@@ -98,19 +98,42 @@ pip3 install --break-system-packages paho-mqtt 2>/dev/null || pip3 install paho-
 # =============================================================================
 
 log_info "[2/7] Installing Node.js ${NODE_MAJOR}.x..."
+NODE_INSTALLED=false
 if command -v node &>/dev/null; then
     current_node=$(node -v | cut -d. -f1 | tr -d v)
     if [ "$current_node" -ge "$NODE_MAJOR" ] 2>/dev/null; then
         log_info "Node.js $(node -v) already installed, skipping"
-    else
-        log_info "Node.js $(node -v) is too old, upgrading..."
-        apt-get remove -y -qq nodejs 2>/dev/null || true
-        curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
-        apt-get install -y -qq nodejs
+        NODE_INSTALLED=true
     fi
-else
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
-    apt-get install -y -qq nodejs
+fi
+
+if [ "$NODE_INSTALLED" = false ]; then
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        armv7l|armv6l)
+            # NodeSource doesn't support armhf; use official Node.js binary
+            NODE_VERSION="v${NODE_MAJOR}.20.2"
+            NODE_DIST="node-${NODE_VERSION}-linux-armv7l"
+            NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIST}.tar.xz"
+            log_info "Downloading Node.js ${NODE_VERSION} for ${ARCH}..."
+            cd /tmp
+            curl -fsSL "$NODE_URL" -o node.tar.xz
+            tar -xf node.tar.xz
+            cp -r ${NODE_DIST}/bin/* /usr/local/bin/
+            cp -r ${NODE_DIST}/lib/* /usr/local/lib/
+            cp -r ${NODE_DIST}/include/* /usr/local/include/ 2>/dev/null || true
+            cp -r ${NODE_DIST}/share/* /usr/local/share/ 2>/dev/null || true
+            rm -rf node.tar.xz ${NODE_DIST}
+            ;;
+        aarch64|x86_64)
+            curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
+            apt-get install -y -qq nodejs
+            ;;
+        *)
+            log_error "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+    esac
 fi
 log_info "Node.js $(node -v), npm $(npm -v)"
 
@@ -164,8 +187,15 @@ log_info "Files deployed to $FEELDSCOPE_DIR"
 
 log_info "[5/7] Building FEELDSCOPE webapp (this may take a few minutes)..."
 cd "$FEELDSCOPE_DIR/webapp"
-sudo -u pi npm install --production=false 2>&1 | tail -5
-sudo -u pi npm run build 2>&1 | tail -5
+# Remove stale node_modules to ensure clean install with correct deps
+rm -rf node_modules package-lock.json .next
+sudo -u pi npm install 2>&1 | tail -5
+# Use --webpack flag to avoid Turbopack/SWC native binding issues on armhf
+sudo -u pi npx next build --webpack 2>&1 | tail -10
+if [ ! -d .next ]; then
+    log_error "Webapp build failed. Check errors above."
+    exit 1
+fi
 log_info "Webapp built successfully"
 
 # =============================================================================

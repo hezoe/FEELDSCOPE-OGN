@@ -7,6 +7,20 @@ const execAsync = promisify(exec);
 
 const ADSB_CONFIG_PATH = "/home/pi/FEELDSCOPE/adsb-config.json";
 
+async function detectReceiverId(): Promise<string> {
+  try {
+    const data = await readFile("/boot/OGN-receiver.conf", "utf-8");
+    const m = data.match(/ReceiverName="([^"#]+)"/);
+    if (m) return m[1];
+  } catch { /* ignore */ }
+  try {
+    const data = await readFile("/home/pi/rtlsdr-ogn.conf", "utf-8");
+    const m = data.match(/Call\s*=\s*"([^"]+)"/);
+    if (m) return m[1];
+  } catch { /* ignore */ }
+  return "OGNReceiver";
+}
+
 interface AdsbSavedConfig {
   enabled: boolean;
   url: string;
@@ -60,12 +74,13 @@ async function mqttPublish(topic: string, payload: object): Promise<void> {
 
 // GET /api/system - Get current system status
 export async function GET() {
-  const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled] = await Promise.all([
+  const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled, receiverId] = await Promise.all([
     isActive("ogn-mqtt"),
     isActive("igc-simulator"),
     isActive("mosquitto"),
     isActive("adsb-poller"),
     isOverlayEnabled(),
+    detectReceiverId(),
   ]);
 
   let mode: "realtime" | "history" | "stopped" = "stopped";
@@ -76,6 +91,7 @@ export async function GET() {
 
   return NextResponse.json({
     mode,
+    receiver_id: receiverId,
     ogn_mqtt_active: ognMqtt,
     igc_simulator_active: igcSim,
     mosquitto_active: mosquitto,
@@ -105,7 +121,8 @@ export async function POST(request: Request) {
 
         if (alreadyRunning) {
           // Send speed change command via MQTT (no restart)
-          await mqttPublish("ogn/TestJP/command", { speed: replaySpeed });
+          const rid = await detectReceiverId();
+          await mqttPublish(`ogn/${rid}/command`, { speed: replaySpeed });
           return NextResponse.json({ ok: true, mode: "history", speed: replaySpeed });
         }
 
