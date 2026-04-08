@@ -1,0 +1,19 @@
+[Unit]
+Description=FEELDSCOPE Web Application
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/FEELDSCOPE/webapp
+ExecStart=/usr/bin/node /home/pi/FEELDSCOPE/webapp/node_modules/.bin/next start -p 3000
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=feeldscope-webapp
+
+[Install]
+WantedBy=multi-user.target

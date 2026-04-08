@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Windows 11 inspired palette */
+  --color-bg-primary: #f3f3f3;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #e7e7e7;
+  --color-bg-card: #f9f9f9;
+  --color-bg-hover: #e9e9e9;
+  --color-text-primary: #1b1b1b;
+  --color-text-secondary: #616161;
+  --color-accent: #0067c0;
+  --color-accent-dim: #004e8c;
+  --color-accent-light: rgba(0, 103, 192, 0.08);
+  --color-danger: #c42b1c;
+  --color-danger-dim: rgba(196, 43, 28, 0.1);
+  --color-warning: #d47b00;
+  --color-warning-dim: rgba(212, 123, 0, 0.1);
+  --color-success: #0f7b0f;
+  --color-success-dim: rgba(15, 123, 15, 0.1);
+  --color-border: #d1d1d1;
+  --color-border-strong: #b0b0b0;
+  --color-glider: #0067c0;
+  --color-motor-glider: #0f7b0f;
+  --color-tow: #d47b00;
+  --font-sans: "Segoe UI", "Meiryo", "Yu Gothic UI", system-ui, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Standard button base */
+button, [role="button"] {
+  font-family: inherit;
+}
+
+/* Leaflet */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #e8e8e8;
+  z-index: 0;
+}
+
+/* Blink animation for map markers */
+@keyframes blink-marker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+.aircraft-blink { animation: blink-marker 0.6s ease-in-out infinite; }
+
+/* Blink for status list */
+@keyframes blink-status {
+  0%, 100% { background: rgba(0, 103, 192, 0.15); }
+  50% { background: rgba(0, 103, 192, 0.04); }
+}
+.status-blink { animation: blink-status 0.6s ease-in-out infinite; }
+
+/* Danger blink for sidebar (red) */
+@keyframes blink-danger {
+  0%, 100% { background: rgba(196, 43, 28, 0.12); }
+  50% { background: rgba(196, 43, 28, 0.03); }
+}
+.danger-blink { animation: blink-danger 0.6s ease-in-out infinite; }
+
+/* Leaflet tooltip overrides */
+.aircraft-tooltip {
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: #1b1b1b !important;
+  border: 1px solid rgba(176, 176, 176, 0.5) !important;
+  border-radius: 3px !important;
+  padding: 3px 7px !important;
+  font-size: 12px !important;
+  font-family: "Segoe UI", "Meiryo", system-ui, sans-serif !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+}
+.aircraft-tooltip::before {
+  border-top-color: #b0b0b0 !important;
+}
+.airfield-tooltip {
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: var(--color-danger) !important;
+  border: 1px solid rgba(196, 43, 28, 0.5) !important;
+  border-radius: 3px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  opacity: 0.6 !important;
+}
+.airfield-tooltip::before {
+  border-top-color: rgba(196, 43, 28, 0.5) !important;
+}
+
+/* Scrollbar — Windows style */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--color-bg-tertiary); }
+::-webkit-scrollbar-thumb { background: #b0b0b0; border-radius: 4px; border: 1px solid var(--color-bg-tertiary); }
+::-webkit-scrollbar-thumb:hover { background: #888; }
+
+/* Standard input focus */
+input:focus, select:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+/* Table striping */
+.table-striped tbody tr:nth-child(even) {
+  background: var(--color-bg-card);
+}
+.table-striped tbody tr:hover {
+  background: var(--color-bg-hover);
+}

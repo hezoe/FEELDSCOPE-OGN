@@ -1,0 +1,19 @@
+[Unit]
+Description=ADS-B Poller for FEELDSCOPE
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/FEELDSCOPE
+ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/adsb-poller.py --url http://localhost/tar1090/data/aircraft.json --interval 3
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=adsb-poller
+
+[Install]
+WantedBy=multi-user.target
