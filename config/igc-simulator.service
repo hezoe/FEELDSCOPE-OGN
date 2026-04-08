@@ -1,0 +1,20 @@
+[Unit]
+Description=IGC Flight Log Simulator for FEELDSCOPE
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+Conflicts=ogn-mqtt.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/FEELDSCOPE
+ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/igc-simulator.py --speed 10 --loop --dir /home/pi/FEELDSCOPE/testdata
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=igc-simulator
+
+[Install]
+WantedBy=multi-user.target

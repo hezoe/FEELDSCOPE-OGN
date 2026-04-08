@@ -1,0 +1,42 @@
+{
+  "ICA84055F": {
+    "device_id": "ICA84055F",
+    "glider_type": "LS8-18",
+    "registration": "JA01EZ",
+    "competition_id": "E1",
+    "pilot": "Ezoe",
+    "aircraft_type": "glider"
+  },
+  "FLRDB02DF": {
+    "device_id": "FLRDB02DF",
+    "glider_type": "PIPER",
+    "registration": "JA4087",
+    "competition_id": "AA",
+    "pilot": "Kobayashi",
+    "aircraft_type": "tow"
+  },
+  "ICA8404FA": {
+    "device_id": "ICA8404FA",
+    "glider_type": "FALKE",
+    "registration": "JA01AU",
+    "competition_id": "AU",
+    "pilot": "Unesaki",
+    "aircraft_type": "glider"
+  },
+  "ICA84CD2B": {
+    "device_id": "ICA84CD2B",
+    "glider_type": "ASK21",
+    "registration": "JA2747",
+    "competition_id": "KS",
+    "pilot": "KSC",
+    "aircraft_type": "glider"
+  },
+  "ICA840190": {
+    "device_id": "ICA840190",
+    "glider_type": "Dimona",
+    "registration": "JA00CN",
+    "competition_id": "CN",
+    "pilot": "SkyJoy",
+    "aircraft_type": "glider"
+  }
+}

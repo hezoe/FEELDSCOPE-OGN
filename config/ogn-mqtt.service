@@ -1,0 +1,19 @@
+[Unit]
+Description=OGN FLARM MQTT Publisher for FEELDSCOPE
+After=network-online.target mosquitto.service rtlsdr-ogn.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/FEELDSCOPE
+ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/ogn-mqtt.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ogn-mqtt
+
+[Install]
+WantedBy=multi-user.target
