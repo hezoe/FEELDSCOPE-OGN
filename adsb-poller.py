@@ -28,9 +28,34 @@ except ImportError:
 
 DEFAULT_BROKER = "localhost"
 DEFAULT_PORT = 1883
-DEFAULT_RECEIVER_ID = "TestJP"
 DEFAULT_INTERVAL = 3.0
 MQTT_BASE_TOPIC = "ogn"
+
+
+def _detect_receiver_id():
+    """Auto-detect receiver ID from OGN configuration files."""
+    try:
+        with open("/boot/OGN-receiver.conf", "r") as f:
+            for line in f:
+                if line.strip().startswith("ReceiverName="):
+                    name = line.split("=", 1)[1].split("#")[0].strip().strip('"').strip("'")
+                    if name:
+                        return name
+    except FileNotFoundError:
+        pass
+    try:
+        import re as _re
+        with open("/home/pi/rtlsdr-ogn.conf", "r") as f:
+            for line in f:
+                m = _re.search(r'Call\s*=\s*"([^"]+)"', line)
+                if m:
+                    return m.group(1)
+    except FileNotFoundError:
+        pass
+    return "OGNReceiver"
+
+
+DEFAULT_RECEIVER_ID = _detect_receiver_id()
 
 logging.basicConfig(
     level=logging.INFO,

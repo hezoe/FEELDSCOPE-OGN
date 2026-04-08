@@ -1,6 +1,8 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
+:root {
   /* Windows 11 inspired palette */
   --color-bg-primary: #f3f3f3;
   --color-bg-secondary: #ffffff;

@@ -16,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
-        <link rel="stylesheet" href="/leaflet.css" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       </head>
       <body>
         <TabProvider>

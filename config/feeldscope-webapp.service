@@ -7,10 +7,11 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/FEELDSCOPE/webapp
-ExecStart=/usr/bin/node /home/pi/FEELDSCOPE/webapp/node_modules/.bin/next start -p 3000
+ExecStart=/usr/local/bin/npx next start -p 80
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=feeldscope-webapp

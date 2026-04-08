@@ -27,10 +27,38 @@ OGN_RF_PORT = 8082
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 MQTT_BASE_TOPIC = "ogn"
-RECEIVER_ID = "TestJP"
 POLL_INTERVAL = 2  # seconds
 POSITION_RETAIN = False
 STATUS_RETAIN = True
+
+
+def detect_receiver_id():
+    """Auto-detect receiver ID from OGN configuration files."""
+    # Try /boot/OGN-receiver.conf first (canonical source)
+    try:
+        with open("/boot/OGN-receiver.conf", "r") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("ReceiverName="):
+                    # Strip inline comments and quotes
+                    val = line.split("=", 1)[1].split("#")[0].strip().strip('"').strip("'")
+                    if val:
+                        return val
+    except FileNotFoundError:
+        pass
+    # Fallback: parse APRS.Call from rtlsdr-ogn.conf
+    try:
+        with open("/home/pi/rtlsdr-ogn.conf", "r") as f:
+            for line in f:
+                m = re.search(r'Call\s*=\s*"([^"]+)"', line)
+                if m:
+                    return m.group(1)
+    except FileNotFoundError:
+        pass
+    return "OGNReceiver"
+
+
+RECEIVER_ID = detect_receiver_id()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -164,7 +192,7 @@ def parse_position_line(line):
         r"([+\-\d.]+)deg/s\s+"
         r"(\S{3})\s+"
         r"(\d+)x(\d+)m\s+"
-        r"Fn:(\S+)\s+"
+        r"Fn:(\S+?)\s*"
         r"([+\-\d.]+)kHz\s+"
         r"([\d.]+)/([\d.]+)dB/(\d+)\s+"
         r"(\d+)e\s+"
