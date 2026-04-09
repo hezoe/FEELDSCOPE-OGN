@@ -150,7 +150,8 @@ sudo reboot</code></pre>
 
 <div class="step">
 <p><span class="step-num">1</span><strong>リポジトリのクローンとインストーラーの実行</strong></p>
-<pre><code>git clone https://github.com/hezoe/FEELDSCOPE-OGN
+<pre><code>sudo apt-get update && sudo apt-get install -y git
+git clone https://github.com/hezoe/FEELDSCOPE-OGN
 cd FEELDSCOPE-OGN
 sudo bash feeldscope-install.sh</code></pre>
 <p>インストーラーが以下を自動的に行います:</p>
@@ -183,13 +184,19 @@ sudo bash feeldscope-install.sh</code></pre>
 </div>
 
 <div class="step">
-<pre><code>sudo overlayctl enable
-sudo reboot</code></pre>
+<p><span class="step-num">1</span><strong>FEELDSCOPE の Web UI から設定</strong></p>
+<ol>
+  <li>ブラウザで <code>http://&lt;raspberry-pi-ip&gt;/</code> を開く</li>
+  <li><strong>設定</strong> 画面を開く</li>
+  <li><strong>システム固定化</strong> を <strong>ON</strong> にする</li>
+  <li><strong>システム電源</strong> から <strong>再起動</strong> を実行する</li>
+</ol>
+<p>再起動後、OverlayFS が有効になりSDカードへの書き込みが保護されます。</p>
 </div>
 
 <div class="warn">
   OverlayFS 有効時にFEELDSCOPEをアップデートする場合は、<br>
-  <code>sudo overlayctl disable</code> → 再起動 → アップデート → <code>sudo overlayctl enable</code> → 再起動<br>
+  設定画面で <strong>システム固定化</strong> を OFF → 再起動 → アップデート → ON → 再起動<br>
   の手順が必要です。
 </div>
 
