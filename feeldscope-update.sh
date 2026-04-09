@@ -93,6 +93,7 @@ cp "$SCRIPT_DIR/webapp/package-lock.json" "$FEELDSCOPE_DIR/webapp/" 2>/dev/null 
 cp "$SCRIPT_DIR/webapp/next.config.ts" "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/tsconfig.json"  "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/postcss.config.mjs" "$FEELDSCOPE_DIR/webapp/"
+cp "$SCRIPT_DIR/webapp/tailwind.config.js" "$FEELDSCOPE_DIR/webapp/" 2>/dev/null || true
 cp "$SCRIPT_DIR/webapp/eslint.config.mjs"  "$FEELDSCOPE_DIR/webapp/"
 
 # Restore site-specific config
