@@ -9,7 +9,7 @@ import {
   topicFor,
 } from "@/lib/mqtt-config";
 import { useUnits } from "@/lib/UnitContext";
-import { formatAltitude, formatSpeed, formatClimbRate, type DisplayNameMode } from "@/lib/units";
+import { formatAltitude, formatSpeed, formatClimbRate, formatDistance, type DisplayNameMode } from "@/lib/units";
 import type {
   AircraftPosition,
   AircraftList,
@@ -178,6 +178,7 @@ interface FlightLogEntry {
   takeoffTime: string;   // local time HH:MM:SS
   landingTime: string | null;
   releaseAlt: number | null;
+  releaseDist: number | null; // distance from airfield in meters
 }
 
 interface FlightTrackingState {
@@ -604,6 +605,7 @@ export default function FlightMap() {
             takeoffTime: timeStr,
             landingTime: null,
             releaseAlt: null,
+            releaseDist: null,
           };
           flightLogRef.current = [...flightLogRef.current, entry];
           tr.flightIdx = flightLogRef.current.length - 1;
@@ -646,12 +648,13 @@ export default function FlightMap() {
         }
 
         if (releaseDetected) {
-          console.log(`[FLIGHT] RELEASE DETECTED ${registration} (${deviceId}) releaseAlt=${tr.maxAltSinceTakeoff.toFixed(0)}m isTow=${isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)}`);
+          const distM = haversineM(u.airfield.latitude, u.airfield.longitude, pos.latitude, pos.longitude);
+          console.log(`[FLIGHT] RELEASE DETECTED ${registration} (${deviceId}) releaseAlt=${tr.maxAltSinceTakeoff.toFixed(0)}m dist=${(distM/1000).toFixed(1)}km isTow=${isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)}`);
           tr.phase = "released";
           tr.releaseAlt = tr.maxAltSinceTakeoff;
           if (tr.flightIdx >= 0 && tr.flightIdx < flightLogRef.current.length) {
             const updated = [...flightLogRef.current];
-            updated[tr.flightIdx] = { ...updated[tr.flightIdx], releaseAlt: tr.releaseAlt };
+            updated[tr.flightIdx] = { ...updated[tr.flightIdx], releaseAlt: tr.releaseAlt, releaseDist: distM };
             flightLogRef.current = updated;
             logChanged = true;
           }
@@ -923,13 +926,14 @@ export default function FlightMap() {
                     <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>着陸</th>
                     <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>飛行時間</th>
                     <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱高度</th>
+                    <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱距離</th>
                     <th className="px-1 py-1.5 text-xs" style={{ borderBottom: "1px solid var(--color-border)" }} />
                   </tr>
                 </thead>
                 <tbody>
                   {flightLog.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-2 text-center" style={{ color: "var(--color-text-secondary)" }}>
+                      <td colSpan={8} className="px-3 py-2 text-center" style={{ color: "var(--color-text-secondary)" }}>
                         フライトデータなし
                       </td>
                     </tr>
@@ -992,6 +996,9 @@ export default function FlightMap() {
                                   setFlightLog(updated);
                                 }}
                               />
+                        </td>
+                        <td className="px-3 py-1 tabular-nums text-right whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                          {entry.releaseDist != null ? formatDistance(entry.releaseDist, units.distance) : "—"}
                         </td>
                         <td className="px-3 py-1 whitespace-nowrap text-center" style={{ borderBottom: "1px solid var(--color-border)" }}>
                           <button

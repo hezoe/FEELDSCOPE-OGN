@@ -40,7 +40,7 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -415,7 +415,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Unit Preferences */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {/* Altitude */}
               <div>
                 <label className="block text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
@@ -455,6 +455,20 @@ export default function SettingsPage() {
                 >
                   <UnitButton label="m/s" active={units.climbRate === "m/s"} onClick={() => setClimbRateUnit("m/s")} />
                   <UnitButton label="knot/s" active={units.climbRate === "knot/s"} onClick={() => setClimbRateUnit("knot/s")} />
+                </div>
+              </div>
+
+              {/* Distance */}
+              <div>
+                <label className="block text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+                  距離
+                </label>
+                <div
+                  className="flex rounded overflow-hidden"
+                  style={{ border: "1px solid var(--color-border)" }}
+                >
+                  <UnitButton label="km" active={units.distance === "km"} onClick={() => setDistanceUnit("km")} />
+                  <UnitButton label="nm" active={units.distance === "nm"} onClick={() => setDistanceUnit("nm")} />
                 </div>
               </div>
             </div>

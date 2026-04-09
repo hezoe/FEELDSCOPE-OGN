@@ -1,6 +1,7 @@
 export type AltitudeUnit = "m" | "ft";
 export type SpeedUnit = "km/h" | "knot";
 export type ClimbRateUnit = "m/s" | "knot/s";
+export type DistanceUnit = "km" | "nm";
 export type DisplayNameMode = "competition_id" | "registration" | "pilot";
 export type MapSource = "internet" | "offline";
 
@@ -34,6 +35,7 @@ export interface UnitPreferences {
   altitude: AltitudeUnit;
   speed: SpeedUnit;
   climbRate: ClimbRateUnit;
+  distance: DistanceUnit;
   displayName: DisplayNameMode;
   safeGlideRatio: number;
   mapSource: MapSource;
@@ -45,6 +47,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
   altitude: "ft",
   speed: "knot",
   climbRate: "knot/s",
+  distance: "km",
   displayName: "registration",
   safeGlideRatio: 15,
   mapSource: "internet",
@@ -94,4 +97,11 @@ export function formatClimbRate(ms: number, unit: ClimbRateUnit): string {
     return `${sign}${(ms * 1.94384).toFixed(1)} kt/s`;
   }
   return `${sign}${ms.toFixed(1)} m/s`;
+}
+
+export function formatDistance(meters: number, unit: DistanceUnit): string {
+  if (unit === "nm") {
+    return `${(meters / 1852).toFixed(1)} nm`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
 }
