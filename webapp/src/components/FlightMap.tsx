@@ -5,7 +5,7 @@ import L from "leaflet";
 import mqtt from "mqtt";
 import {
   MQTT_WS_URL,
-  DEFAULT_RECEIVER_ID,
+  detectReceiverId,
   topicFor,
 } from "@/lib/mqtt-config";
 import { useUnits } from "@/lib/UnitContext";
@@ -726,9 +726,9 @@ export default function FlightMap() {
       reconnectPeriod: 3000,
     });
 
-    client.on("connect", () => {
+    client.on("connect", async () => {
       setConnected(true);
-      const rid = DEFAULT_RECEIVER_ID;
+      const rid = await detectReceiverId();
       client.subscribe(topicFor(rid, "aircraft", "+", "position"));
       client.subscribe(topicFor(rid, "aircraft"));
       client.subscribe(topicFor(rid, "aircraft_adsb"));
