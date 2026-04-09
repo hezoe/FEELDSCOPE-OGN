@@ -920,14 +920,14 @@ export default function FlightMap() {
               <table className="text-xs w-full table-striped" style={{ tableLayout: "auto", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--color-bg-tertiary)", position: "sticky", top: 0, zIndex: 1 }}>
-                    <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>#</th>
-                    <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>登録番号</th>
-                    <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離陸</th>
-                    <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>着陸</th>
-                    <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>飛行時間</th>
-                    <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱高度</th>
-                    <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱距離</th>
-                    <th className="px-1 py-1.5 text-xs" style={{ borderBottom: "1px solid var(--color-border)" }} />
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>#</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>登録番号</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離陸</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>着陸</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>飛行時間</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱高度</th>
+                    <th className="text-left px-1 py-1 font-semibold whitespace-nowrap text-xs" style={{ color: "var(--color-text-primary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>離脱距離</th>
+                    <th className="px-0.5 py-1 text-xs" style={{ borderBottom: "1px solid var(--color-border)" }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -942,9 +942,9 @@ export default function FlightMap() {
                       <tr
                         key={`${entry.deviceId}-${i}`}
                       >
-                        <td className="px-3 py-1 tabular-nums whitespace-nowrap" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{i + 1}</td>
-                        <td className="px-3 py-1 font-semibold whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{entry.registration}</td>
-                        <td className="px-3 py-0.5 tabular-nums whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{i + 1}</td>
+                        <td className="px-1 py-0.5 font-semibold whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{entry.registration}</td>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           <input
                             type="text"
                             value={entry.takeoffTime}
@@ -961,7 +961,7 @@ export default function FlightMap() {
                             style={{ borderColor: "var(--color-border)", outline: "none", color: "inherit" }}
                           />
                         </td>
-                        <td className="px-3 py-0.5 tabular-nums whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           {entry.landingTime != null ? (
                             <input
                               type="text"
@@ -982,10 +982,10 @@ export default function FlightMap() {
                             <span className="font-semibold" style={{ color: "var(--color-success)" }}>飛行中</span>
                           )}
                         </td>
-                        <td className="px-3 py-1 tabular-nums whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           {calcFlightDuration(entry.takeoffTime, entry.landingTime) || "—"}
                         </td>
-                        <td className="px-3 py-0.5 tabular-nums text-right whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           <ReleaseAltInput
                                 releaseAlt={entry.releaseAlt}
                                 altUnit={units.altitude}
@@ -997,10 +997,10 @@ export default function FlightMap() {
                                 }}
                               />
                         </td>
-                        <td className="px-3 py-1 tabular-nums text-right whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
+                        <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           {entry.releaseDist != null ? formatDistance(entry.releaseDist, units.distance) : "—"}
                         </td>
-                        <td className="px-3 py-1 whitespace-nowrap text-center" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                        <td className="px-0.5 py-0.5 whitespace-nowrap text-center" style={{ borderBottom: "1px solid var(--color-border)" }}>
                           <button
                             onClick={() => {
                               if (!confirm("本当に消しますか？")) return;
