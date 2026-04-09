@@ -9,6 +9,7 @@ import {
   AltitudeUnit,
   SpeedUnit,
   ClimbRateUnit,
+  DistanceUnit,
   DisplayNameMode,
   AirfieldConfig,
   AdsbConfig,
@@ -21,6 +22,7 @@ interface UnitContextType {
   setAltitudeUnit: (u: AltitudeUnit) => void;
   setSpeedUnit: (u: SpeedUnit) => void;
   setClimbRateUnit: (u: ClimbRateUnit) => void;
+  setDistanceUnit: (u: DistanceUnit) => void;
   setDisplayNameMode: (u: DisplayNameMode) => void;
   setSafeGlideRatio: (v: number) => void;
   setAirfield: (a: AirfieldConfig) => void;
@@ -34,6 +36,7 @@ const UnitContext = createContext<UnitContextType>({
   setAltitudeUnit: () => {},
   setSpeedUnit: () => {},
   setClimbRateUnit: () => {},
+  setDistanceUnit: () => {},
   setDisplayNameMode: () => {},
   setSafeGlideRatio: () => {},
   setAirfield: () => {},
@@ -64,6 +67,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setAltitudeUnit: (altitude: AltitudeUnit) => update({ altitude }),
         setSpeedUnit: (speed: SpeedUnit) => update({ speed }),
         setClimbRateUnit: (climbRate: ClimbRateUnit) => update({ climbRate }),
+        setDistanceUnit: (distance: DistanceUnit) => update({ distance }),
         setDisplayNameMode: (displayName: DisplayNameMode) => update({ displayName }),
         setSafeGlideRatio: (safeGlideRatio: number) => update({ safeGlideRatio }),
         setAirfield: (airfield: AirfieldConfig) => update({ airfield }),
