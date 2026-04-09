@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FEELDSCOPE-OGN セットアップガイド</title>
+<style>
+  :root { --accent: #2563eb; --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --code-bg: #1e293b; --code-fg: #e2e8f0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; background: var(--bg); color: #1e293b; line-height: 1.7; }
+  .container { max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  h1 small { font-size: 0.9rem; color: #64748b; font-weight: normal; display: block; margin-top: 0.25rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--accent); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+  p, li { margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; }
+  a { color: var(--accent); }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1rem 0; }
+  .step-num { display: inline-block; background: var(--accent); color: #fff; width: 28px; height: 28px; text-align: center; line-height: 28px; border-radius: 50%; font-size: 0.85rem; font-weight: bold; margin-right: 0.5rem; }
+  pre { background: var(--code-bg); color: var(--code-fg); padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0; }
+  code { font-family: "JetBrains Mono", "Fira Code", monospace; }
+  p code, li code { background: #e2e8f0; color: #1e293b; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
+  .warn { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin: 0.75rem 0; }
+  .info { background: #dbeafe; border-left: 4px solid var(--accent); padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin: 0.75rem 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: #f1f5f9; font-weight: 600; }
+  .req { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.75rem 0; }
+  .req-item { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 1rem; flex: 1; min-width: 200px; }
+  .req-item strong { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.2rem; }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: #64748b; font-size: 0.85rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>FEELDSCOPE-OGN セットアップガイド
+  <small>Raspberry Pi 4 + OGN公式イメージ + FEELDSCOPE ワンコマンドインストール</small>
+</h1>
+
+<!-- ============================================================ -->
+<h2>必要なもの</h2>
+
+<div class="req">
+  <div class="req-item"><strong>ハードウェア</strong>Raspberry Pi 4 (2GB+)</div>
+  <div class="req-item"><strong>SDカード</strong>8GB 以上 (16GB 推奨)</div>
+  <div class="req-item"><strong>SDRドングル</strong>RTL-SDR (868/922 MHz 対応)</div>
+  <div class="req-item"><strong>ネットワーク</strong>Wi-Fi または Ethernet</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 1: OGN 公式イメージの書き込み</h2>
+
+<div class="step">
+<p><span class="step-num">1</span><strong>イメージのダウンロード</strong></p>
+<p>OGN 公式サイトからRaspberry Pi用イメージをダウンロードします:</p>
+<p><a href="http://download.glidernet.org/seb-ogn-rpi-image/" target="_blank">http://download.glidernet.org/seb-ogn-rpi-image/</a></p>
+<p>最新の <code>.img.zip</code> ファイルを選択してください。</p>
+</div>
+
+<div class="step">
+<p><span class="step-num">2</span><strong>SDカードへの書き込み</strong></p>
+<p><a href="https://www.raspberrypi.com/software/" target="_blank">Raspberry Pi Imager</a> や
+<a href="https://etcher.balena.io/" target="_blank">balenaEtcher</a> を使って、
+ダウンロードした <code>.img</code> ファイルをSDカードに書き込みます。</p>
+</div>
+
+<div class="step">
+<p><span class="step-num">3</span><strong>OGN 設定ファイルの編集</strong></p>
+<p>書き込み後、SDカードの <code>/boot</code> パーティションにある <code>OGN-receiver.conf</code> を編集します:</p>
+<pre><code>### Mandatory ###
+
+ReceiverName="YOUR_RECEIVER_NAME"
+Latitude="35.6977"
+Longitude="139.7548"
+
+### Optional ###
+
+piUserPassword="your_password"
+FreqCorr="0"
+GSMCenterFreq="922.4"
+wifiName="Your_WiFi_SSID"
+wifiPassword="your_wifi_password"
+wifiCountry="JP"
+OGNBINARYURL="http://download.glidernet.org/arm/rtlsdr-ogn-bin-ARM-latest.tgz?version=japan"</code></pre>
+
+<div class="info">
+  <strong>ReceiverName</strong> は OGN の命名規則に従ってください。
+  日本の場合は <code>ICAO空港コード + 連番</code> (例: <code>RJTTTK001</code>) を推奨します。
+  詳細: <a href="http://wiki.glidernet.org/receiver-naming-convention" target="_blank">命名規則</a>
+</div>
+</div>
+
+<div class="step">
+<p><span class="step-num">4</span><strong>初回起動</strong></p>
+<p>SDカードをRaspberry Piに挿入し、SDRドングルを接続して電源を入れます。</p>
+<p>初回起動時にOGNソフトウェアが自動的にダウンロード・設定されます。起動完了まで数分かかります。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 2: OverlayFS の無効化</h2>
+
+<div class="info">
+  OGN公式イメージは <strong>OverlayFS</strong> が有効になっており、再起動するとファイルシステムへの変更がすべて消えます。
+  FEELDSCOPEをインストールするために、まずOverlayFSを無効化します。
+</div>
+
+<div class="step">
+<p><span class="step-num">1</span><strong>SSH で接続</strong></p>
+<pre><code>ssh pi@&lt;raspberry-pi-ip&gt;</code></pre>
+<p>パスワードは <code>OGN-receiver.conf</code> で設定した <code>piUserPassword</code> の値です。</p>
+<div class="info">
+  IPアドレスはルーターの管理画面や <code>nmap -sn 192.168.x.0/24</code> で確認できます。
+  ホスト名 <code>ogn-receiver.local</code> でも接続できる場合があります。
+</div>
+</div>
+
+<div class="step">
+<p><span class="step-num">2</span><strong>OverlayFS を無効化して再起動</strong></p>
+<pre><code>sudo overlayctl disable
+sudo reboot</code></pre>
+<p>再起動後、ファイルシステムへの変更が永続化されるようになります。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 3: パーティションの拡張</h2>
+
+<div class="info">
+  OGN公式イメージのルートパーティションは約 1.6GB に制限されています。
+  FEELDSCOPEのインストールにはNode.jsやnpmパッケージが必要なため、
+  SDカード全体を使えるようにパーティションを拡張します。
+</div>
+
+<div class="step">
+<p><span class="step-num">1</span><strong>パーティションを拡張して再起動</strong></p>
+<pre><code>sudo raspi-config --expand-rootfs
+sudo reboot</code></pre>
+</div>
+
+<div class="step">
+<p><span class="step-num">2</span><strong>拡張の確認</strong></p>
+<p>再起動後にSSHで再接続し、容量を確認します:</p>
+<pre><code>df -h /</code></pre>
+<p>SDカードのサイズに近い容量が表示されていればOKです (例: 16GBカードなら14GB程度)。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 4: FEELDSCOPE のインストール</h2>
+
+<div class="step">
+<p><span class="step-num">1</span><strong>リポジトリのクローンとインストーラーの実行</strong></p>
+<pre><code>git clone https://github.com/hezoe/FEELDSCOPE-OGN
+cd FEELDSCOPE-OGN
+sudo bash feeldscope-install.sh</code></pre>
+<p>インストーラーが以下を自動的に行います:</p>
+<ul>
+  <li>システムパッケージの導入 (mosquitto, Python paho-mqtt, git)</li>
+  <li>Node.js 20.x のインストール (armhf 対応)</li>
+  <li>Mosquitto の WebSocket 設定</li>
+  <li>FEELDSCOPE ファイルのデプロイ</li>
+  <li>Webアプリのビルド (Next.js)</li>
+  <li>systemd サービスの登録・起動</li>
+</ul>
+<div class="warn">
+  ビルドには RPi4 で <strong>10〜15分程度</strong>かかります。途中で電源を切らないでください。
+</div>
+</div>
+
+<div class="step">
+<p><span class="step-num">2</span><strong>動作確認</strong></p>
+<p>インストール完了後、ブラウザでアクセスします:</p>
+<pre><code>http://&lt;raspberry-pi-ip&gt;/</code></pre>
+<p>地図画面が表示され、受信したFLARM機器がマーカーとして表示されます。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 5: OverlayFS の再有効化 (推奨)</h2>
+
+<div class="info">
+  運用環境では OverlayFS を再有効化することでSDカードの書き込み劣化を防ぎます。
+  有効化後はファイルシステムの変更が再起動で消えるため、SDカードの寿命が大幅に延びます。
+</div>
+
+<div class="step">
+<pre><code>sudo overlayctl enable
+sudo reboot</code></pre>
+</div>
+
+<div class="warn">
+  OverlayFS 有効時にFEELDSCOPEをアップデートする場合は、<br>
+  <code>sudo overlayctl disable</code> → 再起動 → アップデート → <code>sudo overlayctl enable</code> → 再起動<br>
+  の手順が必要です。
+</div>
+
+<!-- ============================================================ -->
+<h2>オプション: ADS-B 表示</h2>
+
+<p>別のRaspberry Pi等で tar1090 / dump1090 が稼働している場合、
+そのADS-Bデータを FEELDSCOPE の地図上に重ねて表示できます。</p>
+
+<div class="step">
+<p>FEELDSCOPE の Web UI から <strong>Settings</strong> ページを開き:</p>
+<ol>
+  <li><strong>ADS-B</strong> を有効化</li>
+  <li><strong>URL</strong> に tar1090 の aircraft.json エンドポイントを入力<br>
+    (例: <code>http://192.168.x.x/tar1090/data/aircraft.json</code>)</li>
+  <li><strong>Interval</strong> を設定 (3秒推奨)</li>
+</ol>
+<p>ADS-Bデータはローカル表示のみで、OGNネットワークにはアップロードされません。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>サービス構成</h2>
+
+<table>
+  <tr><th>サービス</th><th>役割</th><th>自動起動</th></tr>
+  <tr><td><code>rtlsdr-ogn</code></td><td>OGN RF受信 + デコード</td><td>はい (init.d)</td></tr>
+  <tr><td><code>mosquitto</code></td><td>MQTT ブローカー</td><td>はい</td></tr>
+  <tr><td><code>ogn-mqtt</code></td><td>FLARM → MQTT ブリッジ</td><td>はい</td></tr>
+  <tr><td><code>feeldscope-webapp</code></td><td>Web UI (ポート 80)</td><td>はい</td></tr>
+  <tr><td><code>adsb-poller</code></td><td>ADS-B → MQTT (オプション)</td><td>設定時のみ</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>トラブルシューティング</h2>
+
+<h3>Web UI が表示されない</h3>
+<pre><code>sudo systemctl status feeldscope-webapp
+sudo journalctl -u feeldscope-webapp -n 20</code></pre>
+
+<h3>地図に航空機が表示されない</h3>
+<pre><code># OGN受信の確認
+sudo systemctl status rtlsdr-ogn
+curl -s http://localhost:8083/aircraft-list.txt
+
+# MQTT データの確認
+mosquitto_sub -t "ogn/#" -v -C 5</code></pre>
+
+<h3>OverlayFS の状態確認</h3>
+<pre><code>overlayctl status</code></pre>
+
+<!-- ============================================================ -->
+<footer>
+  FEELDSCOPE-OGN &mdash;
+  <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
+</footer>
+
+</div>
+</body>
+</html>

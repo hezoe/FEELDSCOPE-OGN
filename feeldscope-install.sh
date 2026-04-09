@@ -86,7 +86,7 @@ echo ""
 # Step 1: System packages
 # =============================================================================
 
-log_info "[1/7] Installing system packages..."
+log_info "[1/8] Installing system packages..."
 apt-get update -qq
 apt-get install -y -qq mosquitto mosquitto-clients python3-pip git
 
@@ -97,7 +97,7 @@ pip3 install --break-system-packages paho-mqtt 2>/dev/null || pip3 install paho-
 # Step 2: Node.js
 # =============================================================================
 
-log_info "[2/7] Installing Node.js ${NODE_MAJOR}.x..."
+log_info "[2/8] Installing Node.js ${NODE_MAJOR}.x..."
 NODE_INSTALLED=false
 if command -v node &>/dev/null; then
     current_node=$(node -v | cut -d. -f1 | tr -d v)
@@ -141,7 +141,7 @@ log_info "Node.js $(node -v), npm $(npm -v)"
 # Step 3: Configure Mosquitto
 # =============================================================================
 
-log_info "[3/7] Configuring Mosquitto with WebSocket support..."
+log_info "[3/8] Configuring Mosquitto with WebSocket support..."
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf" /etc/mosquitto/conf.d/feeldscope.conf
 
 # Disable the default listener if it conflicts
@@ -160,7 +160,7 @@ log_info "Mosquitto configured (MQTT :1883, WebSocket :9001)"
 # Step 4: Deploy FEELDSCOPE files
 # =============================================================================
 
-log_info "[4/7] Deploying FEELDSCOPE files to $FEELDSCOPE_DIR..."
+log_info "[4/8] Deploying FEELDSCOPE files to $FEELDSCOPE_DIR..."
 mkdir -p "$FEELDSCOPE_DIR"
 
 # Copy Python scripts
@@ -182,16 +182,64 @@ chown -R pi:pi "$FEELDSCOPE_DIR"
 log_info "Files deployed to $FEELDSCOPE_DIR"
 
 # =============================================================================
-# Step 5: Build webapp
+# Step 5: Ensure rtlsdr-ogn.conf has HTTP section
 # =============================================================================
 
-log_info "[5/7] Building FEELDSCOPE webapp (this may take a few minutes)..."
+log_info "[5/8] Configuring OGN HTTP interface..."
+
+OGN_CONF="/home/pi/rtlsdr-ogn.conf"
+OGN_CONF_BOOT="/boot/rtlsdr-ogn.conf"
+
+if [ -f "$OGN_CONF_BOOT" ]; then
+    # /boot/rtlsdr-ogn.conf already exists (config-manager is bypassed)
+    OGN_CONF_SRC="$OGN_CONF_BOOT"
+elif [ -f "$OGN_CONF" ]; then
+    OGN_CONF_SRC="$OGN_CONF"
+else
+    log_warn "rtlsdr-ogn.conf not found. OGN config-manager may not have run yet."
+    log_warn "Skipping HTTP config. You may need to rerun this installer after first OGN boot."
+    OGN_CONF_SRC=""
+fi
+
+if [ -n "$OGN_CONF_SRC" ]; then
+    if grep -q "HTTP:" "$OGN_CONF_SRC"; then
+        log_info "HTTP section already present in $OGN_CONF_SRC"
+    else
+        log_info "Adding HTTP section to OGN config..."
+        # Append HTTP section (Port 8082 for ogn-rf; ogn-decode auto-uses 8083)
+        cat >> "$OGN_CONF_SRC" <<'OGNEOF'
+
+HTTP:
+{ Port = 8082;
+} ;
+OGNEOF
+        log_info "HTTP section added"
+    fi
+    # Ensure /boot copy exists so config-manager is bypassed on future boots
+    if [ "$OGN_CONF_SRC" != "$OGN_CONF_BOOT" ]; then
+        cp "$OGN_CONF_SRC" "$OGN_CONF_BOOT"
+        log_info "Copied to $OGN_CONF_BOOT (bypasses config-manager)"
+    fi
+    # Also sync to /home/pi for immediate use
+    cp "$OGN_CONF_BOOT" "$OGN_CONF"
+
+    # Restart OGN to apply HTTP config
+    log_info "Restarting OGN receiver..."
+    service rtlsdr-ogn restart || log_warn "Failed to restart OGN. You may need to reboot."
+    sleep 5
+fi
+
+# =============================================================================
+# Step 6: Build webapp
+# =============================================================================
+
+log_info "[6/8] Building FEELDSCOPE webapp (this may take a few minutes)..."
 cd "$FEELDSCOPE_DIR/webapp"
 # Remove stale node_modules to ensure clean install with correct deps
 rm -rf node_modules package-lock.json .next
 sudo -u pi npm install 2>&1 | tail -5
-# Use --webpack flag to avoid Turbopack/SWC native binding issues on armhf
-sudo -u pi npx next build --webpack 2>&1 | tail -10
+# package.json build script includes --webpack to avoid Turbopack/SWC issues on armhf
+sudo -u pi npm run build 2>&1 | tail -10
 if [ ! -d .next ]; then
     log_error "Webapp build failed. Check errors above."
     exit 1
@@ -202,7 +250,7 @@ log_info "Webapp built successfully"
 # Step 6: Install systemd services
 # =============================================================================
 
-log_info "[6/7] Installing systemd services..."
+log_info "[7/8] Installing systemd services..."
 cp "$SCRIPT_DIR/config/ogn-mqtt.service"          /etc/systemd/system/
 cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
@@ -214,7 +262,7 @@ systemctl daemon-reload
 # Step 7: Enable and start services
 # =============================================================================
 
-log_info "[7/7] Starting FEELDSCOPE services..."
+log_info "[8/8] Starting FEELDSCOPE services..."
 
 # Core services: ogn-mqtt + webapp (always enabled)
 systemctl enable ogn-mqtt.service
@@ -241,7 +289,7 @@ if [ -z "$IP_ADDR" ]; then
     IP_ADDR="<raspberry-pi-ip>"
 fi
 
-echo "Web UI:     http://${IP_ADDR}:3000"
+echo "Web UI:     http://${IP_ADDR}/"
 echo ""
 echo "Service Status:"
 echo "  ogn-mqtt:     $(systemctl is-active ogn-mqtt 2>/dev/null || echo 'unknown')"
