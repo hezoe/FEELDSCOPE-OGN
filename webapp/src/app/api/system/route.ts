@@ -71,8 +71,8 @@ async function removeAdsbConfig(): Promise<void> {
 
 async function isOverlayEnabled(): Promise<boolean> {
   try {
-    const { stdout } = await execAsync("sudo raspi-config nonint get_overlay_conf");
-    return stdout.trim() === "0";
+    const { stdout } = await execAsync("sudo overlayctl status");
+    return stdout.includes("overlay is active") || stdout.includes("overlay enabled");
   } catch {
     return false;
   }
@@ -222,11 +222,11 @@ EOF'`);
       }
 
       case "overlay-enable":
-        await execAsync("sudo raspi-config nonint enable_overlayfs");
+        await execAsync("sudo overlayctl enable");
         return NextResponse.json({ ok: true, message: "オーバーレイFSを有効にしました。再起動後に反映されます。" });
 
       case "overlay-disable":
-        await execAsync("sudo raspi-config nonint disable_overlayfs");
+        await execAsync("sudo overlayctl disable");
         return NextResponse.json({ ok: true, message: "オーバーレイFSを無効にしました。再起動後に反映されます。" });
 
       default:
