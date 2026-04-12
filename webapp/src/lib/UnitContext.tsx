@@ -49,14 +49,44 @@ export function UnitProvider({ children }: { children: ReactNode }) {
   const [unitsLoaded, setUnitsLoaded] = useState(false);
 
   useEffect(() => {
-    setUnits(loadUnits());
-    setUnitsLoaded(true);
+    const local = loadUnits();
+    fetch("/api/system")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.airfield_config) {
+          setUnits({ ...local, airfield: data.airfield_config });
+        } else {
+          setUnits(local);
+        }
+        setUnitsLoaded(true);
+      })
+      .catch(() => {
+        setUnits(local);
+        setUnitsLoaded(true);
+      });
   }, []);
 
   function update(partial: Partial<UnitPreferences>) {
     const next = { ...units, ...partial };
     setUnits(next);
     saveUnits(next);
+  }
+
+  function updateAirfield(airfield: AirfieldConfig) {
+    const next = { ...units, airfield };
+    setUnits(next);
+    saveUnits(next);
+    fetch("/api/system", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "airfield-save",
+        name: airfield.name,
+        latitude: airfield.latitude,
+        longitude: airfield.longitude,
+        elevation_m: airfield.elevation_m,
+      }),
+    }).catch(() => {});
   }
 
   return (
@@ -70,7 +100,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setDistanceUnit: (distance: DistanceUnit) => update({ distance }),
         setDisplayNameMode: (displayName: DisplayNameMode) => update({ displayName }),
         setSafeGlideRatio: (safeGlideRatio: number) => update({ safeGlideRatio }),
-        setAirfield: (airfield: AirfieldConfig) => update({ airfield }),
+        setAirfield: (airfield: AirfieldConfig) => updateAirfield(airfield),
         setAdsb: (adsb: AdsbConfig) => update({ adsb }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}

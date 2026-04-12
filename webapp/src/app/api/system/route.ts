@@ -6,6 +6,27 @@ import { readFile, writeFile, unlink } from "fs/promises";
 const execAsync = promisify(exec);
 
 const ADSB_CONFIG_PATH = "/home/pi/FEELDSCOPE/adsb-config.json";
+const AIRFIELD_CONFIG_PATH = "/home/pi/FEELDSCOPE/airfield-config.json";
+
+interface AirfieldConfig {
+  name: string;
+  latitude: number;
+  longitude: number;
+  elevation_m: number;
+}
+
+async function loadAirfieldConfig(): Promise<AirfieldConfig | null> {
+  try {
+    const data = await readFile(AIRFIELD_CONFIG_PATH, "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+async function saveAirfieldConfig(config: AirfieldConfig): Promise<void> {
+  await writeFile(AIRFIELD_CONFIG_PATH, JSON.stringify(config, null, 2));
+}
 
 async function detectReceiverId(): Promise<string> {
   try {
@@ -87,11 +108,15 @@ export async function GET() {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const adsbConfig = await loadAdsbConfig();
+  const [adsbConfig, airfieldConfig] = await Promise.all([
+    loadAdsbConfig(),
+    loadAirfieldConfig(),
+  ]);
 
   return NextResponse.json({
     mode,
     receiver_id: receiverId,
+    airfield_config: airfieldConfig,
     ogn_mqtt_active: ognMqtt,
     igc_simulator_active: igcSim,
     mosquitto_active: mosquitto,
@@ -165,11 +190,15 @@ EOF'`);
         return NextResponse.json({ ok: true, adsb: "started" });
       }
 
-      case "adsb-stop":
+      case "adsb-stop": {
         await execAsync("sudo systemctl stop adsb-poller");
         await execAsync("sudo systemctl disable adsb-poller").catch(() => {});
         await removeAdsbConfig();
+        // Clear retained ADS-B MQTT messages
+        const rid = await detectReceiverId();
+        await execAsync(`mosquitto_pub -t 'ogn/${rid}/aircraft_adsb' -r -n`).catch(() => {});
         return NextResponse.json({ ok: true, adsb: "stopped" });
+      }
 
       case "reboot":
         // Respond before rebooting
@@ -180,6 +209,17 @@ EOF'`);
         // Respond before shutting down
         setTimeout(() => execAsync("sudo systemctl poweroff"), 500);
         return NextResponse.json({ ok: true, message: "シャットダウンします..." });
+
+      case "airfield-save": {
+        const airfield: AirfieldConfig = {
+          name: body.name,
+          latitude: body.latitude,
+          longitude: body.longitude,
+          elevation_m: body.elevation_m,
+        };
+        await saveAirfieldConfig(airfield);
+        return NextResponse.json({ ok: true, airfield });
+      }
 
       case "overlay-enable":
         await execAsync("sudo raspi-config nonint enable_overlayfs");
