@@ -7,6 +7,8 @@ const execAsync = promisify(exec);
 
 const ADSB_CONFIG_PATH = "/home/pi/FEELDSCOPE/adsb-config.json";
 const AIRFIELD_CONFIG_PATH = "/home/pi/FEELDSCOPE/airfield-config.json";
+const DHCPCD_CONF = "/etc/dhcpcd.conf";
+const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
 
 interface AirfieldConfig {
   name: string;
@@ -93,6 +95,139 @@ async function mqttPublish(topic: string, payload: object): Promise<void> {
   await execAsync(`mosquitto_pub -t '${topic}' -m '${msg}'`);
 }
 
+// ── Network helpers ──
+
+interface NetworkStatus {
+  wifi: { ssid: string; connected: boolean };
+  eth: {
+    connected: boolean;
+    method: "dhcp" | "static";
+    ip: string;
+    subnet: string;
+    gateway: string;
+    dns: string;
+  };
+}
+
+function cidrToSubnet(cidr: number): string {
+  const mask = (0xffffffff << (32 - cidr)) >>> 0;
+  return `${(mask >>> 24) & 0xff}.${(mask >>> 16) & 0xff}.${(mask >>> 8) & 0xff}.${mask & 0xff}`;
+}
+
+function subnetToCidr(subnet: string): number {
+  const parts = subnet.split(".").map(Number);
+  const n = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+  return n.toString(2).split("1").length - 1;
+}
+
+async function getNetworkStatus(): Promise<NetworkStatus> {
+  // Wi-Fi
+  let wifiSsid = "";
+  let wifiConnected = false;
+  try {
+    const { stdout } = await execAsync("iwgetid -r 2>/dev/null || true");
+    wifiSsid = stdout.trim();
+    wifiConnected = wifiSsid.length > 0;
+  } catch { /* ignore */ }
+
+  // Ethernet
+  let ethConnected = false;
+  let ethIp = "";
+  let ethSubnet = "";
+  let ethGateway = "";
+  let ethDns = "";
+  let ethMethod: "dhcp" | "static" = "dhcp";
+
+  try {
+    const { stdout } = await execAsync("ip -4 addr show eth0 2>/dev/null || true");
+    const m = stdout.match(/inet (\d+\.\d+\.\d+\.\d+)\/(\d+)/);
+    if (m) {
+      ethIp = m[1];
+      ethSubnet = cidrToSubnet(parseInt(m[2], 10));
+    }
+    const { stdout: carrier } = await execAsync("cat /sys/class/net/eth0/carrier 2>/dev/null || echo 0");
+    ethConnected = carrier.trim() === "1";
+  } catch { /* ignore */ }
+
+  try {
+    const { stdout: routeOut } = await execAsync("ip route show dev eth0 2>/dev/null | grep default || true");
+    const gm = routeOut.match(/default via (\d+\.\d+\.\d+\.\d+)/);
+    if (gm) ethGateway = gm[1];
+  } catch { /* ignore */ }
+
+  try {
+    const { stdout: resolvOut } = await execAsync("cat /etc/resolv.conf");
+    const dnsServers = [...resolvOut.matchAll(/nameserver\s+(\S+)/g)].map(m => m[1]);
+    ethDns = dnsServers.join(", ");
+  } catch { /* ignore */ }
+
+  // Check if eth0 has a static block in dhcpcd.conf
+  try {
+    const dhcpcdContent = await readFile(DHCPCD_CONF, "utf-8");
+    if (/^interface\s+eth0\b/m.test(dhcpcdContent) && /static\s+ip_address/m.test(dhcpcdContent)) {
+      // extract static config from dhcpcd.conf
+      const ethBlock = dhcpcdContent.slice(dhcpcdContent.search(/^interface\s+eth0\b/m));
+      const ipMatch = ethBlock.match(/static\s+ip_address=(\d+\.\d+\.\d+\.\d+)\/(\d+)/);
+      const gwMatch = ethBlock.match(/static\s+routers=(\S+)/);
+      const dnsMatch = ethBlock.match(/static\s+domain_name_servers=(.+)/);
+      if (ipMatch) {
+        ethMethod = "static";
+        ethIp = ipMatch[1];
+        ethSubnet = cidrToSubnet(parseInt(ipMatch[2], 10));
+      }
+      if (gwMatch) ethGateway = gwMatch[1];
+      if (dnsMatch) ethDns = dnsMatch[1].trim();
+    }
+  } catch { /* ignore */ }
+
+  return {
+    wifi: { ssid: wifiSsid, connected: wifiConnected },
+    eth: { connected: ethConnected, method: ethMethod, ip: ethIp, subnet: ethSubnet, gateway: ethGateway, dns: ethDns },
+  };
+}
+
+async function applyWifiConfig(ssid: string, password: string): Promise<void> {
+  // Write a clean wpa_supplicant.conf
+  const content = `ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+
+country=JP
+network={
+    ssid="${ssid}"
+    psk="${password}"
+}
+`;
+  await execAsync(`sudo bash -c 'cat > ${WPA_SUPPLICANT_CONF} << WPAEOF
+${content}
+WPAEOF'`);
+  await execAsync("sudo wpa_cli -i wlan0 reconfigure").catch(() => {});
+}
+
+async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: string, gateway?: string, dns?: string): Promise<void> {
+  // Read current dhcpcd.conf and remove existing eth0 static block
+  let content = "";
+  try {
+    content = await readFile(DHCPCD_CONF, "utf-8");
+  } catch { /* ignore */ }
+
+  // Remove any existing eth0 static block (from "interface eth0" to next "interface" or EOF)
+  content = content.replace(/\n*# FEELDSCOPE eth0 static config\ninterface eth0\n(?:static [^\n]+\n)*/g, "");
+  content = content.trimEnd();
+
+  if (method === "static" && ip && subnet) {
+    const cidr = subnetToCidr(subnet);
+    content += `\n\n# FEELDSCOPE eth0 static config\ninterface eth0\nstatic ip_address=${ip}/${cidr}\n`;
+    if (gateway) content += `static routers=${gateway}\n`;
+    if (dns) content += `static domain_name_servers=${dns}\n`;
+  }
+
+  await execAsync(`sudo bash -c 'cat > ${DHCPCD_CONF} << DHCPEOF
+${content}
+DHCPEOF'`);
+  // Restart dhcpcd to apply
+  await execAsync("sudo systemctl restart dhcpcd").catch(() => {});
+}
+
 // GET /api/system - Get current system status
 export async function GET() {
   const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled, receiverId] = await Promise.all([
@@ -108,9 +243,10 @@ export async function GET() {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const [adsbConfig, airfieldConfig] = await Promise.all([
+  const [adsbConfig, airfieldConfig, network] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
+    getNetworkStatus(),
   ]);
 
   return NextResponse.json({
@@ -123,6 +259,7 @@ export async function GET() {
     adsb_poller_active: adsbPoller,
     overlay_enabled: overlayEnabled,
     adsb_config: adsbConfig,
+    network,
   });
 }
 
@@ -219,6 +356,27 @@ EOF'`);
         };
         await saveAirfieldConfig(airfield);
         return NextResponse.json({ ok: true, airfield });
+      }
+
+      case "wifi-save": {
+        const ssid = (body.ssid || "").trim();
+        const password = body.password || "";
+        if (!ssid) return NextResponse.json({ error: "SSIDを入力してください" }, { status: 400 });
+        if (password.length < 8) return NextResponse.json({ error: "パスワードは8文字以上必要です" }, { status: 400 });
+        await applyWifiConfig(ssid, password);
+        return NextResponse.json({ ok: true, message: "Wi-Fi設定を適用しました。接続を試みています..." });
+      }
+
+      case "eth-save": {
+        const ethMethod = body.method as "dhcp" | "static";
+        if (ethMethod === "static") {
+          if (!body.ip) return NextResponse.json({ error: "IPアドレスを入力してください" }, { status: 400 });
+          if (!body.subnet) return NextResponse.json({ error: "サブネットマスクを入力してください" }, { status: 400 });
+          await applyEthConfig("static", body.ip, body.subnet, body.gateway, body.dns);
+        } else {
+          await applyEthConfig("dhcp");
+        }
+        return NextResponse.json({ ok: true, message: "有線LAN設定を適用しました" });
       }
 
       case "overlay-enable":
