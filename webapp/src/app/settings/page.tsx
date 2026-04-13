@@ -1041,76 +1041,107 @@ export default function SettingsPage() {
 
           {/* Overlay FS */}
           <Card title="システム固定化">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={async () => {
-                  if (!confirm("システムを固定化しますか？\n現在の設定が保存され、再起動後にオーバーレイモードになります。")) return;
-                  setOverlayAction(true);
-                  setError(null);
-                  try {
-                    const res = await fetch("/api/system", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "overlay-enable" }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
-                    await fetchStatus();
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "固定化の有効化に失敗しました");
-                  }
-                  setOverlayAction(false);
-                }}
-                disabled={overlayAction || status?.overlay_enabled === true}
-                className="px-4 py-2 rounded text-sm font-medium transition-colors"
-                style={{
-                  background: status?.overlay_enabled ? "var(--color-accent)" : "var(--color-bg-card)",
-                  color: status?.overlay_enabled ? "#fff" : "var(--color-text-primary)",
-                  border: status?.overlay_enabled ? "2px solid var(--color-accent)" : "2px solid var(--color-border)",
-                  opacity: overlayAction ? 0.5 : 1,
-                }}
-              >
-                ON
-              </button>
-              <button
-                onClick={async () => {
-                  if (!confirm("固定化を解除しますか？\n再起動後に通常モードに戻ります。")) return;
-                  setOverlayAction(true);
-                  setError(null);
-                  try {
-                    const res = await fetch("/api/system", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "overlay-disable" }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
-                    await fetchStatus();
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "固定化の解除に失敗しました");
-                  }
-                  setOverlayAction(false);
-                }}
-                disabled={overlayAction || status?.overlay_enabled === false}
-                className="px-4 py-2 rounded text-sm font-medium transition-colors"
-                style={{
-                  background: !status?.overlay_enabled ? "var(--color-accent)" : "var(--color-bg-card)",
-                  color: !status?.overlay_enabled ? "#fff" : "var(--color-text-primary)",
-                  border: !status?.overlay_enabled ? "2px solid var(--color-accent)" : "2px solid var(--color-border)",
-                  opacity: overlayAction ? 0.5 : 1,
-                }}
-              >
-                OFF
-              </button>
-              <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                （デフォルトOFF。変更にはシステム再起動が必要）
-              </span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">現在の状態:</span>
+                <span
+                  className="px-3 py-1 rounded text-sm font-semibold"
+                  style={{
+                    background: status?.overlay_enabled ? "var(--color-success-dim)" : "rgba(160,160,176,0.15)",
+                    color: status?.overlay_enabled ? "var(--color-success)" : "var(--color-text-secondary)",
+                  }}
+                >
+                  {status?.overlay_enabled ? "ON（固定化中）" : "OFF（通常モード）"}
+                </span>
+              </div>
+
+              <div className="flex gap-3">
+                {status?.overlay_enabled ? (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("固定化を解除して再起動しますか？\n再起動後、設定変更が恒久的に保存されるモードになります。")) return;
+                      setOverlayAction(true);
+                      setError(null);
+                      try {
+                        await fetch("/api/system", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "overlay-disable" }),
+                        });
+                        setTimeout(async () => {
+                          await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "reboot" }),
+                          });
+                        }, 500);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "固定化の解除に失敗しました");
+                        setOverlayAction(false);
+                      }
+                    }}
+                    disabled={overlayAction}
+                    className="px-4 py-2 rounded text-sm font-medium transition-colors"
+                    style={{
+                      background: "var(--color-warning-dim)",
+                      color: "var(--color-warning)",
+                      border: "1px solid var(--color-warning)",
+                      opacity: overlayAction ? 0.5 : 1,
+                      cursor: overlayAction ? "wait" : "pointer",
+                    }}
+                  >
+                    {overlayAction ? "再起動中..." : "固定化を解除して再起動"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("システムを固定化して再起動しますか？\n再起動後、設定変更は再起動時にリセットされるモードになります。")) return;
+                      setOverlayAction(true);
+                      setError(null);
+                      try {
+                        await fetch("/api/system", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "overlay-enable" }),
+                        });
+                        setTimeout(async () => {
+                          await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "reboot" }),
+                          });
+                        }, 500);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "固定化の有効化に失敗しました");
+                        setOverlayAction(false);
+                      }
+                    }}
+                    disabled={overlayAction}
+                    className="px-4 py-2 rounded text-sm font-medium transition-colors"
+                    style={{
+                      background: "var(--color-accent)",
+                      color: "#fff",
+                      border: "1px solid var(--color-accent)",
+                      opacity: overlayAction ? 0.5 : 1,
+                      cursor: overlayAction ? "wait" : "pointer",
+                    }}
+                  >
+                    {overlayAction ? "再起動中..." : "固定化を有効にして再起動"}
+                  </button>
+                )}
+              </div>
+
+              {status?.overlay_enabled ? (
+                <p className="text-xs" style={{ color: "var(--color-warning)" }}>
+                  固定化が有効です。設定変更は再起動までの間有効ですが、再起動時にリセットされます。
+                </p>
+              ) : (
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  固定化が無効です。すべての設定変更が恒久的に保存されます。
+                  運用環境ではSDカード保護のため固定化を有効にすることを推奨します。
+                </p>
+              )}
             </div>
-            {status?.overlay_enabled && (
-              <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
-                固定化が有効です。設定変更は再起動までの間有効ですが、再起動時にリセットされます。
-              </p>
-            )}
           </Card>
 
           {/* System Power */}
