@@ -15,6 +15,18 @@ interface AdsbSavedConfig {
   interval: number;
 }
 
+interface NetworkStatus {
+  wifi: { ssid: string; connected: boolean };
+  eth: {
+    connected: boolean;
+    method: "dhcp" | "static";
+    ip: string;
+    subnet: string;
+    gateway: string;
+    dns: string;
+  };
+}
+
 interface SystemStatus {
   mode: "realtime" | "history" | "stopped";
   ogn_mqtt_active: boolean;
@@ -23,6 +35,7 @@ interface SystemStatus {
   adsb_poller_active: boolean;
   overlay_enabled: boolean;
   adsb_config: AdsbSavedConfig | null;
+  network: NetworkStatus | null;
 }
 
 export default function SettingsPage() {
@@ -32,6 +45,17 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [powerAction, setPowerAction] = useState(false);
   const [overlayAction, setOverlayAction] = useState(false);
+  // Network settings
+  const [wifiSsid, setWifiSsid] = useState("");
+  const [wifiPassword, setWifiPassword] = useState("");
+  const [wifiSaving, setWifiSaving] = useState(false);
+  const [ethMethod, setEthMethod] = useState<"dhcp" | "static">("dhcp");
+  const [ethIp, setEthIp] = useState("");
+  const [ethSubnet, setEthSubnet] = useState("255.255.255.0");
+  const [ethGateway, setEthGateway] = useState("");
+  const [ethDns, setEthDns] = useState("");
+  const [ethSaving, setEthSaving] = useState(false);
+  const networkSynced = useRef(false);
   const [replaySpeed, setReplaySpeed] = useState(10);
   useEffect(() => {
     try {
@@ -103,6 +127,19 @@ export default function SettingsPage() {
       }).then(() => fetchStatus()).catch(() => {});
     }
   }, [unitsLoaded, status, units.adsb, fetchStatus, setAdsb]);
+
+  // Sync network settings from server
+  useEffect(() => {
+    if (networkSynced.current || !status?.network) return;
+    networkSynced.current = true;
+    const net = status.network;
+    if (net.wifi.ssid) setWifiSsid(net.wifi.ssid);
+    setEthMethod(net.eth.method);
+    if (net.eth.ip) setEthIp(net.eth.ip);
+    if (net.eth.subnet) setEthSubnet(net.eth.subnet);
+    if (net.eth.gateway) setEthGateway(net.eth.gateway);
+    if (net.eth.dns) setEthDns(net.eth.dns);
+  }, [status]);
 
   // Apply speed change to running igc-simulator (debounced)
   const applySpeed = useCallback(async (speed: number) => {
@@ -581,6 +618,264 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 同一ネットワーク上の FlightRadar24 フィーダー等から ADS-B データを取得し、マップに表示します。フライトログには記録されません。
+              </p>
+            </div>
+          </Card>
+
+          {/* Network Settings */}
+          <Card title="ネットワーク設定">
+            <div className="space-y-6">
+              {/* Warning */}
+              <div
+                className="p-3 rounded text-xs leading-relaxed"
+                style={{
+                  background: status?.overlay_enabled ? "var(--color-warning-dim)" : "var(--color-accent-light)",
+                  border: status?.overlay_enabled ? "1px solid var(--color-warning)" : "1px solid var(--color-accent)",
+                  color: status?.overlay_enabled ? "var(--color-warning)" : "var(--color-text-primary)",
+                }}
+              >
+                {status?.overlay_enabled ? (
+                  <>
+                    <strong>固定化 ON:</strong> ネットワーク設定の変更は一時的に適用されますが、再起動時にリセットされます。
+                    恒久的に変更するには、先に固定化をOFFにしてください。
+                  </>
+                ) : (
+                  <>
+                    <strong>固定化 OFF:</strong> ネットワーク設定の変更は恒久的に保存されます。
+                    誤った設定を適用するとSSH接続できなくなる可能性があります。設定内容を十分確認してから適用してください。
+                  </>
+                )}
+              </div>
+
+              {/* Wi-Fi */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>
+                  Wi-Fi 設定
+                  {status?.network?.wifi.connected && (
+                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
+                      接続中: {status.network.wifi.ssid}
+                    </span>
+                  )}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                      SSID
+                    </label>
+                    <input
+                      type="text"
+                      value={wifiSsid}
+                      onChange={(e) => setWifiSsid(e.target.value)}
+                      placeholder="Wi-FiネットワークのSSID"
+                      className="w-full px-3 py-1.5 text-sm rounded"
+                      style={{
+                        background: "var(--color-bg-primary)",
+                        border: "1px solid var(--color-border)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                      パスワード
+                    </label>
+                    <input
+                      type="password"
+                      value={wifiPassword}
+                      onChange={(e) => setWifiPassword(e.target.value)}
+                      placeholder="8文字以上"
+                      className="w-full px-3 py-1.5 text-sm rounded"
+                      style={{
+                        background: "var(--color-bg-primary)",
+                        border: "1px solid var(--color-border)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setWifiSaving(true);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/system", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "wifi-save", ssid: wifiSsid, password: wifiPassword }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error);
+                      setWifiPassword("");
+                      networkSynced.current = false;
+                      await fetchStatus();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Wi-Fi設定の適用に失敗しました");
+                    }
+                    setWifiSaving(false);
+                  }}
+                  disabled={wifiSaving || !wifiSsid || wifiPassword.length < 8}
+                  className="mt-3 px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                  style={{
+                    background: "var(--color-accent)",
+                    color: "#fff",
+                    opacity: wifiSaving || !wifiSsid || wifiPassword.length < 8 ? 0.5 : 1,
+                    cursor: wifiSaving ? "wait" : "pointer",
+                  }}
+                >
+                  {wifiSaving ? "適用中..." : "Wi-Fi 設定を適用"}
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: "1px solid var(--color-border)" }} />
+
+              {/* Wired (eth0) */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>
+                  有線LAN 設定
+                  {status?.network?.eth.connected ? (
+                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
+                      接続中
+                    </span>
+                  ) : (
+                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium" style={{ background: "rgba(160,160,176,0.15)", color: "var(--color-text-secondary)" }}>
+                      未接続
+                    </span>
+                  )}
+                </h3>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
+                    IPアドレス取得方法
+                  </label>
+                  <div
+                    className="flex rounded overflow-hidden"
+                    style={{ border: "1px solid var(--color-border)", maxWidth: "280px" }}
+                  >
+                    <UnitButton label="DHCP（自動）" active={ethMethod === "dhcp"} onClick={() => setEthMethod("dhcp")} />
+                    <UnitButton label="固定IP" active={ethMethod === "static"} onClick={() => setEthMethod("static")} />
+                  </div>
+                </div>
+
+                {ethMethod === "static" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                        IPアドレス
+                      </label>
+                      <input
+                        type="text"
+                        value={ethIp}
+                        onChange={(e) => setEthIp(e.target.value)}
+                        placeholder="192.168.1.100"
+                        className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                        style={{
+                          background: "var(--color-bg-primary)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-text-primary)",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                        サブネットマスク
+                      </label>
+                      <input
+                        type="text"
+                        value={ethSubnet}
+                        onChange={(e) => setEthSubnet(e.target.value)}
+                        placeholder="255.255.255.0"
+                        className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                        style={{
+                          background: "var(--color-bg-primary)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-text-primary)",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                        デフォルトゲートウェイ
+                      </label>
+                      <input
+                        type="text"
+                        value={ethGateway}
+                        onChange={(e) => setEthGateway(e.target.value)}
+                        placeholder="192.168.1.1"
+                        className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                        style={{
+                          background: "var(--color-bg-primary)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-text-primary)",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                        DNSサーバ
+                      </label>
+                      <input
+                        type="text"
+                        value={ethDns}
+                        onChange={(e) => setEthDns(e.target.value)}
+                        placeholder="8.8.8.8"
+                        className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                        style={{
+                          background: "var(--color-bg-primary)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-text-primary)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={async () => {
+                    if (ethMethod === "static" && !ethIp) {
+                      setError("IPアドレスを入力してください");
+                      return;
+                    }
+                    const msg = ethMethod === "static"
+                      ? `有線LANを固定IP (${ethIp}) に設定しますか？`
+                      : "有線LANをDHCP（自動取得）に変更しますか？";
+                    if (!confirm(msg)) return;
+                    setEthSaving(true);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/system", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          action: "eth-save",
+                          method: ethMethod,
+                          ...(ethMethod === "static" ? { ip: ethIp, subnet: ethSubnet, gateway: ethGateway, dns: ethDns } : {}),
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error);
+                      networkSynced.current = false;
+                      await fetchStatus();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "有線LAN設定の適用に失敗しました");
+                    }
+                    setEthSaving(false);
+                  }}
+                  disabled={ethSaving}
+                  className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                  style={{
+                    background: "var(--color-accent)",
+                    color: "#fff",
+                    opacity: ethSaving ? 0.5 : 1,
+                    cursor: ethSaving ? "wait" : "pointer",
+                  }}
+                >
+                  {ethSaving ? "適用中..." : "有線LAN 設定を適用"}
+                </button>
+              </div>
+
+              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                ネットワーク設定を誤ると本機へのアクセスが不能になる場合があります。
+                アクセス不能になった場合は、SDカードを取り出してPCから設定ファイルを修正するか、有線LANで直接接続してください。
               </p>
             </div>
           </Card>
