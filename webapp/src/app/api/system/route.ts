@@ -418,8 +418,8 @@ EOF'`);
         if (overlayActive) {
           return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
         }
-        // Run updater asynchronously — the webapp will restart as part of the update
-        execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1`).catch(() => {});
+        // Run updater via nohup so it survives webapp restart
+        execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo nohup bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1 &`).catch(() => {});
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
 
