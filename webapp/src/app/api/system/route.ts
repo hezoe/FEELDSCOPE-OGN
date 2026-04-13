@@ -418,9 +418,14 @@ EOF'`);
         if (overlayActive) {
           return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
         }
-        // Run updater fully detached so it survives webapp restart
-        // setsid creates a new session; closing stdin/stdout/stderr prevents inheritance
-        execAsync(`sudo setsid bash -c 'cd ${FEELDSCOPE_OGN_DIR} && bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1' < /dev/null &`).catch(() => {});
+        // Write a one-shot systemd unit to run the updater completely independent of webapp
+        await execAsync(`sudo bash -c 'cat > /tmp/feeldscope-do-update.sh << "SCRIPT"
+#!/bin/bash
+cd ${FEELDSCOPE_OGN_DIR}
+bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1
+SCRIPT
+chmod +x /tmp/feeldscope-do-update.sh'`);
+        await execAsync("sudo systemd-run --unit=feeldscope-update --description='FEELDSCOPE Update' /tmp/feeldscope-do-update.sh");
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
 
