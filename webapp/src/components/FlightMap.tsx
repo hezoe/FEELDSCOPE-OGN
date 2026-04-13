@@ -274,7 +274,12 @@ export default function FlightMap() {
   const [flightLog, setFlightLogRaw] = useState<FlightLogEntry[]>([]);
   const setFlightLog = useCallback((log: FlightLogEntry[]) => {
     setFlightLogRaw(log);
-    try { localStorage.setItem("ogn-flight-log", JSON.stringify(log)); } catch { /* ignore */ }
+    // Sync to server memory
+    fetch("/api/flight-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set", entries: log }),
+    }).catch(() => {});
   }, []);
   const flightLogRef = useRef<FlightLogEntry[]>([]);
   const trackingRef = useRef<Map<string, FlightTrackingState>>(new Map());
@@ -297,42 +302,44 @@ export default function FlightMap() {
   // Hydration-safe: restore client-only state in useEffect
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
-    // Restore flight log from localStorage
-    try {
-      const stored = localStorage.getItem("ogn-flight-log");
-      if (stored) {
-        const restored: FlightLogEntry[] = JSON.parse(stored);
-        setFlightLogRaw(restored);
-        flightLogRef.current = restored;
-        // Rebuild tracking state
-        const map = new Map<string, FlightTrackingState>();
-        for (let i = 0; i < restored.length; i++) {
-          const entry = restored[i];
-          if (!entry.landingTime) {
-            map.set(entry.deviceId, {
-              phase: entry.releaseAlt != null ? "released" : "airborne",
-              takeoffTime: entry.takeoffTime,
-              maxAltSinceTakeoff: entry.releaseAlt ?? 0,
-              releaseAlt: entry.releaseAlt,
-              wasHigh: true,
-              flightIdx: i,
-              prevSpeedMs: 0, prevClimbMs: 0,
-            });
-          } else {
-            map.set(entry.deviceId, {
-              phase: "ground",
-              takeoffTime: null,
-              maxAltSinceTakeoff: 0,
-              releaseAlt: null,
-              wasHigh: false,
-              flightIdx: -1,
-              prevSpeedMs: 0, prevClimbMs: 0,
-            });
+    // Restore flight log from server
+    fetch("/api/flight-log")
+      .then(res => res.json())
+      .then(data => {
+        const restored: FlightLogEntry[] = data.entries || [];
+        if (restored.length > 0) {
+          setFlightLogRaw(restored);
+          flightLogRef.current = restored;
+          // Rebuild tracking state
+          const map = new Map<string, FlightTrackingState>();
+          for (let i = 0; i < restored.length; i++) {
+            const entry = restored[i];
+            if (!entry.landingTime) {
+              map.set(entry.deviceId, {
+                phase: entry.releaseAlt != null ? "released" : "airborne",
+                takeoffTime: entry.takeoffTime,
+                maxAltSinceTakeoff: entry.releaseAlt ?? 0,
+                releaseAlt: entry.releaseAlt,
+                wasHigh: true,
+                flightIdx: i,
+                prevSpeedMs: 0, prevClimbMs: 0,
+              });
+            } else {
+              map.set(entry.deviceId, {
+                phase: "ground",
+                takeoffTime: null,
+                maxAltSinceTakeoff: 0,
+                releaseAlt: null,
+                wasHigh: false,
+                flightIdx: -1,
+                prevSpeedMs: 0, prevClimbMs: 0,
+              });
+            }
           }
+          trackingRef.current = map;
         }
-        trackingRef.current = map;
-      }
-    } catch { /* ignore */ }
+      })
+      .catch(() => {});
     // Restore panel sizes
     try {
       const sw = localStorage.getItem("ogn-sidebar-width");
