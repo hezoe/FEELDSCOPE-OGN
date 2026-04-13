@@ -351,7 +351,7 @@ export default function SettingsPage() {
               <div>
                 <ModeButton
                   label="履歴再生"
-                  description="IGC フライトログファイルを読み込み、過去のフライトを再生します。"
+                  description="IGCファイルの飛行データを現在時刻にずらして再生します。フライトサービスの訓練やシステム操作の学習に利用できます。"
                   active={status?.mode === "history"}
                   switching={switching}
                   onClick={() => switchMode("history")}
@@ -383,6 +383,9 @@ export default function SettingsPage() {
                 停止する
               </button>
             )}
+            <p className="text-xs mt-3" style={{ color: "var(--color-text-secondary)" }}>
+              履歴再生中もOGN受信機は独立して動作しており、FLARMデータのOGNサーバへのアップロードは継続されます。
+            </p>
           </Card>
 
           {/* IGC Files — right after mode selection for discoverability */}
