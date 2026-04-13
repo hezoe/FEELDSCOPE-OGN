@@ -585,7 +585,7 @@ export default function SettingsPage() {
                 <input
                   type="text"
                   value={units.adsb.url}
-                  placeholder="http://192.168.190.148/tar1090/data/aircraft.json"
+                  placeholder="http://fr24.local/tar1090/data/aircraft.json"
                   onChange={(e) => setAdsb({ ...units.adsb, url: e.target.value })}
                   className="w-full px-3 py-1.5 text-sm rounded font-mono"
                   style={{
