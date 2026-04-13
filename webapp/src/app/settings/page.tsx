@@ -381,44 +381,171 @@ export default function SettingsPage() {
             )}
           </Card>
 
-          {/* System Status */}
-          <Card title="システムステータス">
-            <div className="space-y-2 text-sm">
-              <StatusRow label="Mosquitto (MQTT ブローカー)" active={status?.mosquitto_active} />
-              <StatusRow label="ogn-mqtt (リアルタイム再生)" active={status?.ogn_mqtt_active} />
-              <StatusRow label="igc-simulator (履歴再生)" active={status?.igc_simulator_active} />
-              <StatusRow label="adsb-poller (ADS-B 受信)" active={status?.adsb_poller_active} />
+          {/* IGC Files — right after mode selection for discoverability */}
+          <Card title="IGC ファイル管理（履歴再生用）">
+            <div className="mb-4">
+              <label
+                className="inline-flex items-center gap-2 px-4 py-2 rounded cursor-pointer text-sm transition-colors"
+                style={{
+                  background: "var(--color-accent)",
+                  color: "#fff",
+                }}
+              >
+                {uploading ? "アップロード中..." : "IGC ファイルをアップロード"}
+                <input
+                  type="file"
+                  accept=".igc"
+                  onChange={uploadFile}
+                  disabled={uploading}
+                  className="hidden"
+                />
+              </label>
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                OLC (onlinecontest.org) などから IGC ファイルをダウンロードしてアップロードしてください
+              </p>
+            </div>
+
+            {igcFiles.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                IGC ファイルがありません。アップロードしてください。
+              </p>
+            ) : (
+              <div className="rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: "var(--color-bg-primary)" }}>
+                      <th
+                        className="text-left px-4 py-2 font-semibold text-xs"
+                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
+                      >
+                        ファイル名
+                      </th>
+                      <th
+                        className="text-right px-4 py-2 font-semibold text-xs"
+                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
+                      >
+                        サイズ
+                      </th>
+                      <th
+                        className="text-right px-4 py-2 font-semibold text-xs"
+                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
+                      >
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {igcFiles.map((f) => (
+                      <tr
+                        key={f.name}
+                        className="hover:bg-[var(--color-accent-light)]"
+                        style={{ borderBottom: "1px solid var(--color-border)" }}
+                      >
+                        <td className="px-4 py-2 font-mono text-xs">{f.name}</td>
+                        <td className="px-4 py-2 text-right" style={{ color: "var(--color-text-secondary)" }}>
+                          {(f.size / 1024).toFixed(0)} KB
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            onClick={() => deleteFile(f.name)}
+                            className="text-xs hover:underline"
+                            style={{ color: "var(--color-danger)" }}
+                          >
+                            削除
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ADS-B Settings */}
+          <Card title="ADS-B 受信設定">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.adsb.enabled}
+                    onChange={async (e) => {
+                      const enabled = e.target.checked;
+                      setAdsb({ ...units.adsb, enabled });
+                      try {
+                        if (enabled && units.adsb.url) {
+                          await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "adsb-start", url: units.adsb.url, interval: units.adsb.interval }),
+                          });
+                        } else {
+                          await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "adsb-stop" }),
+                          });
+                        }
+                        await fetchStatus();
+                      } catch { /* ignore */ }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">ADS-B 受信を有効にする</span>
+                </label>
+                {status?.adsb_poller_active && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
+                    稼働中
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                  tar1090 / dump1090 URL
+                </label>
+                <input
+                  type="text"
+                  value={units.adsb.url}
+                  placeholder="http://fr24.local/tar1090/data/aircraft.json"
+                  onChange={(e) => setAdsb({ ...units.adsb, url: e.target.value })}
+                  className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                  style={{
+                    background: "var(--color-bg-primary)",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text-primary)",
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                  ポーリング間隔（秒）
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={units.adsb.interval}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 1 && v <= 30) setAdsb({ ...units.adsb, interval: v });
+                  }}
+                  className="w-20 px-3 py-1.5 text-sm rounded"
+                  style={{
+                    background: "var(--color-bg-primary)",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text-primary)",
+                  }}
+                />
+              </div>
+              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                同一ネットワーク上の FlightRadar24 フィーダー等から ADS-B データを取得し、マップに表示します。フライトログには記録されません。
+              </p>
             </div>
           </Card>
 
           {/* Display Settings */}
           <Card title="表示設定">
-            {/* Map Source */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
-                地図ソース
-              </label>
-              <div
-                className="flex rounded overflow-hidden"
-                style={{ border: "1px solid var(--color-border)" }}
-              >
-                <UnitButton
-                  label="Internet地図"
-                  active={units.mapSource === "internet"}
-                  onClick={() => setMapSource("internet")}
-                />
-                <UnitButton
-                  label="オフライン地図"
-                  active={units.mapSource === "offline"}
-                  onClick={() => setMapSource("offline")}
-                />
-              </div>
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                {units.mapSource === "internet" && "OpenStreetMapをインターネット経由で表示します"}
-                {units.mapSource === "offline" && "国土地理院の航空写真＋陰影起伏図をローカルから表示します"}
-              </p>
-            </div>
-
             {/* Display Name Mode */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
@@ -536,88 +663,6 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                 滑空場までの距離÷高度が設定値を超えた場合、パス不足として赤点滅で警告します（デフォルト: 15）
-              </p>
-            </div>
-          </Card>
-
-          {/* ADS-B Settings */}
-          <Card title="ADS-B 受信設定">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={units.adsb.enabled}
-                    onChange={async (e) => {
-                      const enabled = e.target.checked;
-                      setAdsb({ ...units.adsb, enabled });
-                      try {
-                        if (enabled && units.adsb.url) {
-                          await fetch("/api/system", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "adsb-start", url: units.adsb.url, interval: units.adsb.interval }),
-                          });
-                        } else {
-                          await fetch("/api/system", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "adsb-stop" }),
-                          });
-                        }
-                        await fetchStatus();
-                      } catch { /* ignore */ }
-                    }}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm font-medium">ADS-B 受信を有効にする</span>
-                </label>
-                {status?.adsb_poller_active && (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
-                    稼働中
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                  tar1090 / dump1090 URL
-                </label>
-                <input
-                  type="text"
-                  value={units.adsb.url}
-                  placeholder="http://fr24.local/tar1090/data/aircraft.json"
-                  onChange={(e) => setAdsb({ ...units.adsb, url: e.target.value })}
-                  className="w-full px-3 py-1.5 text-sm rounded font-mono"
-                  style={{
-                    background: "var(--color-bg-primary)",
-                    border: "1px solid var(--color-border)",
-                    color: "var(--color-text-primary)",
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                  ポーリング間隔（秒）
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={units.adsb.interval}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    if (!isNaN(v) && v >= 1 && v <= 30) setAdsb({ ...units.adsb, interval: v });
-                  }}
-                  className="w-20 px-3 py-1.5 text-sm rounded"
-                  style={{
-                    background: "var(--color-bg-primary)",
-                    border: "1px solid var(--color-border)",
-                    color: "var(--color-text-primary)",
-                  }}
-                />
-              </div>
-              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                同一ネットワーク上の FlightRadar24 フィーダー等から ADS-B データを取得し、マップに表示します。フライトログには記録されません。
               </p>
             </div>
           </Card>
@@ -880,73 +925,14 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* System Power */}
-          <Card title="システム電源">
-            <div className="flex gap-4">
-              <button
-                onClick={async () => {
-                  if (!confirm("システムを再起動しますか？")) return;
-                  setPowerAction(true);
-                  setError(null);
-                  try {
-                    const res = await fetch("/api/system", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "reboot" }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "再起動に失敗しました");
-                    setPowerAction(false);
-                  }
-                }}
-                disabled={powerAction}
-                className="px-4 py-2 rounded text-sm font-medium transition-colors"
-                style={{
-                  background: "var(--color-warning-dim)",
-                  color: "var(--color-warning)",
-                  border: "1px solid var(--color-warning)",
-                  opacity: powerAction ? 0.5 : 1,
-                  cursor: powerAction ? "wait" : "pointer",
-                }}
-              >
-                {powerAction ? "処理中..." : "再起動"}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!confirm("システムをシャットダウンしますか？\n再度起動するには電源の抜き差しが必要です。")) return;
-                  setPowerAction(true);
-                  setError(null);
-                  try {
-                    const res = await fetch("/api/system", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "shutdown" }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error);
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "シャットダウンに失敗しました");
-                    setPowerAction(false);
-                  }
-                }}
-                disabled={powerAction}
-                className="px-4 py-2 rounded text-sm font-medium transition-colors"
-                style={{
-                  background: "var(--color-danger-dim)",
-                  color: "var(--color-danger)",
-                  border: "1px solid var(--color-danger)",
-                  opacity: powerAction ? 0.5 : 1,
-                  cursor: powerAction ? "wait" : "pointer",
-                }}
-              >
-                {powerAction ? "処理中..." : "シャットダウン"}
-              </button>
+          {/* System Status */}
+          <Card title="システムステータス">
+            <div className="space-y-2 text-sm">
+              <StatusRow label="Mosquitto (MQTT ブローカー)" active={status?.mosquitto_active} />
+              <StatusRow label="ogn-mqtt (リアルタイム再生)" active={status?.ogn_mqtt_active} />
+              <StatusRow label="igc-simulator (履歴再生)" active={status?.igc_simulator_active} />
+              <StatusRow label="adsb-poller (ADS-B 受信)" active={status?.adsb_poller_active} />
             </div>
-            <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-              シャットダウン後に再度起動するには電源の抜き差しが必要です
-            </p>
           </Card>
 
           {/* Overlay FS */}
@@ -1023,86 +1009,75 @@ export default function SettingsPage() {
             )}
           </Card>
 
-          {/* IGC Files */}
-          <Card title="IGC ファイル管理（履歴再生用）">
-            <div className="mb-4">
-              <label
-                className="inline-flex items-center gap-2 px-4 py-2 rounded cursor-pointer text-sm transition-colors"
+          {/* System Power */}
+          <Card title="システム電源">
+            <div className="flex gap-4">
+              <button
+                onClick={async () => {
+                  if (!confirm("システムを再起動しますか？")) return;
+                  setPowerAction(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/system", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "reboot" }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "再起動に失敗しました");
+                    setPowerAction(false);
+                  }
+                }}
+                disabled={powerAction}
+                className="px-4 py-2 rounded text-sm font-medium transition-colors"
                 style={{
-                  background: "var(--color-accent)",
-                  color: "#fff",
+                  background: "var(--color-warning-dim)",
+                  color: "var(--color-warning)",
+                  border: "1px solid var(--color-warning)",
+                  opacity: powerAction ? 0.5 : 1,
+                  cursor: powerAction ? "wait" : "pointer",
                 }}
               >
-                {uploading ? "アップロード中..." : "IGC ファイルをアップロード"}
-                <input
-                  type="file"
-                  accept=".igc"
-                  onChange={uploadFile}
-                  disabled={uploading}
-                  className="hidden"
-                />
-              </label>
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                OLC (onlinecontest.org) などから IGC ファイルをダウンロードしてアップロードしてください
-              </p>
+                {powerAction ? "処理中..." : "再起動"}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("システムをシャットダウンしますか？\n再度起動するには電源の抜き差しが必要です。")) return;
+                  setPowerAction(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/system", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "shutdown" }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "シャットダウンに失敗しました");
+                    setPowerAction(false);
+                  }
+                }}
+                disabled={powerAction}
+                className="px-4 py-2 rounded text-sm font-medium transition-colors"
+                style={{
+                  background: "var(--color-danger-dim)",
+                  color: "var(--color-danger)",
+                  border: "1px solid var(--color-danger)",
+                  opacity: powerAction ? 0.5 : 1,
+                  cursor: powerAction ? "wait" : "pointer",
+                }}
+              >
+                {powerAction ? "処理中..." : "シャットダウン"}
+              </button>
             </div>
-
-            {igcFiles.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                IGC ファイルがありません。アップロードしてください。
-              </p>
-            ) : (
-              <div className="rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ background: "var(--color-bg-primary)" }}>
-                      <th
-                        className="text-left px-4 py-2 font-semibold text-xs"
-                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
-                      >
-                        ファイル名
-                      </th>
-                      <th
-                        className="text-right px-4 py-2 font-semibold text-xs"
-                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
-                      >
-                        サイズ
-                      </th>
-                      <th
-                        className="text-right px-4 py-2 font-semibold text-xs"
-                        style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}
-                      >
-                        操作
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {igcFiles.map((f) => (
-                      <tr
-                        key={f.name}
-                        className="hover:bg-[var(--color-accent-light)]"
-                        style={{ borderBottom: "1px solid var(--color-border)" }}
-                      >
-                        <td className="px-4 py-2 font-mono text-xs">{f.name}</td>
-                        <td className="px-4 py-2 text-right" style={{ color: "var(--color-text-secondary)" }}>
-                          {(f.size / 1024).toFixed(0)} KB
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            onClick={() => deleteFile(f.name)}
-                            className="text-xs hover:underline"
-                            style={{ color: "var(--color-danger)" }}
-                          >
-                            削除
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+              シャットダウン後に再度起動するには電源の抜き差しが必要です
+            </p>
           </Card>
+
         </div>
       </main>
   );
