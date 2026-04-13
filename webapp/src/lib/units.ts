@@ -27,7 +27,7 @@ export interface AdsbConfig {
 
 export const DEFAULT_ADSB: AdsbConfig = {
   enabled: false,
-  url: "",
+  url: "http://fr24.local/tar1090/data/aircraft.json",
   interval: 3,
 };
 
