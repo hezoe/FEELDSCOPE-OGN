@@ -5,3 +5,10 @@ __pycache__/
 .env
 .env.local
 *.img.zip
+
+# Site-specific data (per-device, do not share via git)
+aircraft-db.json
+adsb-config.json
+airfield-config.json
+testdata/*.IGC
+testdata/*.igc
