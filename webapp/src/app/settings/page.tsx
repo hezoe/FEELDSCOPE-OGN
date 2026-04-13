@@ -36,6 +36,7 @@ interface SystemStatus {
   overlay_enabled: boolean;
   adsb_config: AdsbSavedConfig | null;
   network: NetworkStatus | null;
+  version: { current: string; latest: string | null; updateAvailable: boolean } | null;
 }
 
 export default function SettingsPage() {
@@ -45,6 +46,9 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [powerAction, setPowerAction] = useState(false);
   const [overlayAction, setOverlayAction] = useState(false);
+  // System update
+  const [updating, setUpdating] = useState(false);
+  const [updateLog, setUpdateLog] = useState<string | null>(null);
   // Network settings
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
@@ -921,6 +925,103 @@ export default function SettingsPage() {
               <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 ネットワーク設定を誤ると本機へのアクセスが不能になる場合があります。
                 アクセス不能になった場合は、SDカードを取り出してPCから設定ファイルを修正するか、有線LANで直接接続してください。
+              </p>
+            </div>
+          </Card>
+
+          {/* System Update */}
+          <Card title="システムアップデート">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 text-sm">
+                <span style={{ color: "var(--color-text-secondary)" }}>現在のバージョン:</span>
+                <span className="font-mono font-semibold">{status?.version?.current || "---"}</span>
+                {status?.version?.updateAvailable && status.version.latest && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)" }}>
+                    v{status.version.latest} が利用可能
+                  </span>
+                )}
+                {status?.version && !status.version.updateAvailable && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
+                    最新
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    if (!confirm("システムをアップデートしますか？\nアップデート中はWebアプリが一時的に利用できなくなります。")) return;
+                    setUpdating(true);
+                    setUpdateLog(null);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/system", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "system-update" }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error);
+                      // Poll for update log
+                      const poll = setInterval(async () => {
+                        try {
+                          const logRes = await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "update-log" }),
+                          });
+                          const logData = await logRes.json();
+                          if (logData.log) setUpdateLog(logData.log);
+                          if (logData.log?.includes("Update Complete")) {
+                            clearInterval(poll);
+                            setUpdating(false);
+                            await fetchStatus();
+                          }
+                        } catch {
+                          // Webapp may be restarting — keep polling
+                        }
+                      }, 3000);
+                      // Safety timeout: stop polling after 5 minutes
+                      setTimeout(() => { clearInterval(poll); setUpdating(false); }, 300000);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "アップデートに失敗しました");
+                      setUpdating(false);
+                    }
+                  }}
+                  disabled={updating || status?.overlay_enabled === true}
+                  className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                  style={{
+                    background: "var(--color-accent)",
+                    color: "#fff",
+                    opacity: updating || status?.overlay_enabled ? 0.5 : 1,
+                    cursor: updating ? "wait" : "pointer",
+                  }}
+                >
+                  {updating ? "アップデート中..." : "アップデート実行"}
+                </button>
+                {status?.overlay_enabled && (
+                  <span className="text-xs" style={{ color: "var(--color-warning)" }}>
+                    固定化が有効です。アップデートするには先に固定化をOFFにして再起動してください。
+                  </span>
+                )}
+              </div>
+
+              {updateLog && (
+                <pre
+                  className="text-xs p-3 rounded overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap"
+                  style={{
+                    background: "var(--color-bg-primary)",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  {updateLog.replace(/\x1b\[[0-9;]*m/g, "")}
+                </pre>
+              )}
+
+              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                GitHubリポジトリから最新のコードを取得し、Webアプリをリビルドしてサービスを再起動します。
+                アップデート中（約2〜3分）はWebアプリが一時的に利用できなくなります。
               </p>
             </div>
           </Card>

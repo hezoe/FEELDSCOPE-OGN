@@ -9,6 +9,8 @@ const ADSB_CONFIG_PATH = "/home/pi/FEELDSCOPE/adsb-config.json";
 const AIRFIELD_CONFIG_PATH = "/home/pi/FEELDSCOPE/airfield-config.json";
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
+const FEELDSCOPE_OGN_DIR = "/home/pi/FEELDSCOPE-OGN";
+const FEELDSCOPE_DIR = "/home/pi/FEELDSCOPE";
 
 interface AirfieldConfig {
   name: string;
@@ -93,6 +95,35 @@ async function isActive(service: string): Promise<boolean> {
 async function mqttPublish(topic: string, payload: object): Promise<void> {
   const msg = JSON.stringify(payload).replace(/'/g, "'\\''");
   await execAsync(`mosquitto_pub -t '${topic}' -m '${msg}'`);
+}
+
+// ── Version / Update helpers ──
+
+async function getVersionInfo(): Promise<{ current: string; latest: string | null; updateAvailable: boolean }> {
+  let current = "unknown";
+  try {
+    const pkg = await readFile(`${FEELDSCOPE_DIR}/webapp/package.json`, "utf-8");
+    current = JSON.parse(pkg).version || "unknown";
+  } catch { /* ignore */ }
+
+  let latest: string | null = null;
+  let updateAvailable = false;
+  try {
+    // Fetch remote to compare without pulling
+    await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo -u pi git fetch origin --quiet`);
+    const { stdout } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git rev-list HEAD..origin/master --count`);
+    const behind = parseInt(stdout.trim(), 10);
+    updateAvailable = behind > 0;
+    if (updateAvailable) {
+      // Get version from remote package.json
+      try {
+        const { stdout: remotePkg } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git show origin/master:webapp/package.json`);
+        latest = JSON.parse(remotePkg).version || null;
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  return { current, latest, updateAvailable };
 }
 
 // ── Network helpers ──
@@ -243,10 +274,11 @@ export async function GET() {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const [adsbConfig, airfieldConfig, network] = await Promise.all([
+  const [adsbConfig, airfieldConfig, network, version] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
     getNetworkStatus(),
+    getVersionInfo(),
   ]);
 
   return NextResponse.json({
@@ -260,6 +292,7 @@ export async function GET() {
     overlay_enabled: overlayEnabled,
     adsb_config: adsbConfig,
     network,
+    version,
   });
 }
 
@@ -377,6 +410,26 @@ EOF'`);
           await applyEthConfig("dhcp");
         }
         return NextResponse.json({ ok: true, message: "有線LAN設定を適用しました" });
+      }
+
+      case "system-update": {
+        // Run the update script in the background; it will restart the webapp
+        const overlayActive = await isOverlayEnabled();
+        if (overlayActive) {
+          return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
+        }
+        // Run updater asynchronously — the webapp will restart as part of the update
+        execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1`).catch(() => {});
+        return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
+      }
+
+      case "update-log": {
+        try {
+          const log = await readFile("/tmp/feeldscope-update.log", "utf-8");
+          return NextResponse.json({ ok: true, log });
+        } catch {
+          return NextResponse.json({ ok: true, log: "" });
+        }
       }
 
       case "overlay-enable":
