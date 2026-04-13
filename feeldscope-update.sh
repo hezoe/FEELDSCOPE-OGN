@@ -80,10 +80,9 @@ fi
 cp "$SCRIPT_DIR/ogn-mqtt.py"       "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/adsb-poller.py"    "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
-cp "$SCRIPT_DIR/aircraft-db.json"  "$FEELDSCOPE_DIR/"
 
-# Update testdata
-cp -r "$SCRIPT_DIR/testdata" "$FEELDSCOPE_DIR/"
+# Site-specific data (aircraft-db.json, testdata/*.IGC) are NOT overwritten
+# — they live only on each device and are excluded from git
 
 # Update webapp source
 rm -rf "$FEELDSCOPE_DIR/webapp/.next"
