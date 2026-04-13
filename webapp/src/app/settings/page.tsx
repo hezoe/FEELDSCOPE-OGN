@@ -49,6 +49,8 @@ export default function SettingsPage() {
   // System update
   const [updating, setUpdating] = useState(false);
   const [updateLog, setUpdateLog] = useState<string | null>(null);
+  const [updateComplete, setUpdateComplete] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
   // Network settings
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
@@ -956,6 +958,8 @@ export default function SettingsPage() {
                     if (!confirm("システムをアップデートしますか？\nアップデート中はWebアプリが一時的に利用できなくなります。")) return;
                     setUpdating(true);
                     setUpdateLog(null);
+                    setUpdateComplete(false);
+                    setUpdateProgress(0);
                     setError(null);
                     try {
                       const res = await fetch("/api/system", {
@@ -965,8 +969,12 @@ export default function SettingsPage() {
                       });
                       const data = await res.json();
                       if (!res.ok) throw new Error(data.error);
+                      const startTime = Date.now();
                       // Poll for update log
                       const poll = setInterval(async () => {
+                        // Estimate progress (approx 150s total)
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        setUpdateProgress(Math.min(95, Math.round((elapsed / 150) * 100)));
                         try {
                           const logRes = await fetch("/api/system", {
                             method: "POST",
@@ -974,10 +982,21 @@ export default function SettingsPage() {
                             body: JSON.stringify({ action: "update-log" }),
                           });
                           const logData = await logRes.json();
-                          if (logData.log) setUpdateLog(logData.log);
+                          if (logData.log) {
+                            setUpdateLog(logData.log);
+                            // Estimate progress from log steps
+                            const log = logData.log as string;
+                            if (log.includes("[5/5]")) setUpdateProgress(90);
+                            else if (log.includes("[4/5]")) setUpdateProgress(60);
+                            else if (log.includes("[3/5]")) setUpdateProgress(40);
+                            else if (log.includes("[2/5]")) setUpdateProgress(20);
+                            else if (log.includes("[1/5]")) setUpdateProgress(10);
+                          }
                           if (logData.log?.includes("Update Complete")) {
                             clearInterval(poll);
+                            setUpdateProgress(100);
                             setUpdating(false);
+                            setUpdateComplete(true);
                             await fetchStatus();
                           }
                         } catch {
@@ -1009,6 +1028,49 @@ export default function SettingsPage() {
                   </span>
                 )}
               </div>
+
+              {/* Progress bar */}
+              {(updating || updateComplete) && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      {updateComplete ? "完了" : `ステップ ${updateProgress < 20 ? "1" : updateProgress < 40 ? "2" : updateProgress < 60 ? "3" : updateProgress < 90 ? "4" : "5"}/5`}
+                    </span>
+                    <span className="text-xs font-mono" style={{ color: "var(--color-text-secondary)" }}>{updateProgress}%</span>
+                  </div>
+                  <div
+                    className="w-full rounded-full overflow-hidden"
+                    style={{ height: "8px", background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${updateProgress}%`,
+                        background: updateComplete ? "var(--color-success)" : "var(--color-accent)",
+                        transition: "width 0.5s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Complete message */}
+              {updateComplete && (
+                <div
+                  className="p-3 rounded text-sm"
+                  style={{
+                    background: "var(--color-success-dim)",
+                    color: "var(--color-success)",
+                    border: "1px solid var(--color-success)",
+                  }}
+                >
+                  <p className="font-semibold">アップデートが完了しました</p>
+                  <p className="text-xs mt-1">
+                    新しいバージョンを反映するには、ブラウザのキャッシュをクリアしてリロードしてください。<br />
+                    <strong>Shift + Ctrl + R</strong>（Mac: Shift + Cmd + R）でハードリロードできます。
+                  </p>
+                </div>
+              )}
 
               {updateLog && (
                 <pre
