@@ -218,6 +218,42 @@ sudo bash feeldscope-install.sh</code></pre>
 </div>
 
 <!-- ============================================================ -->
+<h2>オプション: 履歴再生機能</h2>
+
+<p>FEELDSCOPEには、過去のフライトログ（IGCファイル）を使って、
+あたかもリアルタイムで飛行しているかのように地図上に再現する<strong>履歴再生機能</strong>があります。</p>
+
+<h3>用途</h3>
+<ul>
+  <li><strong>フライトサービスの訓練</strong> &mdash; 実際のフライトがない日でも、過去のフライトデータを使って発航管理や位置把握の練習ができます</li>
+  <li><strong>システムの操作学習</strong> &mdash; FEELDSCOPEの画面操作や機能を、実機が飛んでいなくても体験できます</li>
+  <li><strong>フライトの振り返り</strong> &mdash; 過去のフライトを再生して、飛行経路やパターンを地図上で確認できます</li>
+</ul>
+
+<h3>仕組み</h3>
+<p>IGCファイルには緯度・経度・高度・時刻が記録されています。
+履歴再生では、記録された飛行データの時刻を<strong>現在時刻に自動的にずらして</strong>再生します。
+例えば、2024年5月に記録されたフライトでも、再生を開始すると「今この瞬間に飛んでいる」ように
+地図上にリアルタイムで軌跡が描かれます。再生速度は1〜20倍速に調整でき、ループ再生にも対応しています。</p>
+
+<h3>使い方</h3>
+<div class="step">
+<ol>
+  <li><a href="https://www.onlinecontest.org/" target="_blank">OLC (Online Contest)</a> などのサイトからIGCファイルをダウンロード</li>
+  <li>設定画面の <strong>IGC ファイル管理</strong> からアップロード</li>
+  <li><strong>データソース切替</strong> で <strong>履歴再生</strong> を選択（再生倍速を調整可能）</li>
+  <li>地図画面に切り替えると、アップロードしたフライトが現在時刻で再生されます</li>
+</ol>
+</div>
+
+<div class="info">
+  <strong>OGNデータの送信は継続されます</strong> &mdash;
+  履歴再生中も、OGN受信機（<code>ogn-rf</code> / <code>ogn-decode</code>）は独立して動作しており、
+  実際に受信したFLARMデータのOGNサーバへのアップロードは中断されません。
+  履歴再生はFEELDSCOPEのWeb表示のみを切り替える機能であり、受信局としての機能には影響しません。
+</div>
+
+<!-- ============================================================ -->
 <h2>サービス構成</h2>
 
 <table>
@@ -227,6 +263,7 @@ sudo bash feeldscope-install.sh</code></pre>
   <tr><td><code>ogn-mqtt</code></td><td>FLARM → MQTT ブリッジ</td><td>はい</td></tr>
   <tr><td><code>feeldscope-webapp</code></td><td>Web UI (ポート 80)</td><td>はい</td></tr>
   <tr><td><code>adsb-poller</code></td><td>ADS-B → MQTT (オプション)</td><td>設定時のみ</td></tr>
+  <tr><td><code>igc-simulator</code></td><td>IGC 履歴再生 → MQTT</td><td>手動 (ogn-mqtt と排他)</td></tr>
 </table>
 
 <!-- ============================================================ -->
