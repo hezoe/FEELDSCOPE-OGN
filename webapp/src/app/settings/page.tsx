@@ -1017,7 +1017,7 @@ export default function SettingsPage() {
                     color: status?.version?.updateAvailable ? "#fff" : "var(--color-text-secondary)",
                     border: status?.version?.updateAvailable ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
                     opacity: updating || status?.overlay_enabled ? 0.5 : 1,
-                    cursor: updating ? "wait" : "pointer",
+                    cursor: updating ? "wait" : (updating || status?.overlay_enabled || (status?.version != null && !status.version.updateAvailable)) ? "default" : "pointer",
                   }}
                 >
                   {updating ? "アップデート中..." : "アップデート実行"}
