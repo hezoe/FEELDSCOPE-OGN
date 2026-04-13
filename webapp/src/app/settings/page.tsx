@@ -991,11 +991,12 @@ export default function SettingsPage() {
                       setUpdating(false);
                     }
                   }}
-                  disabled={updating || status?.overlay_enabled === true}
+                  disabled={updating || status?.overlay_enabled === true || (status?.version != null && !status.version.updateAvailable)}
                   className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
                   style={{
-                    background: "var(--color-accent)",
-                    color: "#fff",
+                    background: status?.version?.updateAvailable ? "var(--color-accent)" : "var(--color-bg-card)",
+                    color: status?.version?.updateAvailable ? "#fff" : "var(--color-text-secondary)",
+                    border: status?.version?.updateAvailable ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
                     opacity: updating || status?.overlay_enabled ? 0.5 : 1,
                     cursor: updating ? "wait" : "pointer",
                   }}
