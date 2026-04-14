@@ -629,217 +629,87 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.5.3 */}
+      {/* v1.1.1 — 公式初回リリース */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.3</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>初回公開リリース</span>
       </div>
 
-      <Card title="VPSデモ環境の互換性修正">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>sudo crontab / sudo -u pi git fetch を sudo -n で fail-fast 化、失敗時は plain コマンドで再試行</li>
-          <li>passwordless sudo がない環境（VPS等）でAPIが応答停止する問題を解消</li>
-        </ul>
-      </Card>
-
-      {/* v1.5.2 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.2</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="自動再起動の設定をGUI化">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>設定タブに「自動再起動」セクションを追加（システム電源の上）</li>
-          <li>毎日の自動再起動の時刻（HH:MM）を変更可能、有効/無効も切替可能</li>
-          <li>rootのcrontabを直接編集（既存の他のcron行は保持）</li>
-          <li>VPS等でcrontabが空の環境でも安全に動作</li>
-        </ul>
-      </Card>
-
-      <Card title="その他">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>各種ファイルパスとReceiver IDを環境変数で上書き可能に（VPSデモ環境対応）</li>
-          <li>HTTPS経由ではMQTTを wss://&lt;host&gt;/mqtt-ws で接続（リバースプロキシ対応）</li>
-        </ul>
-      </Card>
-
-      {/* v1.5.1 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.1</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="ステータスタブの追加（マップと設定の間）">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li><strong>システム概要</strong> — 稼働時間、CPU負荷、CPU温度、RAM、ディスク</li>
-          <li><strong>OGN受信機</strong> — ソフトウェアバージョン、Live Time、実測中心周波数・補正、ゲイン、ノイズ、NTP誤差等</li>
-          <li><strong>ADS-B受信ステータス（詳細）</strong> — 取得元URL、ポーリング間隔、最終取得時刻、応答時間、累計成功率、位置あり/なし機体数、連続失敗回数、最終エラー</li>
-          <li><strong>サービス稼働状況</strong> — 全サービスの状態と稼働時間</li>
-          <li><strong>フライトログ統計</strong> — 本日の総数・飛行中・着陸済み</li>
-          <li>5秒間隔で自動更新</li>
-        </ul>
-      </Card>
-
-      <Card title="マップ上のOGN受信機アイコン">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>OGN設定の緯度・経度位置にアンテナタワー風アイコンを表示</li>
-          <li>受信機の状態に応じて色が変化（緑: 稼働中、グレー: 停止）</li>
-          <li>ホバーで受信機名・状態・ゲイン・ノイズを表示</li>
-        </ul>
-      </Card>
-
-      <Card title="adsb-poller.py の改修">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>ステータスを <code>ogn/{"<rid>"}/adsb_status</code> にretain publish</li>
-          <li>取得成否、エラー詳細、応答時間、累計統計、機体数の内訳を含む</li>
-        </ul>
-      </Card>
-
-      {/* v1.5.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="OGN設定タブの追加">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>新タブ「OGN設定」を追加。OGN受信機の全設定をWeb GUIから変更可能</li>
-          <li>受信機名（APRS Call）、緯度・経度・高度、周波数補正、GSM校正、Bias-T、HTTPポート 等</li>
-          <li>受信機のリアルタイムステータス表示（ソフトウェアバージョン、CPU温度、NTP誤差、実測ゲイン、ノイズ など）</li>
-          <li>設定保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と <code>/boot/OGN-receiver.conf</code> 両方を更新し、<code>rtlsdr-ogn</code> を自動再起動</li>
-        </ul>
-      </Card>
-
-      {/* v1.4.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="mDNSホスト名設定">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>ネットワーク設定にホスト名（mDNS）の項目を追加</li>
-          <li>設定後 <code>{"<hostname>"}.local</code> でアクセス可能（同一LAN内、Avahi/mDNS経由）</li>
-          <li>hostnamectl + /etc/hosts 更新 + avahi-daemon 再起動を自動実行</li>
-        </ul>
-      </Card>
-
-      {/* v1.3.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="GUI アップデート機能の改善">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>アップデート実行を systemd-run で完全独立化（webapp停止の影響を受けない）</li>
-          <li>プログレスバー表示（1/5〜5/5ステップ + パーセンテージ）</li>
-          <li>完了後のハードリロード案内メッセージ（Shift+Ctrl+R）</li>
-          <li>最新バージョン時はアップデートボタンを無効化表示</li>
-        </ul>
-      </Card>
-
-      <Card title="システム固定化 UI の刷新">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>ON/OFFボタンを廃止し「固定化を有効にして再起動」「固定化を解除して再起動」の1アクションに統合</li>
-          <li>現在の状態を明示表示（「ON（固定化中）」/「OFF（通常モード）」）</li>
-          <li>操作と再起動を1ステップ化し、中途半端な状態を排除</li>
-        </ul>
-      </Card>
-
-      <Card title="マニュアル・リファレンスの全面刷新">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>設定項目リファレンスを実際の画面順序に揃えて記載</li>
-          <li>各項目の保存先（ブラウザ / サーバ / ブラウザ+サーバ）を正確に明記</li>
-          <li>履歴再生・システムアップデート・ネットワーク設定の解説を追加</li>
-          <li>フライトログのサーバ保存・AM5時自動リセットの説明を追加</li>
-        </ul>
-      </Card>
-
-      {/* v1.2.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="フライトログのサーバ保存化">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>localStorage からサーバメモリに移行、複数端末・ブラウザで共有可能</li>
-          <li>毎日 日本時間 AM 5:00 に自動リセット</li>
-        </ul>
-      </Card>
-
-      {/* v1.1.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-      </div>
-
-      <Card title="新機能">
-        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>ネットワーク設定 GUI（Wi-Fi SSID/パスワード、有線LAN DHCP/固定IP）</li>
-          <li>システムアップデート GUI（GitHubから最新版取得してリビルド）</li>
-          <li>設定画面の再編成（関連項目を隣接配置、地図ソース切替を削除）</li>
-          <li>ADS-B URL のデフォルト値を http://fr24.local/tar1090/data/aircraft.json に設定</li>
-          <li>機体情報DB・IGCファイルを git管理から除外（端末固有データ保護）</li>
-        </ul>
-      </Card>
-
-      {/* v1.0.0 */}
-      <div className="flex items-center gap-3 mb-2 mt-6">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.0.0</span>
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-03-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-bg-card)", color: "var(--color-text-secondary)" }}>初版リリース</span>
-      </div>
-
-      <Card title="FLARM 受信・表示">
+      <Card title="マップ・受信機表示">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
           <li>OGN FLARM データのリアルタイム受信・マップ表示</li>
           <li>機体状態の色分け表示（緑: 通常、橙: 低高度/着陸進入中、赤: パス不足）</li>
-          <li>着陸進入中はオレンジ表示、着陸確定後に緑に復帰</li>
           <li>パス判定（安全滑空比による帰還可否の警告・赤点滅）</li>
-          <li>機体種別アイコン（グライダー / 曳航機）</li>
+          <li>機体種別アイコン（グライダー / 曳航機 / 動力機 / ヘリ / パラ など）</li>
+          <li>OGN受信機アイコンを設定座標に表示（稼働状態に応じた色）</li>
         </ul>
       </Card>
 
       <Card title="ADS-B 受信">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>ADS-B / Mode-S / Mode-C 受信機能（tar1090/dump1090 連携）</li>
+          <li>tar1090 / dump1090 と連携した ADS-B / Mode-S / Mode-C 受信</li>
           <li>ADS-B 機体のマップ表示（青: ADS-B、黒: Mode-S/C）</li>
-          <li>位置不明機体のサイドバー表示（Mode-S/C 高度のみ）</li>
-          <li>ADS-B 受信設定 UI（URL・ポーリング間隔・有効/無効切替）</li>
+          <li>位置不明機体（Mode-S/C）のサイドバー表示</li>
         </ul>
       </Card>
 
-      <Card title="フライトログ">
+      <Card title="フライトログ・履歴再生">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
           <li>離陸・着陸・曳航離脱の自動検知・記録</li>
-          <li>飛行中の飛行時間リアルタイム表示</li>
-          <li>離陸・着陸時刻、離脱高度の手動編集</li>
+          <li>飛行時間・離脱高度・離脱距離をリアルタイム表示・手動編集可</li>
+          <li>サーバ側メモリで保存、毎日 日本時間 AM 5:00 に自動リセット</li>
           <li>IGC ファイルによる履歴再生（1〜20 倍速ループ）</li>
+          <li>履歴再生中も OGN サーバへの実機データアップロードは継続</li>
         </ul>
       </Card>
 
-      <Card title="GUI・設定">
+      <Card title="設定タブ">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>Windows 標準 GUI 準拠のインターフェース</li>
-          <li>マップ / サイドバー / フライトログのリサイズ対応</li>
-          <li>表示単位の切替（高度: m/ft、速度: km/h/knot、上昇率: m/s/knot/s）</li>
-          <li>機体ラベル表示名の選択（コンテスト番号 / 登録番号 / パイロット名）</li>
-          <li>滑空場設定（名前・位置・標高）</li>
-          <li>ヘルプメニュー（マニュアル・リリースノート・バージョン）ポップアップ表示</li>
+          <li>滑空場設定（名前・位置・標高、ブラウザ+サーバ保存）</li>
+          <li>表示設定（単位・ラベル・安全滑空比）</li>
+          <li>ADS-B 受信設定（URL・ポーリング間隔）</li>
+          <li>ネットワーク設定（mDNSホスト名 / Wi-Fi / 有線LAN DHCP・固定IP）</li>
+          <li>システムアップデート（GitHubから最新版取得＋プログレス表示）</li>
+          <li>システム固定化（OverlayFS、変更＋再起動を1アクション化）</li>
+          <li>自動再起動（毎日決まった時刻に自動再起動）</li>
+          <li>システム電源（再起動・シャットダウン）</li>
+        </ul>
+      </Card>
+
+      <Card title="OGN設定タブ">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN受信機の全設定をWeb GUIから変更可能</li>
+          <li>受信機名（APRS Call）、緯度・経度・高度、周波数補正、GSM校正、Bias-T、HTTPポート、OGNバイナリURL</li>
+          <li>受信機のリアルタイムステータス（ソフトウェアバージョン、CPU温度、NTP誤差、実測ゲイン、ノイズ、Live Time）</li>
+        </ul>
+      </Card>
+
+      <Card title="ステータスタブ">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>システム概要（稼働時間、CPU負荷、CPU温度、RAM、ディスク）</li>
+          <li>OGN受信機の詳細ステータス</li>
+          <li>ADS-B受信の詳細統計（取得元URL、応答時間、累計成功率、機体数の内訳、連続失敗回数、最終エラー）</li>
+          <li>全サービスの稼働状況と稼働時間</li>
+          <li>フライトログ統計（本日の総数・飛行中・着陸済み）</li>
+          <li>5秒間隔で自動更新</li>
+        </ul>
+      </Card>
+
+      <Card title="機体情報タブ">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>FLARM デバイス ID ごとに機体情報（機種名、登録番号、コンテスト番号、パイロット名、航空機タイプ）を管理</li>
+          <li>未登録の FLARM 機体がマップに出現すると自動でデバイス ID 登録</li>
         </ul>
       </Card>
 
       <Card title="システム基盤">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>Raspberry Pi 5 + RTL-SDR 対応（922.4 MHz 日本向けバイナリパッチ）</li>
-          <li>Next.js 16 + React 19 による Web フロントエンド</li>
-          <li>Mosquitto MQTT ブローカー統合（WebSocket 対応）</li>
-          <li>ogn-mqtt.py / igc-simulator.py / adsb-poller.py によるバックエンド</li>
-          <li>全サービスの systemd 統合</li>
+          <li>Raspberry Pi 4/5 + RTL-SDR（922.4 MHz 日本向けバイナリ）</li>
+          <li>Next.js 16 + React 19 によるWebフロントエンド</li>
+          <li>Mosquitto MQTT ブローカー統合（WebSocket 対応、HTTPS環境では wss プロキシ対応）</li>
+          <li>OverlayFS によるシステム固定化対応</li>
+          <li>各種パスを環境変数で上書き可能（VPSデモ環境等にも対応）</li>
         </ul>
       </Card>
     </>
