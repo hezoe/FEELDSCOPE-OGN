@@ -288,18 +288,20 @@ function ManualContent() {
               <li>マップの初期表示位置はホームビュー設定で保存可能（ブラウザに保存）</li>
             </ul>
           </Section>
-          <Section heading="設定画面">
+          <Section heading="設定画面（項目は上から順）">
             <p className="mb-2">各設定項目の詳細は下記「設定項目リファレンス」を参照してください。</p>
-            <ul className="list-disc ml-5 space-y-1">
+            <ol className="list-decimal ml-5 space-y-1">
               <li><strong>滑空場設定</strong> — 名前・緯度・経度・標高</li>
-              <li><strong>データソース切替</strong> — リアルタイム / 履歴再生 / 停止</li>
-              <li><strong>システムステータス</strong> — 各サービスの稼働状態（読み取り専用）</li>
+              <li><strong>データソース切替</strong> — リアルタイム / 履歴再生（再生倍速スライダー付き）</li>
+              <li><strong>IGC ファイル管理</strong> — アップロード・削除（履歴再生用）</li>
+              <li><strong>ADS-B 受信設定</strong> — URL・ポーリング間隔・有効/無効</li>
               <li><strong>表示設定</strong> — ラベル表示名・単位・安全滑空比</li>
-              <li><strong>ADS-B 受信設定</strong> — URL・間隔・有効/無効</li>
+              <li><strong>ネットワーク設定</strong> — Wi-Fi / 有線LAN</li>
+              <li><strong>システムアップデート</strong> — GitHubから最新版を取得してリビルド</li>
+              <li><strong>システムステータス</strong> — 各サービスの稼働状態（読み取り専用）</li>
+              <li><strong>システム固定化</strong> — オーバーレイFS の切替＋再起動（1アクション）</li>
               <li><strong>システム電源</strong> — 再起動・シャットダウン</li>
-              <li><strong>システム固定化</strong> — オーバーレイFS の ON/OFF</li>
-              <li><strong>IGC ファイル管理</strong> — アップロード・削除</li>
-            </ul>
+            </ol>
           </Section>
           <Section heading="機体情報画面">
             <ul className="list-disc ml-5 space-y-1">
@@ -314,6 +316,12 @@ function ManualContent() {
 
       <Card title="設定項目リファレンス">
         <div className="space-y-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <p>保存先の種別:</p>
+          <ul className="list-disc ml-5 space-y-0.5 text-xs">
+            <li><strong>ブラウザ</strong> — 当該ブラウザの localStorage のみに保存。他端末からは参照不可</li>
+            <li><strong>サーバ</strong> — Pi上のファイルに保存。全端末で共有</li>
+            <li><strong>ブラウザ + サーバ</strong> — 両方に保存。読み込み時はサーバが優先</li>
+          </ul>
           <div className="rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
             <table className="w-full text-sm">
               <thead>
@@ -325,23 +333,26 @@ function ManualContent() {
               </thead>
               <tbody>
                 {[
-                  { item: "滑空場名", storage: "ブラウザ", ops: "テキスト入力" },
-                  { item: "滑空場 緯度・経度・標高", storage: "ブラウザ", ops: "数値入力" },
-                  { item: "データソース切替", storage: "サーバー（systemd）", ops: "リアルタイム / 履歴再生 / 停止ボタン" },
-                  { item: "再生倍速（1〜20x）", storage: "ブラウザ", ops: "スライダー" },
-                  { item: "システムステータス", storage: "—", ops: "読み取り専用（5秒間隔で自動更新）" },
+                  { item: "滑空場名", storage: "ブラウザ + サーバ", ops: "テキスト入力" },
+                  { item: "滑空場 緯度・経度・標高", storage: "ブラウザ + サーバ", ops: "数値入力" },
+                  { item: "データソース切替", storage: "サーバ（systemd）", ops: "リアルタイム / 履歴再生 切替" },
+                  { item: "再生倍速（1〜20x）", storage: "ブラウザ", ops: "スライダー（履歴再生時はサーバにも即時反映）" },
+                  { item: "IGC ファイル管理", storage: "サーバ（ファイル）", ops: "アップロード / 削除" },
+                  { item: "ADS-B 有効/無効", storage: "ブラウザ + サーバ", ops: "チェックボックス" },
+                  { item: "ADS-B URL", storage: "ブラウザ + サーバ", ops: "テキスト入力（デフォルト: http://fr24.local/tar1090/data/aircraft.json）" },
+                  { item: "ADS-B ポーリング間隔", storage: "ブラウザ + サーバ", ops: "数値入力（1〜30秒）" },
                   { item: "機体ラベル表示名", storage: "ブラウザ", ops: "CN / 登録番号 / パイロット名 切替" },
                   { item: "高度の単位", storage: "ブラウザ", ops: "m / ft 切替" },
                   { item: "速度の単位", storage: "ブラウザ", ops: "km/h / knot 切替" },
                   { item: "上昇率の単位", storage: "ブラウザ", ops: "m/s / knot/s 切替" },
+                  { item: "距離の単位", storage: "ブラウザ", ops: "km / nm 切替" },
                   { item: "安全滑空比", storage: "ブラウザ", ops: "数値入力（1〜100、デフォルト: 15）" },
-                  { item: "ADS-B 有効/無効", storage: "ブラウザ + サーバー", ops: "チェックボックス" },
-                  { item: "ADS-B URL", storage: "ブラウザ + サーバー", ops: "テキスト入力" },
-                  { item: "ADS-B ポーリング間隔", storage: "ブラウザ + サーバー", ops: "数値入力（1〜30秒）" },
-                  { item: "システム再起動", storage: "—", ops: "ボタン（確認ダイアログあり）" },
-                  { item: "システムシャットダウン", storage: "—", ops: "ボタン（確認ダイアログあり）" },
-                  { item: "システム固定化 ON/OFF", storage: "サーバー（raspi-config）", ops: "ON / OFF ボタン（再起動で反映）" },
-                  { item: "IGC ファイル管理", storage: "サーバー（ファイル）", ops: "アップロード / 削除" },
+                  { item: "Wi-Fi 設定（SSID・パスワード）", storage: "サーバ（wpa_supplicant.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
+                  { item: "有線LAN DHCP/固定IP", storage: "サーバ（dhcpcd.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
+                  { item: "システムアップデート", storage: "—", ops: "実行ボタン（最新時は無効化）" },
+                  { item: "システムステータス", storage: "—", ops: "読み取り専用（5秒間隔で自動更新）" },
+                  { item: "システム固定化 ON/OFF", storage: "サーバ（OverlayFS）", ops: "変更＋再起動（1アクション）" },
+                  { item: "システム再起動 / シャットダウン", storage: "—", ops: "ボタン（確認ダイアログあり）" },
                 ].map(({ item, storage, ops }, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
                     <td className="px-3 py-1.5"><strong>{item}</strong></td>
@@ -358,31 +369,93 @@ function ManualContent() {
               <li><strong>サイドバー幅</strong> — ドラッグで変更した幅を自動保存</li>
               <li><strong>フライトログ高さ</strong> — ドラッグで変更した高さを自動保存</li>
               <li><strong>ホームビュー</strong> — マップの初期表示位置・ズームレベルを保存</li>
-              <li><strong>フライトログデータ</strong> — 離陸・着陸時刻、離脱高度などのフライト記録を自動保存</li>
+            </ul>
+          </Section>
+
+          <Section heading="フライトログデータ">
+            <ul className="list-disc ml-5 space-y-1">
+              <li><strong>保存先:</strong> サーバ側メモリ（全端末で共有）</li>
+              <li><strong>自動リセット:</strong> 毎日 <strong>日本時間 AM 5:00</strong> に全クリア</li>
+              <li>ブラウザを閉じてもデータは保持され、複数端末から同じログを参照できます</li>
+              <li>サーバ再起動時もメモリクリアされるため、永続保存されません</li>
             </ul>
           </Section>
 
           <Section heading="機体情報画面の保存項目">
             <ul className="list-disc ml-5 space-y-1">
-              <li><strong>機体情報データベース</strong> — サーバー（aircraft-db.json）に保存</li>
+              <li><strong>機体情報データベース</strong> — サーバ（aircraft-db.json）に保存</li>
             </ul>
           </Section>
         </div>
       </Card>
 
-      <Card title="システム固定化（オーバーレイFS）">
+      <Card title="システムアップデート">
         <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
           <Section heading="概要">
-            <p>システム固定化は Raspberry Pi のオーバーレイファイルシステム（OverlayFS）を利用した機能です。有効にすると SD カードが読み取り専用になり、稼働中のファイル変更はメモリ上にのみ保持され、再起動時に固定化した時点の状態に自動復帰します。</p>
+            <p>設定画面の「システムアップデート」から、GitHubリポジトリの最新コードを取得してWebアプリをリビルドできます。
+            現在のバージョンとGitHub上の最新バージョンが比較され、アップデートが利用可能な場合のみボタンがアクティブになります。</p>
           </Section>
-          <Section heading="突然の電源 OFF への保護">
-            <p>安定稼働を確認したら固定化を有効にすることを推奨します。固定化により SD カードへの書き込みが発生しないため、突然の電源断（停電、コンセント抜け等）でも SD カードのファイルシステム破損を防止でき、システムを安全に保護できます。通常運用では固定化 ON の状態で使用してください。</p>
+          <Section heading="手順">
+            <ol className="list-decimal ml-5 space-y-1">
+              <li>固定化がONの場合は、先に「固定化を解除して再起動」を実行</li>
+              <li>「アップデート実行」ボタンをクリック</li>
+              <li>プログレスバー（1/5〜5/5）でアップデート進行状況を確認（約2〜3分）</li>
+              <li>完了メッセージが表示されたら、<strong>Shift + Ctrl + R</strong>（Mac: Shift + Cmd + R）でハードリロード</li>
+              <li>必要に応じて「固定化を有効にして再起動」で固定化を戻す</li>
+            </ol>
           </Section>
-          <Section heading="固定化の ON/OFF 手順">
+        </div>
+      </Card>
+
+      <Card title="ネットワーク設定">
+        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
+          <Section heading="Wi-Fi">
             <ul className="list-disc ml-5 space-y-1">
-              <li><strong>ON にする:</strong> 設定画面「システム固定化」で ON を押し、システムを再起動すると有効になります</li>
-              <li><strong>OFF にする:</strong> 設定画面「システム固定化」で OFF を押し、システムを再起動すると解除されます</li>
-              <li>ON/OFF の切替は再起動後に反映されます</li>
+              <li>SSIDとパスワードを入力して適用</li>
+              <li>パスワードは8文字以上必須（WPA2要件）</li>
+              <li>設定は /etc/wpa_supplicant/wpa_supplicant.conf に書き込まれます</li>
+            </ul>
+          </Section>
+          <Section heading="有線LAN">
+            <ul className="list-disc ml-5 space-y-1">
+              <li><strong>DHCP（自動）:</strong> ルーターから自動取得</li>
+              <li><strong>固定IP:</strong> IPアドレス・サブネットマスク・ゲートウェイ・DNSを手動設定</li>
+              <li>設定は /etc/dhcpcd.conf に書き込まれます</li>
+            </ul>
+          </Section>
+          <Section heading="注意事項">
+            <ul className="list-disc ml-5 space-y-1">
+              <li>固定化 ON の場合: 設定変更は再起動時にリセット</li>
+              <li>固定化 OFF の場合: 設定変更は恒久的に保存</li>
+              <li>誤った設定でアクセス不能になった場合は、SDカードを取り出してPCから設定ファイルを修正するか、別系統で接続してください</li>
+            </ul>
+          </Section>
+        </div>
+      </Card>
+
+      <Card title="システム固定化（OverlayFS）">
+        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
+          <Section heading="概要">
+            <p>システム固定化は Raspberry Pi のオーバーレイファイルシステム（OverlayFS）を利用した機能です。
+            有効にすると SD カードが読み取り専用になり、稼働中のファイル変更はメモリ上にのみ保持され、
+            再起動時に固定化した時点の状態に自動復帰します。</p>
+          </Section>
+          <Section heading="SDカード保護">
+            <p>安定稼働を確認したら固定化を有効にすることを推奨します。
+            固定化により SD カードへの書き込みが発生しないため、突然の電源断（停電、コンセント抜け等）でも
+            SD カードのファイルシステム破損を防止でき、システムを安全に保護できます。
+            通常運用では固定化 ON の状態で使用してください。</p>
+          </Section>
+          <Section heading="切替手順（1アクション）">
+            <ul className="list-disc ml-5 space-y-1">
+              <li>設定画面「システム固定化」セクションで現在の状態を確認</li>
+              <li>状態に応じてボタンをクリック:
+                <ul className="list-disc ml-5 mt-1">
+                  <li><strong>OFFの時:</strong>「固定化を有効にして再起動」</li>
+                  <li><strong>ONの時:</strong>「固定化を解除して再起動」</li>
+                </ul>
+              </li>
+              <li>確認ダイアログで OK → 自動的に切替＋再起動が実行されます</li>
             </ul>
           </Section>
           <Section heading="固定化時の設定の保持・リセット">
@@ -397,15 +470,14 @@ function ManualContent() {
                 </thead>
                 <tbody>
                   {[
-                    { item: "滑空場設定（名前・位置・標高）", survive: "残る", reason: "ブラウザ localStorage に保存" },
+                    { item: "滑空場設定（名前・位置・標高）", survive: "残る", reason: "ブラウザ + サーバ両方に保存、読込時はサーバ優先" },
+                    { item: "ADS-B 受信設定", survive: "残る", reason: "ブラウザ + サーバ両方に保存、読込時はサーバ優先" },
                     { item: "表示設定（単位・ラベル・滑空比）", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "ADS-B 受信設定", survive: "残る", reason: "ブラウザ localStorage + サーバー側ファイルだが、ブラウザ設定から自動復元" },
-                    { item: "再生倍速", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "サイドバー幅・ログ高さ・ホームビュー", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "フライトログデータ", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "機体情報データベース", survive: "リセット", reason: "サーバー側ファイル（aircraft-db.json）" },
-                    { item: "IGC ファイル", survive: "リセット", reason: "サーバー側ファイル" },
-                    { item: "ADS-B 設定ファイル", survive: "リセット", reason: "サーバー側ファイル（adsb-config.json）だが、ブラウザ設定から自動復元されるため実質影響なし" },
+                    { item: "再生倍速・サイドバー幅・ログ高さ・ホームビュー", survive: "残る", reason: "ブラウザ localStorage に保存" },
+                    { item: "フライトログデータ", survive: "リセット", reason: "サーバ側メモリ（再起動でクリア、AM5時自動リセット）" },
+                    { item: "機体情報データベース", survive: "リセット", reason: "サーバ側ファイル（aircraft-db.json）で固定化対象" },
+                    { item: "IGC ファイル", survive: "リセット", reason: "サーバ側ファイルで固定化対象" },
+                    { item: "ネットワーク設定（Wi-Fi・有線LAN）", survive: "リセット", reason: "サーバ側ファイル（wpa_supplicant.conf、dhcpcd.conf）で固定化対象" },
                   ].map(({ item, survive, reason }, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
                       <td className="px-3 py-1.5"><strong>{item}</strong></td>
@@ -422,14 +494,33 @@ function ManualContent() {
               </table>
             </div>
           </Section>
-          <Section heading="固定化の解除と設定の引き継ぎ">
+          <Section heading="固定化を解除して変更を永続化する流れ">
             <ul className="list-disc ml-5 space-y-1">
-              <li>固定化を OFF にして再起動すると、通常モードに戻ります</li>
-              <li>ブラウザに保存されている設定（滑空場・表示設定・ADS-B 等）は固定化の ON/OFF に関わらず常に引き継がれます</li>
-              <li>サーバー側ファイル（機体情報 DB・IGC ファイル）は固定化を ON にした時点の内容に戻ります</li>
-              <li>固定化中に追加した機体情報や IGC ファイルは、固定化解除の再起動でも失われます。変更を永続化したい場合は先に固定化を OFF にして再起動し、通常モードで変更してください</li>
-              <li>別のブラウザや端末からアクセスした場合、ブラウザ側の設定はそのブラウザにのみ保存されているため、各端末で個別に設定が必要です</li>
+              <li>「固定化を解除して再起動」→ 通常モードで起動</li>
+              <li>必要な変更（機体情報DB追加、IGCアップロード、ネットワーク設定変更、アップデート等）を実施</li>
+              <li>「固定化を有効にして再起動」→ 変更が固定化された状態で運用再開</li>
             </ul>
+          </Section>
+        </div>
+      </Card>
+
+      <Card title="履歴再生機能">
+        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
+          <Section heading="用途">
+            <ul className="list-disc ml-5 space-y-1">
+              <li><strong>フライトサービスの訓練</strong> — 実際のフライトがない日でも、過去のフライトデータを使って発航管理や位置把握の練習ができます</li>
+              <li><strong>システム操作学習</strong> — 実機が飛んでいなくても FEELDSCOPE の画面操作・機能を体験できます</li>
+              <li><strong>フライトの振り返り</strong> — 過去のフライトを再生して、飛行経路やパターンを地図上で確認できます</li>
+            </ul>
+          </Section>
+          <Section heading="仕組み">
+            <p>IGCファイルには緯度・経度・高度・時刻が記録されています。履歴再生では、記録された飛行データの時刻を<strong>現在時刻に自動的にずらして</strong>再生します。
+            例えば2024年5月に記録されたフライトでも、再生を開始すると「今この瞬間に飛んでいる」ように地図上にリアルタイムで軌跡が描かれます。
+            再生速度は1〜20倍速に調整でき、ループ再生にも対応しています。</p>
+          </Section>
+          <Section heading="OGNへのアップロードは継続">
+            <p>履歴再生中も OGN 受信機（ogn-rf / ogn-decode）は独立して動作しており、実際に受信した FLARM データの OGN サーバへのアップロードは中断されません。
+            履歴再生は FEELDSCOPE の Web 表示のみを切り替える機能であり、受信局としての機能には影響しません。</p>
           </Section>
         </div>
       </Card>
@@ -512,11 +603,73 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.0.0 */}
+      {/* v1.3.0 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="GUI アップデート機能の改善">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>アップデート実行を systemd-run で完全独立化（webapp停止の影響を受けない）</li>
+          <li>プログレスバー表示（1/5〜5/5ステップ + パーセンテージ）</li>
+          <li>完了後のハードリロード案内メッセージ（Shift+Ctrl+R）</li>
+          <li>最新バージョン時はアップデートボタンを無効化表示</li>
+        </ul>
+      </Card>
+
+      <Card title="システム固定化 UI の刷新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ON/OFFボタンを廃止し「固定化を有効にして再起動」「固定化を解除して再起動」の1アクションに統合</li>
+          <li>現在の状態を明示表示（「ON（固定化中）」/「OFF（通常モード）」）</li>
+          <li>操作と再起動を1ステップ化し、中途半端な状態を排除</li>
+        </ul>
+      </Card>
+
+      <Card title="マニュアル・リファレンスの全面刷新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定項目リファレンスを実際の画面順序に揃えて記載</li>
+          <li>各項目の保存先（ブラウザ / サーバ / ブラウザ+サーバ）を正確に明記</li>
+          <li>履歴再生・システムアップデート・ネットワーク設定の解説を追加</li>
+          <li>フライトログのサーバ保存・AM5時自動リセットの説明を追加</li>
+        </ul>
+      </Card>
+
+      {/* v1.2.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
+      </div>
+
+      <Card title="フライトログのサーバ保存化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>localStorage からサーバメモリに移行、複数端末・ブラウザで共有可能</li>
+          <li>毎日 日本時間 AM 5:00 に自動リセット</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
+      </div>
+
+      <Card title="新機能">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ネットワーク設定 GUI（Wi-Fi SSID/パスワード、有線LAN DHCP/固定IP）</li>
+          <li>システムアップデート GUI（GitHubから最新版取得してリビルド）</li>
+          <li>設定画面の再編成（関連項目を隣接配置、地図ソース切替を削除）</li>
+          <li>ADS-B URL のデフォルト値を http://fr24.local/tar1090/data/aircraft.json に設定</li>
+          <li>機体情報DB・IGCファイルを git管理から除外（端末固有データ保護）</li>
+        </ul>
+      </Card>
+
+      {/* v1.0.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.0.0</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-03-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>初版リリース</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-bg-card)", color: "var(--color-text-secondary)" }}>初版リリース</span>
       </div>
 
       <Card title="FLARM 受信・表示">
@@ -572,6 +725,13 @@ function ReleaseNotesContent() {
 }
 
 function VersionContent() {
+  const [version, setVersion] = useState<string>("...");
+  useEffect(() => {
+    fetch("/api/system")
+      .then(r => r.json())
+      .then(d => setVersion(d.version?.current || "unknown"))
+      .catch(() => setVersion("unknown"));
+  }, []);
   return (
     <>
       <Card title="バージョン情報">
@@ -580,8 +740,8 @@ function VersionContent() {
             <span className="text-2xl font-bold tracking-widest" style={{ color: "var(--color-accent)" }}>FEELDSCOPE</span>
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
-          <InfoRow label="バージョン" value="1.0.0" />
-          <InfoRow label="リリース日" value="2026-03-20" />
+          <InfoRow label="バージョン" value={version} />
+          <InfoRow label="リリース日" value="2026-04-14" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
@@ -598,8 +758,8 @@ function VersionContent() {
 
       <Card title="動作環境">
         <div className="space-y-2">
-          <InfoRow label="プラットフォーム" value="Raspberry Pi 5" />
-          <InfoRow label="OS" value="Raspberry Pi OS (Linux)" />
+          <InfoRow label="プラットフォーム" value="Raspberry Pi 4 / 5" />
+          <InfoRow label="OS" value="Raspbian / Raspberry Pi OS (Linux)" />
           <InfoRow label="受信周波数" value="922.4 MHz（日本）" />
           <InfoRow label="受信機" value="RTL-SDR" />
         </div>
