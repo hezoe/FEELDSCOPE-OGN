@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Navigation from "@/components/Navigation";
 import { useTab } from "@/lib/TabContext";
 import SettingsPage from "@/app/settings/page";
+import OgnPage from "@/app/ogn/page";
 import AircraftDbPage from "@/app/aircraft-db/page";
 
 const FlightMap = dynamic(() => import("@/components/FlightMap"), {
@@ -34,6 +35,7 @@ export default function Home() {
       </div>
 
       {activeTab === "settings" && <SettingsPage />}
+      {activeTab === "ogn" && <OgnPage />}
       {activeTab === "aircraft-db" && <AircraftDbPage />}
     </div>
   );
