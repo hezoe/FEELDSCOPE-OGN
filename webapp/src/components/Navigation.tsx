@@ -66,6 +66,8 @@ export default function Navigation() {
           <div style={{ width: 1, background: "var(--color-border)" }} />
           <NavTab tabId="settings" label="設定" active={activeTab === "settings"} onClick={setActiveTab} />
           <div style={{ width: 1, background: "var(--color-border)" }} />
+          <NavTab tabId="ogn" label="OGN設定" active={activeTab === "ogn"} onClick={setActiveTab} />
+          <div style={{ width: 1, background: "var(--color-border)" }} />
           <NavTab tabId="aircraft-db" label="機体情報" active={activeTab === "aircraft-db"} onClick={setActiveTab} />
           <div style={{ width: 1, background: "var(--color-border)" }} />
           <div className="h-full flex items-center">
@@ -268,6 +270,7 @@ function ManualContent() {
               <li><strong>滑空場名</strong> — 設定画面で設定した滑空場名を表示</li>
               <li><strong>マップ</strong> — マップ画面に切替</li>
               <li><strong>設定</strong> — 設定画面に切替</li>
+              <li><strong>OGN設定</strong> — OGN受信機の設定・ステータス画面に切替</li>
               <li><strong>機体情報</strong> — 機体情報データベース画面に切替</li>
               <li><strong>ヘルプ</strong> — マニュアル / リリースノート / バージョン情報をポップアップ表示</li>
               <li><strong>時計</strong> — 現在時刻をリアルタイム表示（右端）</li>
@@ -302,6 +305,16 @@ function ManualContent() {
               <li><strong>システム固定化</strong> — オーバーレイFS の切替＋再起動（1アクション）</li>
               <li><strong>システム電源</strong> — 再起動・シャットダウン</li>
             </ol>
+          </Section>
+          <Section heading="OGN設定画面">
+            <ul className="list-disc ml-5 space-y-1">
+              <li><strong>受信機ステータス</strong> — ソフトウェアバージョン、CPU温度、NTP誤差、実測ゲイン、ノイズ等をリアルタイム表示（5秒間隔自動更新）</li>
+              <li><strong>受信機識別</strong> — 受信機名（APRS Call、英数字9文字以内）</li>
+              <li><strong>アンテナ設置位置</strong> — 緯度・経度・高度</li>
+              <li><strong>RF設定</strong> — 周波数補正(ppm)、GSM中心周波数・ゲイン（校正用）、Bias-T、HTTPポート</li>
+              <li><strong>OGNバイナリURL</strong> — OGNソフトウェア再インストール時のダウンロード元</li>
+              <li>保存時は rtlsdr-ogn.conf と OGN-receiver.conf の両方が更新され、受信機が自動再起動します</li>
+            </ul>
           </Section>
           <Section heading="機体情報画面">
             <ul className="list-disc ml-5 space-y-1">
@@ -611,11 +624,26 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.0 */}
+      {/* v1.5.0 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.0</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OGN設定タブの追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>新タブ「OGN設定」を追加。OGN受信機の全設定をWeb GUIから変更可能</li>
+          <li>受信機名（APRS Call）、緯度・経度・高度、周波数補正、GSM校正、Bias-T、HTTPポート 等</li>
+          <li>受信機のリアルタイムステータス表示（ソフトウェアバージョン、CPU温度、NTP誤差、実測ゲイン、ノイズ など）</li>
+          <li>設定保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と <code>/boot/OGN-receiver.conf</code> 両方を更新し、<code>rtlsdr-ogn</code> を自動再起動</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
       </div>
 
       <Card title="mDNSホスト名設定">

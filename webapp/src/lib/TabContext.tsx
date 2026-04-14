@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-export type TabId = "map" | "settings" | "aircraft-db";
+export type TabId = "map" | "settings" | "ogn" | "aircraft-db";
 
 interface TabContextValue {
   activeTab: TabId;
