@@ -684,11 +684,35 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.1 — 公式初回リリース */}
+      {/* v1.1.2 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.2</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="アップデート判定ロジックの変更">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>「アップデートあり」の判定をリモートのコミット差のみで行うように変更</li>
+          <li>マニュアル更新やドキュメント修正など、バージョン番号を変えない変更も自動で配布対象に</li>
+        </ul>
+      </Card>
+
+      <Card title="マニュアル全面刷新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>5大項目（マップ / ステータス / 設定 / OGN設定 / 機体情報）に再構成</li>
+          <li>マップアイコン11種類の一覧表（OGN受信機アンテナアイコン含む）</li>
+          <li>ステータスタブの全項目を表形式で意味解説</li>
+          <li>設定タブ全11セクションを個別解説、保存先（ブラウザ / サーバ / 両方）を明記</li>
+          <li>HOME / 保存ボタン、Bias-T警告等の操作系も全てカバー</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.1 — 公式初回リリース */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>初回公開リリース</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-bg-card)", color: "var(--color-text-secondary)" }}>初回公開リリース</span>
       </div>
 
       <Card title="マップ・受信機表示">
