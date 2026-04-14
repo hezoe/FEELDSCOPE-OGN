@@ -110,8 +110,9 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
   let latest: string | null = null;
   let updateAvailable = false;
   try {
-    // Fetch remote to compare without pulling
-    await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo -u pi git fetch origin --quiet`);
+    // Fetch remote to compare without pulling. Try sudo -u pi first (RPi),
+    // fall back to plain git fetch (VPS or any other env).
+    await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && (sudo -n -u pi git fetch origin --quiet 2>/dev/null || git fetch origin --quiet)`);
     // Compare package.json version rather than commit count — update-script commits
     // don't change the deployed version, so commits-ahead can be misleading
     try {
@@ -137,9 +138,10 @@ interface AutoRebootConfig {
 }
 
 async function getAutoRebootConfig(): Promise<AutoRebootConfig> {
+  // Try sudo first (RPi has passwordless sudo); fall back to plain crontab
+  // -n: never prompt for password (fails fast on VPS without sudoers entry)
   try {
-    const { stdout } = await execAsync("sudo crontab -l 2>/dev/null || true");
-    // Match line like: "0 5 * * * /sbin/reboot"
+    const { stdout } = await execAsync("sudo -n crontab -l 2>/dev/null || crontab -l 2>/dev/null || true");
     const lines = stdout.split("\n");
     for (const line of lines) {
       const m = line.match(/^\s*(\d+)\s+(\d+)\s+\*\s+\*\s+\*\s+.*reboot/);

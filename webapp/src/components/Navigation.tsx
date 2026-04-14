@@ -629,11 +629,24 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.5.2 */}
+      {/* v1.5.3 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.2</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.3</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="VPSデモ環境の互換性修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>sudo crontab / sudo -u pi git fetch を sudo -n で fail-fast 化、失敗時は plain コマンドで再試行</li>
+          <li>passwordless sudo がない環境（VPS等）でAPIが応答停止する問題を解消</li>
+        </ul>
+      </Card>
+
+      {/* v1.5.2 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.2</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
       </div>
 
       <Card title="自動再起動の設定をGUI化">
