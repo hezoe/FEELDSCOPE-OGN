@@ -5,7 +5,6 @@ import { readFile } from "fs/promises";
 
 const execAsync = promisify(exec);
 
-const FEELDSCOPE_DIR = "/home/pi/FEELDSCOPE";
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
 
 async function isActive(service: string): Promise<boolean> {

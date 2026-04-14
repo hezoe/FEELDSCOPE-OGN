@@ -5,12 +5,12 @@ import { readFile, writeFile, unlink } from "fs/promises";
 
 const execAsync = promisify(exec);
 
-const ADSB_CONFIG_PATH = "/home/pi/FEELDSCOPE/adsb-config.json";
-const AIRFIELD_CONFIG_PATH = "/home/pi/FEELDSCOPE/airfield-config.json";
+const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
+const FEELDSCOPE_OGN_DIR = process.env.FEELDSCOPE_OGN_DIR || "/home/pi/FEELDSCOPE-OGN";
+const ADSB_CONFIG_PATH = process.env.FEELDSCOPE_ADSB_CONFIG || `${FEELDSCOPE_DIR}/adsb-config.json`;
+const AIRFIELD_CONFIG_PATH = process.env.FEELDSCOPE_AIRFIELD_CONFIG || `${FEELDSCOPE_DIR}/airfield-config.json`;
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
-const FEELDSCOPE_OGN_DIR = "/home/pi/FEELDSCOPE-OGN";
-const FEELDSCOPE_DIR = "/home/pi/FEELDSCOPE";
 
 interface AirfieldConfig {
   name: string;
@@ -353,7 +353,7 @@ export async function POST(request: Request) {
         await execAsync(`sudo bash -c 'cat > ${overrideDir}/speed.conf << EOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/igc-simulator.py --speed ${replaySpeed} --loop --dir /home/pi/FEELDSCOPE/testdata
+ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --dir ${FEELDSCOPE_DIR}/testdata
 EOF'`);
         await execAsync("sudo systemctl daemon-reload");
         await execAsync("sudo systemctl start igc-simulator");
@@ -376,7 +376,7 @@ EOF'`);
         await execAsync(`sudo bash -c 'cat > ${adsbOverrideDir}/config.conf << EOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval}
+ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval}
 EOF'`);
         await execAsync("sudo systemctl daemon-reload");
         await execAsync("sudo systemctl restart adsb-poller");
