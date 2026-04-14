@@ -130,6 +130,7 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
 // ── Network helpers ──
 
 interface NetworkStatus {
+  hostname: string;
   wifi: { ssid: string; connected: boolean };
   eth: {
     connected: boolean;
@@ -152,7 +153,30 @@ function subnetToCidr(subnet: string): number {
   return n.toString(2).split("1").length - 1;
 }
 
+async function getHostname(): Promise<string> {
+  try {
+    const { stdout } = await execAsync("hostname");
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+
+async function applyHostname(name: string): Promise<void> {
+  // Update /etc/hostname, /etc/hosts (127.0.1.1 entry), and apply via hostnamectl
+  const safe = name.replace(/[^a-zA-Z0-9-]/g, "");
+  if (!safe || safe.length > 63 || /^-/.test(safe) || /-$/.test(safe)) {
+    throw new Error("ホスト名は英数字とハイフンのみ、63文字以内、先頭末尾はハイフン不可です");
+  }
+  await execAsync(`sudo hostnamectl set-hostname ${safe}`);
+  // Update /etc/hosts 127.0.1.1 entry
+  await execAsync(`sudo sed -i -E 's/^(127\\.0\\.1\\.1\\s+).*/\\1${safe}/' /etc/hosts`);
+  // Restart avahi to refresh mDNS
+  await execAsync("sudo systemctl restart avahi-daemon").catch(() => {});
+}
+
 async function getNetworkStatus(): Promise<NetworkStatus> {
+  const hostname = await getHostname();
   // Wi-Fi
   let wifiSsid = "";
   let wifiConnected = false;
@@ -213,6 +237,7 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
   } catch { /* ignore */ }
 
   return {
+    hostname,
     wifi: { ssid: wifiSsid, connected: wifiConnected },
     eth: { connected: ethConnected, method: ethMethod, ip: ethIp, subnet: ethSubnet, gateway: ethGateway, dns: ethDns },
   };
@@ -390,6 +415,17 @@ EOF'`);
         };
         await saveAirfieldConfig(airfield);
         return NextResponse.json({ ok: true, airfield });
+      }
+
+      case "hostname-save": {
+        const name = (body.hostname || "").trim();
+        if (!name) return NextResponse.json({ error: "ホスト名を入力してください" }, { status: 400 });
+        try {
+          await applyHostname(name);
+        } catch (e) {
+          return NextResponse.json({ error: e instanceof Error ? e.message : "ホスト名設定に失敗しました" }, { status: 400 });
+        }
+        return NextResponse.json({ ok: true, message: `ホスト名を ${name} に設定しました。${name}.local でアクセス可能になります。` });
       }
 
       case "wifi-save": {

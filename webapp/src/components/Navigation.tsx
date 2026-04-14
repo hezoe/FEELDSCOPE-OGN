@@ -347,6 +347,7 @@ function ManualContent() {
                   { item: "上昇率の単位", storage: "ブラウザ", ops: "m/s / knot/s 切替" },
                   { item: "距離の単位", storage: "ブラウザ", ops: "km / nm 切替" },
                   { item: "安全滑空比", storage: "ブラウザ", ops: "数値入力（1〜100、デフォルト: 15）" },
+                  { item: "ホスト名（mDNS）", storage: "サーバ（/etc/hostname）", ops: "テキスト入力 + 適用ボタン（{name}.local でアクセス可能）" },
                   { item: "Wi-Fi 設定（SSID・パスワード）", storage: "サーバ（wpa_supplicant.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
                   { item: "有線LAN DHCP/固定IP", storage: "サーバ（dhcpcd.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
                   { item: "システムアップデート", storage: "—", ops: "実行ボタン（最新時は無効化）" },
@@ -409,6 +410,13 @@ function ManualContent() {
 
       <Card title="ネットワーク設定">
         <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
+          <Section heading="ホスト名（mDNS）">
+            <ul className="list-disc ml-5 space-y-1">
+              <li>システムのホスト名を設定。Avahi/mDNS により <code>{"<hostname>"}.local</code> で同一LAN内からアクセス可能</li>
+              <li>使用可能文字: 英数字とハイフン、63文字以内、先頭・末尾はハイフン不可</li>
+              <li>適用すると即時反映され、avahi-daemon が自動的に再起動します</li>
+            </ul>
+          </Section>
           <Section heading="Wi-Fi">
             <ul className="list-disc ml-5 space-y-1">
               <li>SSIDとパスワードを入力して適用</li>
@@ -603,11 +611,25 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.3.0 */}
+      {/* v1.4.0 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="mDNSホスト名設定">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ネットワーク設定にホスト名（mDNS）の項目を追加</li>
+          <li>設定後 <code>{"<hostname>"}.local</code> でアクセス可能（同一LAN内、Avahi/mDNS経由）</li>
+          <li>hostnamectl + /etc/hosts 更新 + avahi-daemon 再起動を自動実行</li>
+        </ul>
+      </Card>
+
+      {/* v1.3.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
       </div>
 
       <Card title="GUI アップデート機能の改善">
