@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 
-const IGC_DIR = "/home/pi/FEELDSCOPE/testdata";
+const IGC_DIR = process.env.FEELDSCOPE_IGC_DIR || "/home/pi/FEELDSCOPE/testdata";
 
 // GET /api/system/igc-files - List IGC files in testdata
 export async function GET() {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile, writeFile } from "fs/promises";
 import type { AircraftDatabase, AircraftRecord, AircraftTypeCode } from "@/lib/types";
 
-const DB_PATH = "/home/pi/FEELDSCOPE/aircraft-db.json";
+const DB_PATH = process.env.FEELDSCOPE_AIRCRAFT_DB || "/home/pi/FEELDSCOPE/aircraft-db.json";
 
 async function readDb(): Promise<AircraftDatabase> {
   try {
