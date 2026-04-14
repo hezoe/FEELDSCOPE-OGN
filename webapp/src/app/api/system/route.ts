@@ -119,11 +119,11 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
       const { stdout: remotePkg } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git show origin/master:webapp/package.json`);
       latest = JSON.parse(remotePkg).version || null;
     } catch { /* ignore */ }
-    // Update available if remote has any commits ahead, regardless of version string.
-    // This way doc-only updates (manual / release notes) also reach users.
+    // Update available only when version string differs.
+    // Same version = same state for all users (policy: always bump patch for any change).
     const { stdout } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git rev-list HEAD..origin/master --count`);
     const behind = parseInt(stdout.trim(), 10);
-    updateAvailable = behind > 0;
+    updateAvailable = behind > 0 && latest !== current;
   } catch { /* ignore */ }
 
   return { current, latest, updateAvailable };
