@@ -33,6 +33,7 @@ async function saveAirfieldConfig(config: AirfieldConfig): Promise<void> {
 }
 
 async function detectReceiverId(): Promise<string> {
+  if (process.env.FEELDSCOPE_RECEIVER_ID) return process.env.FEELDSCOPE_RECEIVER_ID;
   try {
     const data = await readFile("/boot/OGN-receiver.conf", "utf-8");
     const m = data.match(/ReceiverName="([^"#]+)"/);

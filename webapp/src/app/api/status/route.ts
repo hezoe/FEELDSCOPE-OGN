@@ -26,6 +26,7 @@ async function isInitdActive(name: string): Promise<boolean> {
 }
 
 async function getReceiverId(): Promise<string> {
+  if (process.env.FEELDSCOPE_RECEIVER_ID) return process.env.FEELDSCOPE_RECEIVER_ID;
   try {
     const data = await readFile("/boot/OGN-receiver.conf", "utf-8");
     const m = data.match(/ReceiverName="([^"#]+)"/);
