@@ -38,6 +38,7 @@ interface SystemStatus {
   adsb_config: AdsbSavedConfig | null;
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
+  auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
 }
 
 export default function SettingsPage() {
@@ -47,6 +48,12 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [powerAction, setPowerAction] = useState(false);
   const [overlayAction, setOverlayAction] = useState(false);
+  // Auto reboot
+  const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
+  const [autoRebootHour, setAutoRebootHour] = useState(5);
+  const [autoRebootMinute, setAutoRebootMinute] = useState(0);
+  const [autoRebootSaving, setAutoRebootSaving] = useState(false);
+  const autoRebootSynced = useRef(false);
   // System update
   const [updating, setUpdating] = useState(false);
   const [updateLog, setUpdateLog] = useState<string | null>(null);
@@ -136,6 +143,15 @@ export default function SettingsPage() {
       }).then(() => fetchStatus()).catch(() => {});
     }
   }, [unitsLoaded, status, units.adsb, fetchStatus, setAdsb]);
+
+  // Sync auto-reboot settings from server (once)
+  useEffect(() => {
+    if (autoRebootSynced.current || !status?.auto_reboot) return;
+    autoRebootSynced.current = true;
+    setAutoRebootEnabled(status.auto_reboot.enabled);
+    setAutoRebootHour(status.auto_reboot.hour);
+    setAutoRebootMinute(status.auto_reboot.minute);
+  }, [status]);
 
   // Sync network settings from server
   useEffect(() => {
@@ -1279,6 +1295,91 @@ export default function SettingsPage() {
                   運用環境ではSDカード保護のため固定化を有効にすることを推奨します。
                 </p>
               )}
+            </div>
+          </Card>
+
+          {/* Auto Reboot */}
+          <Card title="自動再起動">
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoRebootEnabled}
+                  onChange={(e) => setAutoRebootEnabled(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">毎日決まった時刻に自動再起動する</span>
+              </label>
+
+              {autoRebootEnabled && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>時刻:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={autoRebootHour}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v) && v >= 0 && v <= 23) setAutoRebootHour(v);
+                    }}
+                    className="w-16 px-3 py-1.5 text-sm rounded font-mono text-right"
+                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+                  />
+                  <span className="text-sm">:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={autoRebootMinute}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v) && v >= 0 && v <= 59) setAutoRebootMinute(v);
+                    }}
+                    className="w-16 px-3 py-1.5 text-sm rounded font-mono text-right"
+                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+                  />
+                  <span className="text-xs ml-2" style={{ color: "var(--color-text-secondary)" }}>
+                    （システムのローカルタイムゾーン基準）
+                  </span>
+                </div>
+              )}
+
+              <button
+                onClick={async () => {
+                  setAutoRebootSaving(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/system", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "auto-reboot-save",
+                        enabled: autoRebootEnabled,
+                        hour: autoRebootHour,
+                        minute: autoRebootMinute,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    autoRebootSynced.current = false;
+                    await fetchStatus();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "自動再起動設定の保存に失敗しました");
+                  }
+                  setAutoRebootSaving(false);
+                }}
+                disabled={autoRebootSaving}
+                className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                style={{ background: "var(--color-accent)", color: "#fff", opacity: autoRebootSaving ? 0.5 : 1, cursor: autoRebootSaving ? "wait" : "pointer" }}
+              >
+                {autoRebootSaving ? "保存中..." : "適用"}
+              </button>
+
+              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                rootのcrontabに <code>{autoRebootEnabled ? `${autoRebootMinute} ${autoRebootHour} * * * /sbin/reboot` : "（再起動行を削除）"}</code> を設定します。
+                毎日決まった時刻にシステム全体を再起動することで、メモリリークや一時ファイルの蓄積を防ぎます。
+              </p>
             </div>
           </Card>
 

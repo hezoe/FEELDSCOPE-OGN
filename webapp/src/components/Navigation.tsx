@@ -306,6 +306,7 @@ function ManualContent() {
               <li><strong>システムアップデート</strong> — GitHubから最新版を取得してリビルド</li>
               <li><strong>システムステータス</strong> — 各サービスの稼働状態（読み取り専用）</li>
               <li><strong>システム固定化</strong> — オーバーレイFS の切替＋再起動（1アクション）</li>
+              <li><strong>自動再起動</strong> — 毎日決まった時刻にシステム自動再起動</li>
               <li><strong>システム電源</strong> — 再起動・シャットダウン</li>
             </ol>
           </Section>
@@ -369,6 +370,7 @@ function ManualContent() {
                   { item: "システムアップデート", storage: "—", ops: "実行ボタン（最新時は無効化）" },
                   { item: "システムステータス", storage: "—", ops: "読み取り専用（5秒間隔で自動更新）" },
                   { item: "システム固定化 ON/OFF", storage: "サーバ（OverlayFS）", ops: "変更＋再起動（1アクション）" },
+                  { item: "自動再起動", storage: "サーバ（root crontab）", ops: "有効/無効 + 時刻(HH:MM)入力" },
                   { item: "システム再起動 / シャットダウン", storage: "—", ops: "ボタン（確認ダイアログあり）" },
                 ].map(({ item, storage, ops }, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
@@ -627,11 +629,33 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.5.1 */}
+      {/* v1.5.2 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.1</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.2</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="自動再起動の設定をGUI化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定タブに「自動再起動」セクションを追加（システム電源の上）</li>
+          <li>毎日の自動再起動の時刻（HH:MM）を変更可能、有効/無効も切替可能</li>
+          <li>rootのcrontabを直接編集（既存の他のcron行は保持）</li>
+          <li>VPS等でcrontabが空の環境でも安全に動作</li>
+        </ul>
+      </Card>
+
+      <Card title="その他">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>各種ファイルパスとReceiver IDを環境変数で上書き可能に（VPSデモ環境対応）</li>
+          <li>HTTPS経由ではMQTTを wss://&lt;host&gt;/mqtt-ws で接続（リバースプロキシ対応）</li>
+        </ul>
+      </Card>
+
+      {/* v1.5.1 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.1</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
       </div>
 
       <Card title="ステータスタブの追加（マップと設定の間）">
