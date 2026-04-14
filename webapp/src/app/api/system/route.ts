@@ -111,16 +111,17 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
   try {
     // Fetch remote to compare without pulling
     await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && sudo -u pi git fetch origin --quiet`);
+    // Compare package.json version rather than commit count — update-script commits
+    // don't change the deployed version, so commits-ahead can be misleading
+    try {
+      const { stdout: remotePkg } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git show origin/master:webapp/package.json`);
+      latest = JSON.parse(remotePkg).version || null;
+    } catch { /* ignore */ }
+    // Also check commits-ahead: if current deployed version matches remote, but
+    // there are remote commits ahead, still offer update (e.g. hotfix without version bump)
     const { stdout } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git rev-list HEAD..origin/master --count`);
     const behind = parseInt(stdout.trim(), 10);
-    updateAvailable = behind > 0;
-    if (updateAvailable) {
-      // Get version from remote package.json
-      try {
-        const { stdout: remotePkg } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git show origin/master:webapp/package.json`);
-        latest = JSON.parse(remotePkg).version || null;
-      } catch { /* ignore */ }
-    }
+    updateAvailable = behind > 0 && latest !== current;
   } catch { /* ignore */ }
 
   return { current, latest, updateAvailable };
@@ -418,13 +419,16 @@ EOF'`);
         if (overlayActive) {
           return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
         }
-        // Write a one-shot systemd unit to run the updater completely independent of webapp
+        // Remove stale log and launch updater as independent systemd transient unit
+        await execAsync("sudo rm -f /tmp/feeldscope-update.log && sudo touch /tmp/feeldscope-update.log && sudo chmod 666 /tmp/feeldscope-update.log");
         await execAsync(`sudo bash -c 'cat > /tmp/feeldscope-do-update.sh << "SCRIPT"
 #!/bin/bash
 cd ${FEELDSCOPE_OGN_DIR}
-bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1
+exec bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1
 SCRIPT
 chmod +x /tmp/feeldscope-do-update.sh'`);
+        // Reset any previous failed unit before starting new one
+        await execAsync("sudo systemctl reset-failed feeldscope-update 2>/dev/null || true");
         await execAsync("sudo systemd-run --unit=feeldscope-update --description='FEELDSCOPE Update' /tmp/feeldscope-do-update.sh");
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
