@@ -367,6 +367,7 @@ export default function FlightMap() {
 
   const airfield = units.airfield;
   const fieldMarkerRef = useRef<L.CircleMarker | null>(null);
+  const ognReceiverMarkerRef = useRef<L.Marker | null>(null);
   const tileLayersRef = useRef<L.TileLayer[]>([]);
 
   // Initialize map
@@ -449,6 +450,62 @@ export default function FlightMap() {
     const markerPane = map.getPane("markerPane");
     if (markerPane) markerPane.style.zIndex = "650";
   }, [units.mapSource]);
+
+  // OGN receiver marker: poll /api/ogn for receiver location and status
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    async function update() {
+      try {
+        const res = await fetch("/api/ogn");
+        const data = await res.json();
+        if (cancelled) return;
+        const cfg = data.config;
+        const status = data.status;
+        if (!cfg || cfg.latitude == null || cfg.longitude == null) return;
+
+        const online = status?.online === true;
+        const color = online ? "#00b894" : "#888";
+        const html = `<div style="display:flex;flex-direction:column;align-items:center;line-height:1;">
+          <svg width="22" height="22" viewBox="-11 -11 22 22">
+            <path d="M0,-9 L4,8 L0,5 L-4,8 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width="0.7"/>
+            <line x1="-3" y1="-2" x2="3" y2="-2" stroke="${color}" stroke-width="1.2"/>
+            <line x1="-5" y1="-5" x2="5" y2="-5" stroke="${color}" stroke-width="1.2"/>
+          </svg>
+        </div>`;
+        const icon = L.divIcon({ html, className: "ogn-receiver-icon", iconSize: [22, 22], iconAnchor: [11, 11] });
+
+        const latlng = L.latLng(cfg.latitude, cfg.longitude);
+        const tooltipText = `OGN受信機: ${cfg.receiverName || "—"}<br>${online ? "稼働中" : "停止"}${status?.ognGain ? `<br>Gain: ${status.ognGain}` : ""}${status?.noise ? `<br>Noise: ${status.noise}` : ""}`;
+
+        if (!ognReceiverMarkerRef.current) {
+          const m = L.marker(latlng, { icon, zIndexOffset: -100 })
+            .addTo(map)
+            .bindTooltip(tooltipText, { direction: "top", offset: [0, -8], className: "ogn-receiver-tooltip" });
+          ognReceiverMarkerRef.current = m;
+        } else {
+          ognReceiverMarkerRef.current.setLatLng(latlng);
+          ognReceiverMarkerRef.current.setIcon(icon);
+          ognReceiverMarkerRef.current.setTooltipContent(tooltipText);
+        }
+      } catch { /* ignore */ }
+    }
+
+    update();
+    intervalId = setInterval(update, 10000);
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+      if (ognReceiverMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(ognReceiverMarkerRef.current);
+        ognReceiverMarkerRef.current = null;
+      }
+    };
+  }, []);
 
   // Update field marker when airfield settings change
   useEffect(() => {
