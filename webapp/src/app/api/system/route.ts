@@ -128,6 +128,47 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
   return { current, latest, updateAvailable };
 }
 
+// ── Auto-reboot (cron) helpers ──
+
+interface AutoRebootConfig {
+  enabled: boolean;
+  hour: number;   // 0-23
+  minute: number; // 0-59
+}
+
+async function getAutoRebootConfig(): Promise<AutoRebootConfig> {
+  try {
+    const { stdout } = await execAsync("sudo crontab -l 2>/dev/null || true");
+    // Match line like: "0 5 * * * /sbin/reboot"
+    const lines = stdout.split("\n");
+    for (const line of lines) {
+      const m = line.match(/^\s*(\d+)\s+(\d+)\s+\*\s+\*\s+\*\s+.*reboot/);
+      if (m) {
+        return { enabled: true, minute: parseInt(m[1], 10), hour: parseInt(m[2], 10) };
+      }
+    }
+  } catch { /* ignore */ }
+  return { enabled: false, hour: 5, minute: 0 };
+}
+
+async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
+  if (cfg.hour < 0 || cfg.hour > 23) throw new Error("時(hour)は 0〜23 の範囲です");
+  if (cfg.minute < 0 || cfg.minute > 59) throw new Error("分(minute)は 0〜59 の範囲です");
+
+  // Read existing crontab (sans reboot lines), append new line if enabled
+  const { stdout } = await execAsync("sudo crontab -l 2>/dev/null || true");
+  const filtered = stdout.split("\n").filter(line => !/.*\/sbin\/reboot\s*$/.test(line)).join("\n");
+  let newCron = filtered.trimEnd();
+  if (cfg.enabled) {
+    if (newCron) newCron += "\n";
+    newCron += `${cfg.minute} ${cfg.hour} * * * /sbin/reboot\n`;
+  } else {
+    newCron += "\n";
+  }
+  // Install via stdin
+  await execAsync(`echo ${JSON.stringify(newCron)} | sudo crontab -`);
+}
+
 // ── Network helpers ──
 
 interface NetworkStatus {
@@ -301,11 +342,12 @@ export async function GET() {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const [adsbConfig, airfieldConfig, network, version] = await Promise.all([
+  const [adsbConfig, airfieldConfig, network, version, autoReboot] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
     getNetworkStatus(),
     getVersionInfo(),
+    getAutoRebootConfig(),
   ]);
 
   return NextResponse.json({
@@ -320,6 +362,7 @@ export async function GET() {
     adsb_config: adsbConfig,
     network,
     version,
+    auto_reboot: autoReboot,
   });
 }
 
@@ -427,6 +470,21 @@ EOF'`);
           return NextResponse.json({ error: e instanceof Error ? e.message : "ホスト名設定に失敗しました" }, { status: 400 });
         }
         return NextResponse.json({ ok: true, message: `ホスト名を ${name} に設定しました。${name}.local でアクセス可能になります。` });
+      }
+
+      case "auto-reboot-save": {
+        const cfg: AutoRebootConfig = {
+          enabled: !!body.enabled,
+          hour: parseInt(body.hour, 10),
+          minute: parseInt(body.minute, 10),
+        };
+        await saveAutoRebootConfig(cfg);
+        return NextResponse.json({
+          ok: true,
+          message: cfg.enabled
+            ? `毎日 ${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")} に自動再起動するよう設定しました。`
+            : "自動再起動を無効にしました。",
+        });
       }
 
       case "wifi-save": {

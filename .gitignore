@@ -12,3 +12,6 @@ adsb-config.json
 airfield-config.json
 testdata/*.IGC
 testdata/*.igc
+
+# Local QEMU test images (too large for GitHub)
+qemu-test/
