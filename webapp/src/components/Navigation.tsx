@@ -684,17 +684,18 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.2 */}
+      {/* v1.1.3 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.2</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.3</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
-      <Card title="アップデート判定ロジックの変更">
+      <Card title="バージョン管理ポリシーの確立">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>「アップデートあり」の判定をリモートのコミット差のみで行うように変更</li>
-          <li>マニュアル更新やドキュメント修正など、バージョン番号を変えない変更も自動で配布対象に</li>
+          <li>「同じバージョン番号 = 全端末で完全に同じ状態」を保証するポリシーを採用</li>
+          <li>あらゆるコード・ドキュメント変更ごとに必ずpatch番号を増分</li>
+          <li>アップデート判定はバージョン文字列の差分で判定（v1.1.2のロジック変更を撤回）</li>
         </ul>
       </Card>
 
