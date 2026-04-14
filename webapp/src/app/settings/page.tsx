@@ -16,6 +16,7 @@ interface AdsbSavedConfig {
 }
 
 interface NetworkStatus {
+  hostname: string;
   wifi: { ssid: string; connected: boolean };
   eth: {
     connected: boolean;
@@ -52,6 +53,8 @@ export default function SettingsPage() {
   const [updateComplete, setUpdateComplete] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
   // Network settings
+  const [hostname, setHostname] = useState("");
+  const [hostnameSaving, setHostnameSaving] = useState(false);
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [wifiSaving, setWifiSaving] = useState(false);
@@ -139,6 +142,7 @@ export default function SettingsPage() {
     if (networkSynced.current || !status?.network) return;
     networkSynced.current = true;
     const net = status.network;
+    if (net.hostname) setHostname(net.hostname);
     if (net.wifi.ssid) setWifiSsid(net.wifi.ssid);
     setEthMethod(net.eth.method);
     if (net.eth.ip) setEthIp(net.eth.ip);
@@ -700,6 +704,77 @@ export default function SettingsPage() {
                   </>
                 )}
               </div>
+
+              {/* Hostname (mDNS) */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>
+                  ホスト名（mDNS）
+                  {status?.network?.hostname && (
+                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-mono" style={{ background: "var(--color-bg-card)", color: "var(--color-text-secondary)" }}>
+                      現在: {status.network.hostname}.local
+                    </span>
+                  )}
+                </h3>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
+                      ホスト名（英数字・ハイフンのみ、63文字以内）
+                    </label>
+                    <input
+                      type="text"
+                      value={hostname}
+                      onChange={(e) => setHostname(e.target.value)}
+                      placeholder="feeldscope"
+                      className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                      style={{
+                        background: "var(--color-bg-primary)",
+                        border: "1px solid var(--color-border)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const trimmed = hostname.trim();
+                      if (!trimmed) { setError("ホスト名を入力してください"); return; }
+                      if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) { setError("ホスト名は英数字とハイフンのみ使用できます"); return; }
+                      if (!confirm(`ホスト名を ${trimmed} に変更しますか？\n変更後は ${trimmed}.local でアクセス可能になります。`)) return;
+                      setHostnameSaving(true);
+                      setError(null);
+                      try {
+                        const res = await fetch("/api/system", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "hostname-save", hostname: trimmed }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        networkSynced.current = false;
+                        await fetchStatus();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "ホスト名設定に失敗しました");
+                      }
+                      setHostnameSaving(false);
+                    }}
+                    disabled={hostnameSaving || !hostname || hostname === status?.network?.hostname}
+                    className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                    style={{
+                      background: "var(--color-accent)",
+                      color: "#fff",
+                      opacity: hostnameSaving || !hostname || hostname === status?.network?.hostname ? 0.5 : 1,
+                      cursor: hostnameSaving ? "wait" : "pointer",
+                    }}
+                  >
+                    {hostnameSaving ? "適用中..." : "適用"}
+                  </button>
+                </div>
+                <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+                  同一LAN内から <code>{(hostname || status?.network?.hostname || "feeldscope")}.local</code> でWebUIにアクセスできるようになります（mDNS / Avahi 経由）。
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: "1px solid var(--color-border)" }} />
 
               {/* Wi-Fi */}
               <div>
