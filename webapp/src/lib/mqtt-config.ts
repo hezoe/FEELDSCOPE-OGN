@@ -1,9 +1,14 @@
 // MQTT WebSocket connection config
-// Browser connects to Mosquitto via WebSocket on port 9001
-export const MQTT_WS_URL =
-  typeof window !== "undefined"
-    ? `ws://${window.location.hostname}:9001`
-    : "ws://localhost:9001";
+// - Direct (LAN/RPi): ws://<host>:9001
+// - Reverse-proxied (HTTPS demo): wss://<host>/mqtt-ws (nginx proxies to localhost:9001)
+function buildMqttUrl(): string {
+  if (typeof window === "undefined") return "ws://localhost:9001";
+  if (window.location.protocol === "https:") {
+    return `wss://${window.location.host}/mqtt-ws`;
+  }
+  return `ws://${window.location.hostname}:9001`;
+}
+export const MQTT_WS_URL = buildMqttUrl();
 
 export const MQTT_BASE_TOPIC = "ogn";
 export const DEFAULT_RECEIVER_ID = "RJTTTK001";
