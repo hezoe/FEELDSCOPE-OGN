@@ -453,8 +453,7 @@ export default function FlightMap() {
 
   // OGN receiver marker: poll /api/ogn for receiver location and status
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+    if (!mapRef.current) return;
 
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -464,6 +463,8 @@ export default function FlightMap() {
         const res = await fetch("/api/ogn");
         const data = await res.json();
         if (cancelled) return;
+        const currentMap = mapRef.current;
+        if (!currentMap) return;
         const cfg = data.config;
         const status = data.status;
         if (!cfg || cfg.latitude == null || cfg.longitude == null) return;
@@ -484,7 +485,7 @@ export default function FlightMap() {
 
         if (!ognReceiverMarkerRef.current) {
           const m = L.marker(latlng, { icon, zIndexOffset: -100 })
-            .addTo(map)
+            .addTo(currentMap)
             .bindTooltip(tooltipText, { direction: "top", offset: [0, -8], className: "ogn-receiver-tooltip" });
           ognReceiverMarkerRef.current = m;
         } else {
