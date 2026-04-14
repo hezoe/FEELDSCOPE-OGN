@@ -73,8 +73,13 @@ def signal_handler(sig, frame):
     _running = False
 
 
+_last_fetch_error = None
+
+
 def fetch_aircraft(url):
-    """Fetch aircraft.json from tar1090/dump1090."""
+    """Fetch aircraft.json from tar1090/dump1090. Sets _last_fetch_error on failure."""
+    global _last_fetch_error
+    _last_fetch_error = None
     try:
         if requests:
             resp = requests.get(url, timeout=5)
@@ -85,6 +90,7 @@ def fetch_aircraft(url):
             with urllib.request.urlopen(req, timeout=5) as resp:
                 return json.loads(resp.read().decode())
     except Exception as e:
+        _last_fetch_error = f"{type(e).__name__}: {e}"
         log.warning("Failed to fetch %s: %s", url, e)
         return None
 
@@ -231,10 +237,42 @@ def main():
     log.info("Polling %s every %.1fs", args.url, args.interval)
 
     prev_ids = set()
+    started_at_utc = datetime.now(timezone.utc).isoformat()
+    poll_count = 0
+    success_count = 0
+    consecutive_failures = 0
+    last_error = None
+
+    def publish_status(last_fetch_ok, with_pos, without_pos, latency_ms):
+        status = {
+            "started_at_utc": started_at_utc,
+            "url": args.url,
+            "interval_sec": args.interval,
+            "last_attempt_utc": datetime.now(timezone.utc).isoformat(),
+            "last_fetch_ok": last_fetch_ok,
+            "last_error": last_error,
+            "last_latency_ms": latency_ms,
+            "poll_count": poll_count,
+            "success_count": success_count,
+            "consecutive_failures": consecutive_failures,
+            "aircraft_with_position": with_pos,
+            "aircraft_without_position": without_pos,
+            "aircraft_total": with_pos + without_pos,
+        }
+        client.publish(f"{base_topic}/adsb_status", json.dumps(status, ensure_ascii=False), qos=1, retain=True)
 
     while _running:
+        poll_count += 1
+        t_start = time.time()
         data = fetch_aircraft(args.url)
+        latency_ms = int((time.time() - t_start) * 1000)
+        with_pos = 0
+        without_pos = 0
+
         if data and "aircraft" in data:
+            success_count += 1
+            consecutive_failures = 0
+            last_error = None
             current_ids = set()
             aircraft_list = []
             for ac in data["aircraft"]:
@@ -244,12 +282,13 @@ def main():
                 device_id, position = result
                 current_ids.add(device_id)
 
-                # Only publish position to map if we have coordinates
                 if position["has_position"]:
+                    with_pos += 1
                     topic = f"{base_topic}/aircraft/{device_id}/position"
                     client.publish(topic, json.dumps(position, ensure_ascii=False), qos=0)
+                else:
+                    without_pos += 1
 
-                # All aircraft (with or without position) go into the list
                 aircraft_list.append({
                     "device_id": device_id,
                     "packets_received": 1,
@@ -264,13 +303,17 @@ def main():
                 "adsb": True,
             }
             client.publish(f"{base_topic}/aircraft_adsb", json.dumps(list_payload, ensure_ascii=False), qos=1, retain=True)
-
             prev_ids = current_ids
 
             if aircraft_list:
-                log.info("Published %d ADS-B aircraft", len(aircraft_list))
+                log.info("Published %d ADS-B aircraft (pos=%d, no_pos=%d, %dms)",
+                         len(aircraft_list), with_pos, without_pos, latency_ms)
+            publish_status(True, with_pos, without_pos, latency_ms)
+        else:
+            consecutive_failures += 1
+            last_error = _last_fetch_error or "fetch returned no data"
+            publish_status(False, 0, 0, latency_ms)
 
-        # Sleep in small chunks for responsive shutdown
         wait = args.interval
         while wait > 0 and _running:
             time.sleep(min(wait, 0.5))

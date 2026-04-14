@@ -64,6 +64,8 @@ export default function Navigation() {
         <nav className="flex h-full">
           <NavTab tabId="map" label="マップ" active={activeTab === "map"} onClick={setActiveTab} />
           <div style={{ width: 1, background: "var(--color-border)" }} />
+          <NavTab tabId="status" label="ステータス" active={activeTab === "status"} onClick={setActiveTab} />
+          <div style={{ width: 1, background: "var(--color-border)" }} />
           <NavTab tabId="settings" label="設定" active={activeTab === "settings"} onClick={setActiveTab} />
           <div style={{ width: 1, background: "var(--color-border)" }} />
           <NavTab tabId="ogn" label="OGN設定" active={activeTab === "ogn"} onClick={setActiveTab} />
@@ -269,6 +271,7 @@ function ManualContent() {
               <li><strong>FEELDSCOPE</strong> — アプリケーション名</li>
               <li><strong>滑空場名</strong> — 設定画面で設定した滑空場名を表示</li>
               <li><strong>マップ</strong> — マップ画面に切替</li>
+              <li><strong>ステータス</strong> — システム・OGN受信・ADS-B受信のステータス画面に切替</li>
               <li><strong>設定</strong> — 設定画面に切替</li>
               <li><strong>OGN設定</strong> — OGN受信機の設定・ステータス画面に切替</li>
               <li><strong>機体情報</strong> — 機体情報データベース画面に切替</li>
@@ -624,11 +627,43 @@ function ManualContent() {
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.5.0 */}
+      {/* v1.5.1 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="ステータスタブの追加（マップと設定の間）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>システム概要</strong> — 稼働時間、CPU負荷、CPU温度、RAM、ディスク</li>
+          <li><strong>OGN受信機</strong> — ソフトウェアバージョン、Live Time、実測中心周波数・補正、ゲイン、ノイズ、NTP誤差等</li>
+          <li><strong>ADS-B受信ステータス（詳細）</strong> — 取得元URL、ポーリング間隔、最終取得時刻、応答時間、累計成功率、位置あり/なし機体数、連続失敗回数、最終エラー</li>
+          <li><strong>サービス稼働状況</strong> — 全サービスの状態と稼働時間</li>
+          <li><strong>フライトログ統計</strong> — 本日の総数・飛行中・着陸済み</li>
+          <li>5秒間隔で自動更新</li>
+        </ul>
+      </Card>
+
+      <Card title="マップ上のOGN受信機アイコン">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN設定の緯度・経度位置にアンテナタワー風アイコンを表示</li>
+          <li>受信機の状態に応じて色が変化（緑: 稼働中、グレー: 停止）</li>
+          <li>ホバーで受信機名・状態・ゲイン・ノイズを表示</li>
+        </ul>
+      </Card>
+
+      <Card title="adsb-poller.py の改修">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ステータスを <code>ogn/{"<rid>"}/adsb_status</code> にretain publish</li>
+          <li>取得成否、エラー詳細、応答時間、累計統計、機体数の内訳を含む</li>
+        </ul>
+      </Card>
+
+      {/* v1.5.0 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.5.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
       </div>
 
       <Card title="OGN設定タブの追加">
