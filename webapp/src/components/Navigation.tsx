@@ -257,374 +257,429 @@ function HelpModal({
 function ManualContent() {
   return (
     <>
-      <Card title="FEELDSCOPE マニュアル">
+      <Card title="FEELDSCOPE とは">
         <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
           FEELDSCOPE は、OGN（Open Glider Network）の FLARM データおよび ADS-B データをリアルタイムに受信・表示するフライトモニターです。
-          Raspberry Pi 上で動作し、滑空場周辺のグライダー、モーターグライダー、曳航機、および周辺航空機の位置を地図上に表示します。
+          Raspberry Pi 上で動作し、滑空場周辺のグライダー・モーターグライダー・曳航機・周辺航空機の位置を地図上に表示します。
         </p>
-      </Card>
-
-      <Card title="画面構成">
-        <div className="space-y-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="ナビゲーションバー（共通）">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>FEELDSCOPE</strong> — アプリケーション名</li>
-              <li><strong>滑空場名</strong> — 設定画面で設定した滑空場名を表示</li>
-              <li><strong>マップ</strong> — マップ画面に切替</li>
-              <li><strong>ステータス</strong> — システム・OGN受信・ADS-B受信のステータス画面に切替</li>
-              <li><strong>設定</strong> — 設定画面に切替</li>
-              <li><strong>OGN設定</strong> — OGN受信機の設定・ステータス画面に切替</li>
-              <li><strong>機体情報</strong> — 機体情報データベース画面に切替</li>
-              <li><strong>ヘルプ</strong> — マニュアル / リリースノート / バージョン情報をポップアップ表示</li>
-              <li><strong>時計</strong> — 現在時刻をリアルタイム表示（右端）</li>
-            </ul>
-          </Section>
-          <Section heading="マップ画面">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>マップ上に FLARM 機体と ADS-B 機体がリアルタイムで表示されます</li>
-              <li>FLARM 機体アイコンの色で状態を識別できます（緑: 通常、橙: 低高度/着陸進入中、赤: パス不足）</li>
-              <li>着陸進入中の機体はオレンジ色で表示され、着陸確定後に緑に戻ります</li>
-              <li>ADS-B 機体は青（ADS-B）または黒（Mode-S/C）で表示されます</li>
-              <li>機体をクリックすると詳細情報（高度、速度、上昇率、方位、パス L/D）が表示されます</li>
-              <li>赤く点滅する機体はパス不足（滑空場に安全に帰還できない高度）を示しています</li>
-              <li>サイドバーに警告・上空・ADS-B・地上の4カテゴリで機体一覧が表示されます</li>
-              <li>サイドバーの幅はドラッグで変更可能（ブラウザに保存）</li>
-              <li>フライトログテーブルに離陸・着陸時刻、飛行時間（飛行中はリアルタイム更新）、離脱高度が自動記録されます</li>
-              <li>フライトログテーブルの高さはドラッグで変更可能（ブラウザに保存）</li>
-              <li>マップの初期表示位置はホームビュー設定で保存可能（ブラウザに保存）</li>
-            </ul>
-          </Section>
-          <Section heading="設定画面（項目は上から順）">
-            <p className="mb-2">各設定項目の詳細は下記「設定項目リファレンス」を参照してください。</p>
-            <ol className="list-decimal ml-5 space-y-1">
-              <li><strong>滑空場設定</strong> — 名前・緯度・経度・標高</li>
-              <li><strong>データソース切替</strong> — リアルタイム / 履歴再生（再生倍速スライダー付き）</li>
-              <li><strong>IGC ファイル管理</strong> — アップロード・削除（履歴再生用）</li>
-              <li><strong>ADS-B 受信設定</strong> — URL・ポーリング間隔・有効/無効</li>
-              <li><strong>表示設定</strong> — ラベル表示名・単位・安全滑空比</li>
-              <li><strong>ネットワーク設定</strong> — Wi-Fi / 有線LAN</li>
-              <li><strong>システムアップデート</strong> — GitHubから最新版を取得してリビルド</li>
-              <li><strong>システムステータス</strong> — 各サービスの稼働状態（読み取り専用）</li>
-              <li><strong>システム固定化</strong> — オーバーレイFS の切替＋再起動（1アクション）</li>
-              <li><strong>自動再起動</strong> — 毎日決まった時刻にシステム自動再起動</li>
-              <li><strong>システム電源</strong> — 再起動・シャットダウン</li>
-            </ol>
-          </Section>
-          <Section heading="OGN設定画面">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>受信機ステータス</strong> — ソフトウェアバージョン、CPU温度、NTP誤差、実測ゲイン、ノイズ等をリアルタイム表示（5秒間隔自動更新）</li>
-              <li><strong>受信機識別</strong> — 受信機名（APRS Call、英数字9文字以内）</li>
-              <li><strong>アンテナ設置位置</strong> — 緯度・経度・高度</li>
-              <li><strong>RF設定</strong> — 周波数補正(ppm)、GSM中心周波数・ゲイン（校正用）、Bias-T、HTTPポート</li>
-              <li><strong>OGNバイナリURL</strong> — OGNソフトウェア再インストール時のダウンロード元</li>
-              <li>保存時は rtlsdr-ogn.conf と OGN-receiver.conf の両方が更新され、受信機が自動再起動します</li>
-            </ul>
-          </Section>
-          <Section heading="機体情報画面">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>FLARM デバイス ID ごとに機体情報（機種名、登録番号、コンテスト番号、パイロット名、航空機タイプ）を管理</li>
-              <li>新規追加・編集・削除が可能</li>
-              <li>未登録の FLARM 機体がマップに出現すると自動的にデバイス ID が登録されます</li>
-              <li>固定化中はデータベースへの変更は再起動時にリセットされます（警告バッジ表示）</li>
-            </ul>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="設定項目リファレンス">
-        <div className="space-y-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <p>保存先の種別:</p>
-          <ul className="list-disc ml-5 space-y-0.5 text-xs">
-            <li><strong>ブラウザ</strong> — 当該ブラウザの localStorage のみに保存。他端末からは参照不可</li>
-            <li><strong>サーバ</strong> — Pi上のファイルに保存。全端末で共有</li>
-            <li><strong>ブラウザ + サーバ</strong> — 両方に保存。読み込み時はサーバが優先</li>
+        <Section heading="ナビゲーションバー（共通）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>FEELDSCOPE</strong> — アプリケーション名（左端）</li>
+            <li><strong>滑空場名</strong> — 設定で登録した滑空場名を表示</li>
+            <li><strong>マップ</strong> — マップ画面に切替</li>
+            <li><strong>ステータス</strong> — システム・受信機の稼働状況画面に切替</li>
+            <li><strong>設定</strong> — 各種設定画面に切替</li>
+            <li><strong>OGN設定</strong> — OGN受信機専用の設定画面に切替</li>
+            <li><strong>機体情報</strong> — 機体データベース管理画面に切替</li>
+            <li><strong>ヘルプ</strong> — マニュアル / リリースノート / バージョン情報をポップアップ表示</li>
+            <li><strong>時計</strong> — 現在時刻をリアルタイム表示（右端）</li>
           </ul>
-          <div className="rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "var(--color-bg-primary)" }}>
-                  <th className="text-left px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>設定項目</th>
-                  <th className="text-left px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>保存先</th>
-                  <th className="text-left px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>操作</th>
+        </Section>
+      </Card>
+
+      {/* ===== 1. マップ画面 ===== */}
+      <Card title="1. マップ画面">
+        <Section heading="マップ操作">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>ドラッグ</strong> — 地図を平行移動</li>
+            <li><strong>マウスホイール / ピンチ</strong> — 拡大縮小</li>
+            <li><strong>右下の +/− ボタン</strong> — ズーム</li>
+            <li><strong>機体クリック</strong> — その機体を選択し、サイドバーで詳細表示</li>
+          </ul>
+        </Section>
+        <Section heading="HOMEボタン・保存ボタン（マップ右上）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>HOME</strong> — 保存済みの「HOMEビュー」（地図中心位置・ズーム）に瞬時に戻ります。未保存時は滑空場設定の位置を表示</li>
+            <li><strong>保存</strong> — 現在表示中の地図の中心位置とズームを「HOMEビュー」として保存（ブラウザに保存）。次回起動時もこの位置から開始</li>
+          </ul>
+        </Section>
+        <Section heading="サイドバー（左）">
+          <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>機体を4カテゴリで一覧表示：</p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>警告</strong> — パス不足（赤）または着陸進入中（橙）の機体</li>
+            <li><strong>上空</strong> — 飛行中の通常機体（緑）</li>
+            <li><strong>ADS-B</strong> — 受信したADS-B / Mode-S/C機体</li>
+            <li><strong>地上</strong> — 地表付近で停止している機体</li>
+            <li><strong>幅変更</strong> — サイドバーとマップの境界をドラッグで幅変更可能（ブラウザ保存）</li>
+          </ul>
+        </Section>
+        <Section heading="機体アイコン一覧">
+          <table className="w-full text-sm mt-2" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "var(--color-bg-primary)" }}>
+                <th className="text-left px-2 py-1 text-xs" style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>アイコン</th>
+                <th className="text-left px-2 py-1 text-xs" style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>種別</th>
+                <th className="text-left px-2 py-1 text-xs" style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>説明</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ICON_TABLE.map((row, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <td className="px-2 py-1" dangerouslySetInnerHTML={{ __html: row.svg }} />
+                  <td className="px-2 py-1"><strong>{row.label}</strong></td>
+                  <td className="px-2 py-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.desc}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {[
-                  { item: "滑空場名", storage: "ブラウザ + サーバ", ops: "テキスト入力" },
-                  { item: "滑空場 緯度・経度・標高", storage: "ブラウザ + サーバ", ops: "数値入力" },
-                  { item: "データソース切替", storage: "サーバ（systemd）", ops: "リアルタイム / 履歴再生 切替" },
-                  { item: "再生倍速（1〜20x）", storage: "ブラウザ", ops: "スライダー（履歴再生時はサーバにも即時反映）" },
-                  { item: "IGC ファイル管理", storage: "サーバ（ファイル）", ops: "アップロード / 削除" },
-                  { item: "ADS-B 有効/無効", storage: "ブラウザ + サーバ", ops: "チェックボックス" },
-                  { item: "ADS-B URL", storage: "ブラウザ + サーバ", ops: "テキスト入力（デフォルト: http://fr24.local/tar1090/data/aircraft.json）" },
-                  { item: "ADS-B ポーリング間隔", storage: "ブラウザ + サーバ", ops: "数値入力（1〜30秒）" },
-                  { item: "機体ラベル表示名", storage: "ブラウザ", ops: "CN / 登録番号 / パイロット名 切替" },
-                  { item: "高度の単位", storage: "ブラウザ", ops: "m / ft 切替" },
-                  { item: "速度の単位", storage: "ブラウザ", ops: "km/h / knot 切替" },
-                  { item: "上昇率の単位", storage: "ブラウザ", ops: "m/s / knot/s 切替" },
-                  { item: "距離の単位", storage: "ブラウザ", ops: "km / nm 切替" },
-                  { item: "安全滑空比", storage: "ブラウザ", ops: "数値入力（1〜100、デフォルト: 15）" },
-                  { item: "ホスト名（mDNS）", storage: "サーバ（/etc/hostname）", ops: "テキスト入力 + 適用ボタン（{name}.local でアクセス可能）" },
-                  { item: "Wi-Fi 設定（SSID・パスワード）", storage: "サーバ（wpa_supplicant.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
-                  { item: "有線LAN DHCP/固定IP", storage: "サーバ（dhcpcd.conf）", ops: "適用ボタン（固定化OFF時のみ恒久保存）" },
-                  { item: "システムアップデート", storage: "—", ops: "実行ボタン（最新時は無効化）" },
-                  { item: "システムステータス", storage: "—", ops: "読み取り専用（5秒間隔で自動更新）" },
-                  { item: "システム固定化 ON/OFF", storage: "サーバ（OverlayFS）", ops: "変更＋再起動（1アクション）" },
-                  { item: "自動再起動", storage: "サーバ（root crontab）", ops: "有効/無効 + 時刻(HH:MM)入力" },
-                  { item: "システム再起動 / シャットダウン", storage: "—", ops: "ボタン（確認ダイアログあり）" },
-                ].map(({ item, storage, ops }, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td className="px-3 py-1.5"><strong>{item}</strong></td>
-                    <td className="px-3 py-1.5">{storage}</td>
-                    <td className="px-3 py-1.5">{ops}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <Section heading="マップ画面の保存項目（ブラウザ保存）">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>サイドバー幅</strong> — ドラッグで変更した幅を自動保存</li>
-              <li><strong>フライトログ高さ</strong> — ドラッグで変更した高さを自動保存</li>
-              <li><strong>ホームビュー</strong> — マップの初期表示位置・ズームレベルを保存</li>
-            </ul>
-          </Section>
-
-          <Section heading="フライトログデータ">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>保存先:</strong> サーバ側メモリ（全端末で共有）</li>
-              <li><strong>自動リセット:</strong> 毎日 <strong>日本時間 AM 5:00</strong> に全クリア</li>
-              <li>ブラウザを閉じてもデータは保持され、複数端末から同じログを参照できます</li>
-              <li>サーバ再起動時もメモリクリアされるため、永続保存されません</li>
-            </ul>
-          </Section>
-
-          <Section heading="機体情報画面の保存項目">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>機体情報データベース</strong> — サーバ（aircraft-db.json）に保存</li>
-            </ul>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="システムアップデート">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="概要">
-            <p>設定画面の「システムアップデート」から、GitHubリポジトリの最新コードを取得してWebアプリをリビルドできます。
-            現在のバージョンとGitHub上の最新バージョンが比較され、アップデートが利用可能な場合のみボタンがアクティブになります。</p>
-          </Section>
-          <Section heading="手順">
-            <ol className="list-decimal ml-5 space-y-1">
-              <li>固定化がONの場合は、先に「固定化を解除して再起動」を実行</li>
-              <li>「アップデート実行」ボタンをクリック</li>
-              <li>プログレスバー（1/5〜5/5）でアップデート進行状況を確認（約2〜3分）</li>
-              <li>完了メッセージが表示されたら、<strong>Shift + Ctrl + R</strong>（Mac: Shift + Cmd + R）でハードリロード</li>
-              <li>必要に応じて「固定化を有効にして再起動」で固定化を戻す</li>
-            </ol>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="ネットワーク設定">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="ホスト名（mDNS）">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>システムのホスト名を設定。Avahi/mDNS により <code>{"<hostname>"}.local</code> で同一LAN内からアクセス可能</li>
-              <li>使用可能文字: 英数字とハイフン、63文字以内、先頭・末尾はハイフン不可</li>
-              <li>適用すると即時反映され、avahi-daemon が自動的に再起動します</li>
-            </ul>
-          </Section>
-          <Section heading="Wi-Fi">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>SSIDとパスワードを入力して適用</li>
-              <li>パスワードは8文字以上必須（WPA2要件）</li>
-              <li>設定は /etc/wpa_supplicant/wpa_supplicant.conf に書き込まれます</li>
-            </ul>
-          </Section>
-          <Section heading="有線LAN">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>DHCP（自動）:</strong> ルーターから自動取得</li>
-              <li><strong>固定IP:</strong> IPアドレス・サブネットマスク・ゲートウェイ・DNSを手動設定</li>
-              <li>設定は /etc/dhcpcd.conf に書き込まれます</li>
-            </ul>
-          </Section>
-          <Section heading="注意事項">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>固定化 ON の場合: 設定変更は再起動時にリセット</li>
-              <li>固定化 OFF の場合: 設定変更は恒久的に保存</li>
-              <li>誤った設定でアクセス不能になった場合は、SDカードを取り出してPCから設定ファイルを修正するか、別系統で接続してください</li>
-            </ul>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="システム固定化（OverlayFS）">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="概要">
-            <p>システム固定化は Raspberry Pi のオーバーレイファイルシステム（OverlayFS）を利用した機能です。
-            有効にすると SD カードが読み取り専用になり、稼働中のファイル変更はメモリ上にのみ保持され、
-            再起動時に固定化した時点の状態に自動復帰します。</p>
-          </Section>
-          <Section heading="SDカード保護">
-            <p>安定稼働を確認したら固定化を有効にすることを推奨します。
-            固定化により SD カードへの書き込みが発生しないため、突然の電源断（停電、コンセント抜け等）でも
-            SD カードのファイルシステム破損を防止でき、システムを安全に保護できます。
-            通常運用では固定化 ON の状態で使用してください。</p>
-          </Section>
-          <Section heading="切替手順（1アクション）">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>設定画面「システム固定化」セクションで現在の状態を確認</li>
-              <li>状態に応じてボタンをクリック:
-                <ul className="list-disc ml-5 mt-1">
-                  <li><strong>OFFの時:</strong>「固定化を有効にして再起動」</li>
-                  <li><strong>ONの時:</strong>「固定化を解除して再起動」</li>
-                </ul>
-              </li>
-              <li>確認ダイアログで OK → 自動的に切替＋再起動が実行されます</li>
-            </ul>
-          </Section>
-          <Section heading="固定化時の設定の保持・リセット">
-            <div className="mt-2 rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ background: "var(--color-bg-primary)" }}>
-                    <th className="text-left px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>設定項目</th>
-                    <th className="text-center px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>再起動後</th>
-                    <th className="text-left px-3 py-2 font-semibold text-xs" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>理由</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { item: "滑空場設定（名前・位置・標高）", survive: "残る", reason: "ブラウザ + サーバ両方に保存、読込時はサーバ優先" },
-                    { item: "ADS-B 受信設定", survive: "残る", reason: "ブラウザ + サーバ両方に保存、読込時はサーバ優先" },
-                    { item: "表示設定（単位・ラベル・滑空比）", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "再生倍速・サイドバー幅・ログ高さ・ホームビュー", survive: "残る", reason: "ブラウザ localStorage に保存" },
-                    { item: "フライトログデータ", survive: "リセット", reason: "サーバ側メモリ（再起動でクリア、AM5時自動リセット）" },
-                    { item: "機体情報データベース", survive: "リセット", reason: "サーバ側ファイル（aircraft-db.json）で固定化対象" },
-                    { item: "IGC ファイル", survive: "リセット", reason: "サーバ側ファイルで固定化対象" },
-                    { item: "ネットワーク設定（Wi-Fi・有線LAN）", survive: "リセット", reason: "サーバ側ファイル（wpa_supplicant.conf、dhcpcd.conf）で固定化対象" },
-                  ].map(({ item, survive, reason }, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                      <td className="px-3 py-1.5"><strong>{item}</strong></td>
-                      <td className="px-3 py-1.5 text-center">
-                        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{
-                          background: survive === "残る" ? "var(--color-success-dim)" : "var(--color-warning-dim)",
-                          color: survive === "残る" ? "var(--color-success)" : "var(--color-warning)",
-                        }}>{survive}</span>
-                      </td>
-                      <td className="px-3 py-1.5 text-xs">{reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Section>
-          <Section heading="固定化を解除して変更を永続化する流れ">
-            <ul className="list-disc ml-5 space-y-1">
-              <li>「固定化を解除して再起動」→ 通常モードで起動</li>
-              <li>必要な変更（機体情報DB追加、IGCアップロード、ネットワーク設定変更、アップデート等）を実施</li>
-              <li>「固定化を有効にして再起動」→ 変更が固定化された状態で運用再開</li>
-            </ul>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="履歴再生機能">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="用途">
-            <ul className="list-disc ml-5 space-y-1">
-              <li><strong>フライトサービスの訓練</strong> — 実際のフライトがない日でも、過去のフライトデータを使って発航管理や位置把握の練習ができます</li>
-              <li><strong>システム操作学習</strong> — 実機が飛んでいなくても FEELDSCOPE の画面操作・機能を体験できます</li>
-              <li><strong>フライトの振り返り</strong> — 過去のフライトを再生して、飛行経路やパターンを地図上で確認できます</li>
-            </ul>
-          </Section>
-          <Section heading="仕組み">
-            <p>IGCファイルには緯度・経度・高度・時刻が記録されています。履歴再生では、記録された飛行データの時刻を<strong>現在時刻に自動的にずらして</strong>再生します。
-            例えば2024年5月に記録されたフライトでも、再生を開始すると「今この瞬間に飛んでいる」ように地図上にリアルタイムで軌跡が描かれます。
-            再生速度は1〜20倍速に調整でき、ループ再生にも対応しています。</p>
-          </Section>
-          <Section heading="OGNへのアップロードは継続">
-            <p>履歴再生中も OGN 受信機（ogn-rf / ogn-decode）は独立して動作しており、実際に受信した FLARM データの OGN サーバへのアップロードは中断されません。
-            履歴再生は FEELDSCOPE の Web 表示のみを切り替える機能であり、受信局としての機能には影響しません。</p>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="航空機タイプとアイコン">
-        <div className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <p className="mb-3">機体情報データベースで設定した航空機タイプに応じて、マップ上のアイコンが変わります。</p>
-          <div className="grid gap-2" style={{ gridTemplateColumns: "40px 1fr" }}>
-            {[
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><path d="M0,-11 L.8,-3 L14,-0.5 L14,0.5 L.8,1.5 L.4,8 L2.5,9.5 L2.5,10.5 L-2.5,10.5 L-2.5,9.5 L-.4,8 L-.8,1.5 L-14,0.5 L-14,-0.5 L-.8,-3Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`, label: "グライダー/モーターグライダー", desc: "離着陸時間と離脱高度の自動検知対象" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><path d="M0,-12 L1.5,-4 L1.5,-2 L10,-2 L10,1 L1.5,1 L1,9 L4,10 L4,11.5 L-4,11.5 L-4,10 L-1,9 L-1.5,1 L-10,1 L-10,-2 L-1.5,-2 L-1.5,-4Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`, label: "曳航機", desc: "離着陸時間と離脱高度の自動検知対象" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><path d="M0,-11 L1.5,-4 L9,-1 L9,1 L1.5,2 L1,9 L3.5,10 L3.5,11 L-3.5,11 L-3.5,10 L-1,9 L-1.5,2 L-9,1 L-9,-1 L-1.5,-4Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-12" x2="3" y2="-12" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "動力機" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><line x1="-12" y1="-10" x2="12" y2="-10" stroke="#4caf50" stroke-width="2" stroke-linecap="round"/><line x1="0" y1="-10" x2="0" y2="-6" stroke="#4caf50" stroke-width="1.2"/><circle cx="0" cy="-1" r="5.5" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-4" y1="4.5" x2="-6" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="4" y1="4.5" x2="6" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="-7" y1="10" x2="-5" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="10" x2="7" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "ヘリコプター" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><path d="M-10,-3 Q-5,-10 0,-10 Q5,-10 10,-3 L10,-1 Q5,-6 0,-6 Q-5,-6 -10,-1Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-7" y1="-2" x2="0" y2="6" stroke="#4caf50" stroke-width=".7"/><line x1="7" y1="-2" x2="0" y2="6" stroke="#4caf50" stroke-width=".7"/><line x1="-3" y1="-3" x2="0" y2="6" stroke="#4caf50" stroke-width=".5" opacity=".5"/><line x1="3" y1="-3" x2="0" y2="6" stroke="#4caf50" stroke-width=".5" opacity=".5"/><circle cx="0" cy="7" r="2" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`, label: "パラグライダー" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><path d="M0,-8 L12,6 Q0,2 -12,6Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5" fill-opacity=".8"/><circle cx="0" cy="3" r="1.5" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`, label: "ハンググライダー" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><circle cx="0" cy="-6" r="3" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="0" y1="-3" x2="0" y2="5" stroke="#4caf50" stroke-width="2" stroke-linecap="round"/><line x1="-7" y1="-1" x2="7" y2="-1" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="-5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "スカイダイバー" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><ellipse cx="0" cy="-3" rx="8" ry="10" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="7" x2="-2" y2="10" stroke="#4caf50" stroke-width=".7"/><line x1="3" y1="7" x2="2" y2="10" stroke="#4caf50" stroke-width=".7"/><rect x="-3" y="10" width="6" height="4" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".4"/></svg>`, label: "バルーン" },
-              { svg: `<svg width="30" height="30" viewBox="-15 -15 30 30"><rect x="-3" y="-3" width="6" height="6" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-3" x2="-9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="-3" x2="9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="-3" y1="3" x2="-9" y2="9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="3" x2="9" y2="9" stroke="#4caf50" stroke-width="1.5"/><circle cx="-9" cy="-9" r="3" fill="none" stroke="#4caf50" stroke-width=".8"/><circle cx="9" cy="-9" r="3" fill="none" stroke="#4caf50" stroke-width=".8"/><circle cx="-9" cy="9" r="3" fill="none" stroke="#4caf50" stroke-width=".8"/><circle cx="9" cy="9" r="3" fill="none" stroke="#4caf50" stroke-width=".8"/></svg>`, label: "UAV" },
-              { svg: `<svg width="24" height="24" viewBox="-12 -12 24 24"><path d="M0,-10 L1.5,-4 L8,-1 L8,0.5 L1.5,1.5 L1,6 L3.5,7.5 L3.5,8.5 L-3.5,8.5 L-3.5,7.5 L-1,6 L-1.5,1.5 L-8,0.5 L-8,-1 L-1.5,-4Z" fill="#1565c0" stroke="rgba(255,255,255,.5)" stroke-width=".5"/></svg>`, label: "ジェット機" },
-            ].map(({ svg, label, desc }, i) => (
-              <React.Fragment key={i}>
-                <div className="flex items-center justify-center" dangerouslySetInnerHTML={{ __html: svg }} />
-                <div><strong>{label}</strong>{desc ? ` — ${desc}` : ""}</div>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <Card title="データソース">
-        <div className="space-y-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <Section heading="リアルタイム受信（FLARM）">
-            <p>OGN レシーバー（RTL-SDR + ogn-rf/ogn-decode）が 922.4 MHz で受信した FLARM データを、ogn-mqtt.py が MQTT 経由でリアルタイムに配信します。</p>
-          </Section>
-          <Section heading="ADS-B 受信">
-            <p>同一ネットワーク上の tar1090/dump1090 フィーダーから aircraft.json を定期取得し、ADS-B / Mode-S / Mode-C 機体をマップに表示します。FLARM と同時に受信可能です。位置情報を持たない Mode-S/C 機体もサイドバーに高度付きで一覧表示されます。</p>
-          </Section>
-          <Section heading="履歴再生（IGC）">
-            <p>IGC フライトログファイルを使って過去のフライトを再生します。OLC（onlinecontest.org）などから IGC ファイルをダウンロードし、設定画面からアップロードしてください。再生速度は 1〜20 倍速で調整可能で、ループ再生に対応しています。</p>
-          </Section>
-        </div>
-      </Card>
-
-      <Card title="フライトログ・自動検知">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <p><strong>離陸検知:</strong> 対地速度が 30 km/h を超えた時点で離陸を自動記録します。</p>
-          <p><strong>着陸検知:</strong> 一度 1500ft AGL を超えた機体が、1500ft AGL 以下かつ 10 km/h 以下になった時点で着陸を記録します。</p>
-          <p><strong>離脱検知:</strong> グライダーが旋回率 8°/s 以上 + 速度低下 10 km/h 以上 + 高度 500ft AGL 以上の条件で曳航離脱を検知し、離脱高度を記録します。</p>
-          <p><strong>飛行時間:</strong> 飛行中はリアルタイムで経過時間を表示し、着陸後は確定した飛行時間を表示します。</p>
-          <p>フライトログの離陸・着陸時刻および離脱高度は手動で編集可能です。</p>
-        </div>
-      </Card>
-
-      <Card title="パス判定（安全滑空比）">
-        <div className="text-sm space-y-2" style={{ color: "var(--color-text-secondary)" }}>
-          <p>各機体について、滑空場までの距離と現在の高度から滑空比を計算します。設定した安全滑空比（デフォルト: 15:1）を超えた場合、パス不足として赤く点滅して警告します。</p>
-          <p><strong>計算式:</strong> 必要滑空比 = 滑空場までの距離 ÷ (現在高度 - 滑空場標高)</p>
-          <p>安全滑空比は設定画面の「表示設定」から変更できます。</p>
-        </div>
-      </Card>
-
-      <Card title="システム構成">
-        <div className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <ul className="list-disc ml-5 space-y-1">
-            <li><strong>Raspberry Pi 5</strong> — ハードウェアプラットフォーム</li>
-            <li><strong>RTL-SDR</strong> — 922.4 MHz（日本向け）FLARM 信号受信</li>
-            <li><strong>rtlsdr-ogn (ogn-rf + ogn-decode)</strong> — OGN 受信・デコードデーモン</li>
-            <li><strong>ogn-mqtt.py</strong> — OGN APRS → MQTT 変換パブリッシャー</li>
-            <li><strong>adsb-poller.py</strong> — tar1090/dump1090 ADS-B データ取得・MQTT 配信</li>
-            <li><strong>Mosquitto</strong> — MQTT ブローカー（WebSocket 対応）</li>
-            <li><strong>Next.js 16 Web アプリ</strong> — フロントエンド（本画面）</li>
-            <li><strong>igc-simulator.py</strong> — IGC ファイル履歴再生エンジン</li>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+        <Section heading="機体アイコンの色分け">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><span style={{ color: "#4caf50", fontWeight: 600 }}>緑</span> — 通常飛行中</li>
+            <li><span style={{ color: "#ff9800", fontWeight: 600 }}>橙</span> — 低高度・着陸進入中（着陸確定後に緑へ復帰）</li>
+            <li><span style={{ color: "#f44336", fontWeight: 600 }}>赤・点滅</span> — パス不足（滑空場に安全に帰還できない高度）</li>
+            <li><span style={{ color: "#1565c0", fontWeight: 600 }}>青</span> — ADS-B受信機体</li>
+            <li><span style={{ color: "#222", fontWeight: 600 }}>黒</span> — Mode-S/Mode-C機体</li>
           </ul>
+        </Section>
+        <Section heading="パス判定（安全滑空比による警告）">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            各機体の現在地から滑空場までの距離 ÷（現在高度 − 滑空場標高）で滑空比を計算し、設定値（デフォルト15:1）を超えると赤点滅で警告します。
+            数字が大きいほど効率の良い滑空が必要なことを意味します。
+          </p>
+        </Section>
+        <Section heading="フライトログテーブル（マップ下部）">
+          <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>FLARM受信機の自動検知でフライトを記録：</p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>#</strong> — 行番号</li>
+            <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）</li>
+            <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）</li>
+            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）</li>
+            <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
+            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）</li>
+            <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
+            <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）</li>
+            <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            データはサーバ側メモリに保存され、毎日 <strong>日本時間 AM 5:00</strong> に自動リセット。複数端末で同じログを参照できます。
+          </p>
+        </Section>
+        <Section heading="自動検知の閾値">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>離陸検知</strong> — 対地速度が <strong>30 km/h</strong> を超えた瞬間</li>
+            <li><strong>着陸検知</strong> — 一度 1500ft AGL を超えた機体が、1500ft AGL以下かつ <strong>10 km/h以下</strong> になった瞬間</li>
+            <li><strong>離脱検知（グライダー）</strong> — 旋回率8°/s以上 + 速度低下10 km/h以上 + 高度500ft AGL以上</li>
+            <li><strong>離脱検知（曳航機）</strong> — 高度ピークから50m以上の降下</li>
+          </ul>
+        </Section>
+      </Card>
+
+      {/* ===== 2. ステータス画面 ===== */}
+      <Card title="2. ステータス画面">
+        <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+          5秒間隔で自動更新されるシステム・受信状況のダッシュボード。読み取り専用。
+        </p>
+
+        <Section heading="システム概要">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="受信機名" desc="OGN受信機の識別名（APRS Call）" />
+            <ManualRow label="稼働時間" desc="OS起動からの経過時間" />
+            <ManualRow label="CPU負荷" desc="1分 / 5分 / 15分の平均負荷率（1.0でCPU 1コアフル稼働相当）" />
+            <ManualRow label="CPU温度" desc="60°C以上で橙色、70°C以上で赤色警告" />
+            <ManualRow label="RAM 使用 / 空き" desc="メモリの使用量・空き容量（空きが少ない場合は再起動を推奨）" />
+            <ManualRow label="ディスク使用" desc="ルートパーティションの使用量と使用率" />
+          </tbody></table>
+        </Section>
+
+        <Section heading="OGN受信機">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
+            <ManualRow label="ソフトウェア" desc="rtlsdr-ognのバージョンとビルド日" />
+            <ManualRow label="Live Time" desc="OGN受信機が信号処理に費やしている時間の比率（高いほどCPU余裕なし）" />
+            <ManualRow label="中心周波数（実測）" desc="実際にRTL-SDRが受信している周波数" />
+            <ManualRow label="周波数補正（実測）" desc="GSM校正後の補正値" />
+            <ManualRow label="周波数プラン" desc="使用中の周波数規格（日本は7: Japan）" />
+            <ManualRow label="OGN受信ゲイン" desc="自動ゲイン制御後の現在値" />
+            <ManualRow label="ノイズレベル" desc="周辺雑音レベル（小さいほど受信良好、3〜6dB程度が理想）" />
+            <ManualRow label="NTP誤差" desc="ネットワーク時刻同期との誤差。FLARMはタイムスロット方式なので時刻精度が重要" />
+            <ManualRow label="NTP周波数補正" desc="システムクロックの周波数補正値" />
+            <ManualRow label="RTL-SDR" desc="使用中のRTL-SDRデバイス名・チューナー型番" />
+          </tbody></table>
+        </Section>
+
+        <Section heading="ADS-B 受信ステータス">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="状態" desc="正常受信中 / 失敗（連続失敗回数を表示）" />
+            <ManualRow label="最終取得" desc="最後にtar1090エンドポイントから取得した時刻からの経過" />
+            <ManualRow label="取得元URL" desc="設定で指定したaircraft.jsonのURL" />
+            <ManualRow label="ポーリング間隔" desc="取得頻度（秒）" />
+            <ManualRow label="応答時間" desc="HTTP応答までのミリ秒（小さいほど良好）" />
+            <ManualRow label="累計ポーリング" desc="サービス起動以降の成功 / 全試行回数" />
+            <ManualRow label="位置あり機体" desc="緯度経度を持つADS-B機体数（マップに表示される）" />
+            <ManualRow label="位置なし機体（Mode-S/C）" desc="位置情報を持たない機体数（サイドバー上空欄に表示）" />
+            <ManualRow label="合計受信機体" desc="位置あり＋位置なしの総数" />
+            <ManualRow label="受信開始" desc="adsb-pollerサービスが開始してからの経過時間" />
+            <ManualRow label="最終エラー" desc="最新の取得失敗時のエラー詳細（成功中は表示なし）" />
+          </tbody></table>
+        </Section>
+
+        <Section heading="サービス稼働状況">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="mosquitto" desc="MQTTブローカー（FEELDSCOPE全体の通信ハブ）" />
+            <ManualRow label="ogn-mqtt" desc="OGN受信機からのデータをMQTTに変換して配信" />
+            <ManualRow label="igc-simulator" desc="IGCファイル履歴再生サービス（リアルタイム再生時は停止）" />
+            <ManualRow label="adsb-poller" desc="tar1090からADS-Bデータを定期取得してMQTTに配信" />
+            <ManualRow label="feeldscope-webapp" desc="本Webアプリケーション" />
+            <ManualRow label="avahi-daemon" desc="mDNS（&lt;hostname&gt;.local 名前解決）デーモン" />
+            <ManualRow label="rtlsdr-ogn (init.d)" desc="OGNのRF受信・デコードプロセス（init.d管理）" />
+            <ManualRow label="稼働時間" desc="各サービスの起動からの経過時間" />
+          </tbody></table>
+        </Section>
+
+        <Section heading="フライトログ統計（本日）">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="総記録数" desc="本日記録されたフライト総数（離陸検知＋編集追加）" />
+            <ManualRow label="飛行中" desc="現在飛行中（着陸時刻が未記録）の機体数" />
+            <ManualRow label="着陸済み" desc="着陸時刻が記録された機体数" />
+          </tbody></table>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            毎日 日本時間 AM 5:00 にサーバ側で自動リセット。webapp再起動でもクリア。
+          </p>
+        </Section>
+      </Card>
+
+      {/* ===== 3. 設定画面 ===== */}
+      <Card title="3. 設定画面">
+        <p className="text-sm mb-3" style={{ color: "var(--color-text-secondary)" }}>
+          画面の上から順に解説します。保存先の種別:
+          <strong>ブラウザ</strong>＝当該ブラウザのlocalStorageのみ /
+          <strong>サーバ</strong>＝Pi上のファイル（全端末で共有） /
+          <strong>ブラウザ + サーバ</strong>＝両方に保存（読込時はサーバ優先）
+        </p>
+
+        <Section heading="3-1. 滑空場設定">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>滑空場名</strong>（ブラウザ + サーバ） — マップ中心位置のラベル、ナビゲーションバーに表示</li>
+            <li><strong>緯度（°）</strong>（ブラウザ + サーバ） — 十進法。マップ初期表示・パス判定の基準</li>
+            <li><strong>経度（°）</strong>（ブラウザ + サーバ） — 十進法</li>
+            <li><strong>標高（m）</strong>（ブラウザ + サーバ） — パス判定で使用する基準高度</li>
+          </ul>
+        </Section>
+
+        <Section heading="3-2. データソース切替">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>リアルタイム再生</strong>ボタン — OGN FLARMデータ受信モードに切替（ogn-mqtt起動）</li>
+            <li><strong>履歴再生</strong>ボタン — IGCファイル再生モード（igc-simulator起動、ogn-mqtt停止）</li>
+            <li><strong>再生倍速スライダー</strong>（ブラウザ） — 1〜20倍速。履歴再生中はスライダー操作で即時反映</li>
+            <li><strong>停止する</strong>リンク — 現在のモードを停止</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            履歴再生中も OGN受信機（rtlsdr-ogn）は独立稼働しており、FLARMデータのOGNサーバへのアップロードは継続されます。
+          </p>
+        </Section>
+
+        <Section heading="3-3. IGC ファイル管理（履歴再生用）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>IGC ファイルをアップロード</strong>ボタン — 拡張子 .igc のファイルをサーバに保存</li>
+            <li><strong>削除</strong>ボタン — 各ファイルを削除（確認ダイアログ）</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            OLC（onlinecontest.org）等からダウンロードしたIGCを使用可能。
+            記録時刻を現在時刻にずらして再生されるため、過去のフライトでも「今飛んでいる」ように表示。
+          </p>
+        </Section>
+
+        <Section heading="3-4. ADS-B 受信設定">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>ADS-B 受信を有効にする</strong>チェックボックス（ブラウザ + サーバ） — adsb-pollerサービスのON/OFF</li>
+            <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code></li>
+            <li><strong>ポーリング間隔（秒）</strong>（ブラウザ + サーバ） — 1〜30秒</li>
+          </ul>
+        </Section>
+
+        <Section heading="3-5. 表示設定">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>機体ラベル表示名</strong>（ブラウザ） — コンテスト番号 / 登録番号 / パイロット名 切替</li>
+            <li><strong>高度</strong>（ブラウザ） — m / ft</li>
+            <li><strong>速度</strong>（ブラウザ） — km/h / knot</li>
+            <li><strong>上昇率</strong>（ブラウザ） — m/s / knot/s</li>
+            <li><strong>距離</strong>（ブラウザ） — km / nm</li>
+            <li><strong>安全滑空比</strong>（ブラウザ） — パス判定の閾値（1〜100、デフォルト15）。値より大きい滑空比が必要な機体は赤点滅</li>
+          </ul>
+        </Section>
+
+        <Section heading="3-6. ネットワーク設定">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>ホスト名（mDNS）</strong> — 英数字とハイフンのみ、63文字以内。設定後 <code>&lt;name&gt;.local</code> でアクセス可能</li>
+            <li><strong>Wi-Fi SSID</strong> — 接続先Wi-Fiネットワーク名</li>
+            <li><strong>Wi-Fi パスワード</strong> — WPA2パスワード（8文字以上）</li>
+            <li><strong>有線LAN: DHCP（自動）</strong> — ルーターから自動取得</li>
+            <li><strong>有線LAN: 固定IP</strong> — IPアドレス・サブネットマスク・ゲートウェイ・DNSを手動指定</li>
+            <li><strong>適用</strong>ボタン — 各設定の保存と即時反映</li>
+          </ul>
+          <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            <strong>⚠ 注意:</strong> 固定化(OverlayFS)がONの場合、ネットワーク設定の変更は再起動時にリセットされます。
+            恒久的に変更するには先に固定化をOFFにしてください。誤った設定でアクセス不能になった場合はSDカードを取り出してPCから設定ファイル修正、または別系統で接続してください。
+          </div>
+        </Section>
+
+        <Section heading="3-7. システムアップデート">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>現在のバージョン</strong>表示 — 稼働中のwebappバージョン</li>
+            <li><strong>「v X.Y.Z が利用可能」</strong>バッジ — GitHubリモートに新バージョンがある時に表示</li>
+            <li><strong>「最新」</strong>バッジ — 利用可能な更新がない時</li>
+            <li><strong>アップデート実行</strong>ボタン — クリックで <code>git pull</code> + <code>npm install</code> + <code>npm run build</code> + サービス再起動を自動実行</li>
+            <li><strong>プログレスバー</strong> — 1/5〜5/5のステップを%で表示（約2〜3分）</li>
+            <li><strong>完了メッセージ</strong> — 緑バナーで Shift + Ctrl + R によるハードリロードを促す</li>
+          </ul>
+          <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            <strong>⚠ 注意:</strong> 固定化(OverlayFS)がONの場合はアップデートできません。先に固定化をOFFにして再起動してください。
+          </div>
+        </Section>
+
+        <Section heading="3-8. システムステータス">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            読み取り専用。Mosquitto / ogn-mqtt / igc-simulator / adsb-poller の稼働状態を5秒間隔で表示（詳細はステータスタブで）。
+          </p>
+        </Section>
+
+        <Section heading="3-9. システム固定化（OverlayFS）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>現在の状態</strong>表示 — ON（固定化中） / OFF（通常モード）</li>
+            <li><strong>「固定化を有効にして再起動」</strong>ボタン — OverlayFSを有効化して再起動を1アクションで実行</li>
+            <li><strong>「固定化を解除して再起動」</strong>ボタン — OverlayFSを解除して再起動を1アクションで実行</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            <strong>固定化ON</strong>: SDカード書き込みが保護され、再起動で変更がリセット。電源断時のSDカード破損防止。<br />
+            <strong>固定化OFF</strong>: 全変更が恒久保存されるが、電源断時にSDカード破損リスクあり。
+          </p>
+          <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-success-dim)", color: "var(--color-success)", border: "1px solid var(--color-success)" }}>
+            <strong>推奨:</strong> 通常運用では固定化ONを推奨。設定変更が必要な時のみOFFに切替。
+          </div>
+        </Section>
+
+        <Section heading="3-10. 自動再起動">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>毎日決まった時刻に自動再起動する</strong>チェックボックス（サーバ） — 有効化するとcrontabに <code>MM HH * * * /sbin/reboot</code> を追加</li>
+            <li><strong>時刻入力</strong>（HH:MM、システムローカルタイムゾーン基準）</li>
+            <li><strong>適用</strong>ボタン — rootのcrontabを書き換え（既存の他のcron行は保持）</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            毎日決まった時刻にシステム全体を再起動することで、メモリリークや一時ファイル蓄積を防止できます。
+          </p>
+        </Section>
+
+        <Section heading="3-11. システム電源">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>再起動</strong>ボタン — システム再起動（確認ダイアログあり）</li>
+            <li><strong>シャットダウン</strong>ボタン — システム停止（再起動には電源抜き差しが必要）</li>
+          </ul>
+        </Section>
+      </Card>
+
+      {/* ===== 4. OGN設定画面 ===== */}
+      <Card title="4. OGN設定画面">
+        <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+          OGN受信機（rtlsdr-ogn）の全設定をWeb GUIから変更できます。保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と
+          <code>/boot/OGN-receiver.conf</code> の両方を更新し、rtlsdr-ognサービスを自動再起動します（受信が数秒中断）。
+        </p>
+
+        <Section heading="受信機ステータス（リアルタイム）">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            5秒間隔で自動更新。ステータスタブの「OGN受信機」と同じ項目に加え、
+            ホスト名・CPU負荷・RAM空き・RTL-SDRシリアル番号・サンプルレートも表示。
+          </p>
+        </Section>
+
+        <Section heading="受信機識別">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>受信機名（APRS Call）</strong> — 英数字9文字以内。OGN命名規則に従う（日本: <code>ICAO空港コード + 連番</code>、例: <code>RJTTTK001</code>）</li>
+          </ul>
+        </Section>
+
+        <Section heading="アンテナ設置位置">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>緯度・経度（°）</strong> — アンテナの実際の設置位置。OGNネットワーク上の受信局位置として公開されます</li>
+            <li><strong>高度（m）</strong> — アンテナ高度</li>
+          </ul>
+        </Section>
+
+        <Section heading="RF（無線）設定">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>FreqCorr（ppm）</strong> — RTL-SDRドングルの水晶誤差補正（R820T系は通常 40〜80 ppm）</li>
+            <li><strong>HTTPポート</strong> — 受信機ステータスHTTPサーバのポート（デフォルト 8082）</li>
+            <li><strong>GSM中心周波数（MHz）</strong> — 周波数キャリブレーション用（日本: 922.4MHz付近）</li>
+            <li><strong>GSMゲイン（dB）</strong> — GSM受信時のRF入力ゲイン（GSM信号は強力なため低めに）</li>
+            <li><strong>Bias-T 電源供給</strong>チェックボックス — アンテナ用LNAなどへの電源供給</li>
+          </ul>
+          <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            <strong>⚠ Bias-T警告:</strong> Bias-T対応のLNA等を使う場合のみ有効化してください。
+            通常アンテナで有効化するとRTL-SDRドングルが故障する恐れがあります。
+          </div>
+        </Section>
+
+        <Section heading="OGNバイナリURL">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <strong>OGNBINARYURL</strong> — OGNバイナリのダウンロード元URL。日本向けは <code>?version=japan</code> を付与。再インストール時に使用。
+          </p>
+        </Section>
+
+        <Section heading="アクションボタン">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>設定を保存して受信機を再起動</strong> — 設定変更を保存＋rtlsdr-ogn再起動</li>
+            <li><strong>受信機のみ再起動</strong> — 設定は変更せずrtlsdr-ognだけ再起動</li>
+          </ul>
+        </Section>
+      </Card>
+
+      {/* ===== 5. 機体情報画面 ===== */}
+      <Card title="5. 機体情報画面">
+        <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+          FLARMデバイスID（24bit hex）ごとに機体情報をデータベース管理。マップやフライトログでの表示に使用されます。
+        </p>
+
+        <Section heading="保存項目">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>Device ID</strong> — FLARMの24bit ID（例: <code>DD1234</code>）</li>
+            <li><strong>登録番号</strong> — JA番号など（例: <code>JA1234</code>）</li>
+            <li><strong>コンテスト番号</strong> — CN（例: <code>AA</code>）</li>
+            <li><strong>パイロット名</strong> — 操縦者名</li>
+            <li><strong>機種</strong> — 機種名（例: ASW27）</li>
+            <li><strong>航空機タイプ</strong> — グライダー / 曳航機 / 動力機 / ヘリ / パラ など。マップアイコンに反映</li>
+          </ul>
+        </Section>
+
+        <Section heading="操作">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>+ 新規追加</strong>ボタン — 機体情報を手動追加</li>
+            <li><strong>編集</strong>ボタン — 既存レコードを編集</li>
+            <li><strong>削除</strong>ボタン — レコード削除（確認ダイアログ）</li>
+            <li>未登録のFLARM機体がマップに出現すると、Device IDだけが自動登録されます（後から登録番号等を追記可能）</li>
+          </ul>
+        </Section>
+
+        <div className="mt-3 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+          <strong>⚠ 固定化中の注意:</strong> OverlayFSがONの場合、追加・編集・削除した機体情報は再起動時にリセットされます（警告バッジ表示）。
+          恒久保存したい場合は先に固定化をOFFにしてから操作してください。
         </div>
       </Card>
     </>
   );
 }
+
+function ManualRow({ label, desc }: { label: string; desc: string }) {
+  return (
+    <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <td className="px-3 py-1.5 text-sm" style={{ width: "40%" }}><strong>{label}</strong></td>
+      <td className="px-3 py-1.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>{desc}</td>
+    </tr>
+  );
+}
+
+const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0,-11 L.8,-3 L14,-0.5 L14,0.5 L.8,1.5 L.4,8 L2.5,9.5 L2.5,10.5 L-2.5,10.5 L-2.5,9.5 L-.4,8 L-.8,1.5 L-14,0.5 L-14,-0.5 L-.8,-3Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`, label: "グライダー / モーターグライダー", desc: "離着陸時刻と離脱高度の自動検知対象" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0,-12 L1.5,-4 L1.5,-2 L10,-2 L10,1 L1.5,1 L1,9 L4,10 L4,11.5 L-4,11.5 L-4,10 L-1,9 L-1.5,1 L-10,1 L-10,-2 L-1.5,-2 L-1.5,-4Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`, label: "曳航機", desc: "離着陸時刻と離脱高度の自動検知対象" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0,-11 L1.5,-4 L9,-1 L9,1 L1.5,2 L1,9 L3.5,10 L3.5,11 L-3.5,11 L-3.5,10 L-1,9 L-1.5,2 L-9,1 L-9,-1 L-1.5,-4Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-12" x2="3" y2="-12" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "動力機", desc: "プロペラ機" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><line x1="-12" y1="-10" x2="12" y2="-10" stroke="#4caf50" stroke-width="2" stroke-linecap="round"/><line x1="0" y1="-10" x2="0" y2="-6" stroke="#4caf50" stroke-width="1.2"/><circle cx="0" cy="-1" r="5.5" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-4" y1="4.5" x2="-6" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="4" y1="4.5" x2="6" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="-7" y1="10" x2="-5" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="10" x2="7" y2="10" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "ヘリコプター", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M-10,-3 Q-5,-10 0,-10 Q5,-10 10,-3 L10,-1 Q5,-6 0,-6 Q-5,-6 -10,-1Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-7" y1="-2" x2="0" y2="6" stroke="#4caf50" stroke-width=".7"/><line x1="7" y1="-2" x2="0" y2="6" stroke="#4caf50" stroke-width=".7"/><circle cx="0" cy="7" r="2" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`, label: "パラグライダー", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0,-8 L12,6 Q0,2 -12,6Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5" fill-opacity=".8"/><circle cx="0" cy="3" r="1.5" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`, label: "ハンググライダー", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><circle cx="0" cy="-6" r="3" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="0" y1="-3" x2="0" y2="5" stroke="#4caf50" stroke-width="2" stroke-linecap="round"/><line x1="-7" y1="-1" x2="7" y2="-1" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="-5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "スカイダイバー", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><ellipse cx="0" cy="-3" rx="8" ry="10" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="7" x2="-2" y2="10" stroke="#4caf50" stroke-width=".7"/><line x1="3" y1="7" x2="2" y2="10" stroke="#4caf50" stroke-width=".7"/><rect x="-3" y="10" width="6" height="4" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".4"/></svg>`, label: "バルーン", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><rect x="-3" y="-3" width="6" height="6" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-3" x2="-9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="-3" x2="9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="-3" y1="3" x2="-9" y2="9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="3" x2="9" y2="9" stroke="#4caf50" stroke-width="1.5"/></svg>`, label: "UAV / ドローン", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-12 -12 24 24"><path d="M0,-10 L1.5,-4 L8,-1 L8,0.5 L1.5,1.5 L1,6 L3.5,7.5 L3.5,8.5 L-3.5,8.5 L-3.5,7.5 L-1,6 L-1.5,1.5 L-8,0.5 L-8,-1 L-1.5,-4Z" fill="#1565c0" stroke="rgba(255,255,255,.5)" stroke-width=".5"/></svg>`, label: "ADS-B（青） / Mode-S/C（黒）", desc: "tar1090経由のADS-B機体" },
+  { svg: `<svg width="24" height="24" viewBox="-11 -11 22 22"><path d="M0,-9 L4,8 L0,5 L-4,8 Z" fill="#00b894" stroke="rgba(0,0,0,.5)" stroke-width="0.7"/><line x1="-3" y1="-2" x2="3" y2="-2" stroke="#00b894" stroke-width="1.2"/><line x1="-5" y1="-5" x2="5" y2="-5" stroke="#00b894" stroke-width="1.2"/></svg>`, label: "OGN受信機（アンテナ）", desc: "OGN設定の緯度経度に表示。緑=稼働中、グレー=停止" },
+];
 
 function ReleaseNotesContent() {
   return (
