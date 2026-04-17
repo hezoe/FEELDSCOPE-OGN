@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import { useTab, type TabId } from "@/lib/TabContext";
 
-type HelpTab = "manual" | "release-notes" | "version";
+type HelpTab = "manual" | "release-notes" | "version" | "support";
 
 export default function Navigation() {
   const { activeTab, setActiveTab } = useTab();
@@ -139,6 +139,8 @@ function HelpMenu({ onSelect }: { onSelect: (tab: HelpTab) => void }) {
           <DropdownItem label="マニュアル" onClick={() => select("manual")} />
           <DropdownItem label="リリースノート" onClick={() => select("release-notes")} />
           <DropdownItem label="バージョン" onClick={() => select("version")} />
+          <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
+          <DropdownItem label="サポート" onClick={() => select("support")} />
         </div>
       )}
     </div>
@@ -164,6 +166,7 @@ const TABS: { key: HelpTab; label: string }[] = [
   { key: "manual", label: "マニュアル" },
   { key: "release-notes", label: "リリースノート" },
   { key: "version", label: "バージョン" },
+  { key: "support", label: "サポート" },
 ];
 
 function HelpModal({
@@ -245,6 +248,7 @@ function HelpModal({
             {tab === "manual" && <ManualContent />}
             {tab === "release-notes" && <ReleaseNotesContent />}
             {tab === "version" && <VersionContent />}
+            {tab === "support" && <SupportContent />}
           </div>
         </div>
       </div>
@@ -844,6 +848,210 @@ function VersionContent() {
           <p>地図データ: OpenStreetMap contributors</p>
         </div>
       </Card>
+    </>
+  );
+}
+
+/* ── Support tab ── */
+
+type SupportStatus = "idle" | "collecting" | "done" | "error";
+
+function SupportContent() {
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<SupportStatus>("idle");
+  const [statusMsg, setStatusMsg] = useState("");
+
+  function formatTs(d: Date): string {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+
+  async function handleDownload() {
+    if (!description.trim()) {
+      setStatusMsg("不具合の内容を入力してください。");
+      setStatus("error");
+      return;
+    }
+
+    setStatus("collecting");
+    setStatusMsg("データを収集中...");
+
+    try {
+      const [systemRes, statusRes, ognRes, flightRes, logsRes] = await Promise.allSettled([
+        fetch("/api/system").then((r) => r.json()),
+        fetch("/api/status").then((r) => r.json()),
+        fetch("/api/ogn").then((r) => r.json()),
+        fetch("/api/flight-log").then((r) => r.json()),
+        fetch("/api/support/logs").then((r) => r.json()),
+      ]);
+
+      setStatusMsg("ZIPを生成中...");
+
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const ts = new Date();
+      const folder = zip.folder(`feeldscope-support-${formatTs(ts)}`)!;
+
+      // report.txt — Claude向け診断フォーマット
+      const lsEntries: string[] = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i)!;
+          lsEntries.push(`  ${k}: ${localStorage.getItem(k)}`);
+        }
+      } catch { /* sandboxed */ }
+
+      const reportLines = [
+        "=== FEELDSCOPE サポートリクエスト ===",
+        `生成日時: ${ts.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })} JST`,
+        "",
+        "【不具合の内容】",
+        description.trim(),
+        "",
+        "【ブラウザ環境】",
+        `URL: ${window.location.href}`,
+        `User-Agent: ${navigator.userAgent}`,
+        `言語: ${navigator.language}`,
+        `画面解像度: ${screen.width}×${screen.height}`,
+        `ウィンドウサイズ: ${window.innerWidth}×${window.innerHeight}`,
+        "",
+        "【ローカルストレージ設定】",
+        ...(lsEntries.length ? lsEntries : ["  (なし)"]),
+      ];
+      folder.file("report.txt", reportLines.join("\n"));
+
+      // JSON データファイル
+      function settled(r: PromiseSettledResult<unknown>) {
+        return r.status === "fulfilled" ? r.value : { __error: String((r as PromiseRejectedResult).reason) };
+      }
+      folder.file("system-info.json", JSON.stringify(settled(systemRes), null, 2));
+      folder.file("realtime-status.json", JSON.stringify(settled(statusRes), null, 2));
+      folder.file("ogn-receiver.json", JSON.stringify(settled(ognRes), null, 2));
+      folder.file("flight-log.json", JSON.stringify(settled(flightRes), null, 2));
+
+      // systemdログ — サービス別テキストファイル
+      const logsFolder = folder.folder("systemd-logs")!;
+      if (logsRes.status === "fulfilled") {
+        const logs = logsRes.value as { services: Record<string, string>; system_errors: string; system_info: string };
+        for (const [svc, text] of Object.entries(logs.services ?? {})) {
+          logsFolder.file(`${svc}.txt`, text);
+        }
+        logsFolder.file("system-errors.txt", logs.system_errors ?? "");
+        logsFolder.file("system-info.txt", logs.system_info ?? "");
+      } else {
+        logsFolder.file("fetch-error.txt", String((logsRes as PromiseRejectedResult).reason));
+      }
+
+      // ブラウザ情報JSON
+      folder.file("browser-info.json", JSON.stringify({
+        timestamp: ts.toISOString(),
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        screen: { width: screen.width, height: screen.height },
+        window: { width: window.innerWidth, height: window.innerHeight },
+        localStorage: Object.fromEntries(lsEntries.map((l) => {
+          const [k, ...v] = l.trim().split(": ");
+          return [k, v.join(": ")];
+        })),
+      }, null, 2));
+
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `feeldscope-support-${formatTs(ts)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setStatus("done");
+      setStatusMsg("ダウンロードしました。このZIPファイルをサポートへお送りください。");
+    } catch (e: unknown) {
+      setStatus("error");
+      setStatusMsg(`エラーが発生しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  const isCollecting = status === "collecting";
+
+  return (
+    <>
+      <Card title="サポートリクエスト">
+        <div className="space-y-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <p>不具合の内容を入力し、診断ファイルをダウンロードしてください。</p>
+          <p>ダウンロードされたZIPファイルにはシステムの状態・ログが含まれています。このファイルをサポート担当者へお送りいただくことで、問題の特定が容易になります。</p>
+        </div>
+      </Card>
+
+      <Card title="不具合の内容">
+        <textarea
+          value={description}
+          onChange={(e) => { setDescription(e.target.value); if (status === "error" && e.target.value.trim()) { setStatus("idle"); setStatusMsg(""); } }}
+          placeholder={"例：マップに航空機が表示されない\n例：OGN受信機のステータスがエラーになる\n\n発生状況や手順もできるだけ詳しく記入してください。"}
+          rows={6}
+          disabled={isCollecting}
+          className="w-full text-sm rounded p-3 resize-none"
+          style={{
+            background: "var(--color-bg-primary)",
+            border: `1px solid ${status === "error" && !description.trim() ? "var(--color-danger)" : "var(--color-border)"}`,
+            color: "var(--color-text-primary)",
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+      </Card>
+
+      <Card title="診断ファイルに含まれる情報">
+        <ul className="text-sm space-y-1" style={{ color: "var(--color-text-secondary)" }}>
+          {[
+            ["report.txt", "不具合の内容・ブラウザ環境・ローカルストレージ設定"],
+            ["system-info.json", "バージョン・設定値・サービス稼働状態"],
+            ["realtime-status.json", "MQTT経由のリアルタイムデータ"],
+            ["ogn-receiver.json", "OGN受信機のCPU・温度・RF状態"],
+            ["flight-log.json", "当日のフライトログ"],
+            ["systemd-logs/", "各サービスのsystemdログ・システムエラー"],
+            ["browser-info.json", "画面サイズ・URL等のブラウザ情報"],
+          ].map(([name, desc]) => (
+            <li key={name} className="flex gap-2">
+              <code className="shrink-0 text-xs px-1 rounded" style={{ background: "var(--color-bg-card)", color: "var(--color-accent)" }}>{name}</code>
+              <span>{desc}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs mt-3" style={{ color: "var(--color-text-secondary)" }}>
+          ※ パスワード・秘密鍵等のセキュリティ情報は含まれません。機体DB・フライト乗員情報は含まれません。
+        </p>
+      </Card>
+
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={handleDownload}
+          disabled={isCollecting}
+          className="w-full py-2.5 text-sm font-semibold rounded transition-colors"
+          style={{
+            background: isCollecting ? "var(--color-border)" : "var(--color-accent)",
+            color: isCollecting ? "var(--color-text-secondary)" : "#fff",
+            cursor: isCollecting ? "not-allowed" : "pointer",
+            border: "none",
+          }}
+        >
+          {isCollecting ? "収集中..." : "診断ファイルをダウンロード (.zip)"}
+        </button>
+
+        {statusMsg && (
+          <p
+            className="text-sm text-center px-3 py-2 rounded"
+            style={{
+              color: status === "done" ? "var(--color-success)" : status === "error" ? "var(--color-danger)" : "var(--color-text-secondary)",
+              background: "var(--color-bg-card)",
+            }}
+          >
+            {statusMsg}
+          </p>
+        )}
+      </div>
     </>
   );
 }
