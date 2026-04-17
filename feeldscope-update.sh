@@ -61,7 +61,8 @@ log_info "Code updated"
 
 log_info "[2/5] Stopping FEELDSCOPE services..."
 systemctl stop ogn-mqtt.service 2>/dev/null || true
-systemctl stop feeldscope-webapp.service 2>/dev/null || true
+# feeldscope-webapp is intentionally kept running so the browser progress bar
+# remains visible throughout the build. It is restarted in step 5.
 systemctl stop adsb-poller.service 2>/dev/null || true
 systemctl stop igc-simulator.service 2>/dev/null || true
 
@@ -130,7 +131,7 @@ log_info "Webapp rebuilt"
 log_info "[5/5] Restarting services..."
 systemctl restart mosquitto
 systemctl start ogn-mqtt.service
-systemctl start feeldscope-webapp.service
+systemctl restart feeldscope-webapp.service
 
 # Restart optional services if they were enabled
 if systemctl is-enabled adsb-poller.service &>/dev/null; then
