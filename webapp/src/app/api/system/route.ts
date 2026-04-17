@@ -76,7 +76,7 @@ async function removeAdsbConfig(): Promise<void> {
 
 async function isOverlayEnabled(): Promise<boolean> {
   try {
-    const { stdout } = await execAsync("sudo overlayctl status");
+    const { stdout } = await execAsync("sudo -n overlayctl status");
     return stdout.includes("overlay is active") || stdout.includes("overlay enabled");
   } catch {
     return false;
@@ -158,7 +158,7 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
   if (cfg.minute < 0 || cfg.minute > 59) throw new Error("分(minute)は 0〜59 の範囲です");
 
   // Read existing crontab (sans reboot lines), append new line if enabled
-  const { stdout } = await execAsync("sudo crontab -l 2>/dev/null || true");
+  const { stdout } = await execAsync("sudo -n crontab -l 2>/dev/null || true");
   const filtered = stdout.split("\n").filter(line => !/.*\/sbin\/reboot\s*$/.test(line)).join("\n");
   let newCron = filtered.trimEnd();
   if (cfg.enabled) {
@@ -168,7 +168,7 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
     newCron += "\n";
   }
   // Install via stdin
-  await execAsync(`echo ${JSON.stringify(newCron)} | sudo crontab -`);
+  await execAsync(`echo ${JSON.stringify(newCron)} | sudo -n crontab -`);
 }
 
 // ── Network helpers ──
@@ -212,11 +212,11 @@ async function applyHostname(name: string): Promise<void> {
   if (!safe || safe.length > 63 || /^-/.test(safe) || /-$/.test(safe)) {
     throw new Error("ホスト名は英数字とハイフンのみ、63文字以内、先頭末尾はハイフン不可です");
   }
-  await execAsync(`sudo hostnamectl set-hostname ${safe}`);
+  await execAsync(`sudo -n hostnamectl set-hostname ${safe}`);
   // Update /etc/hosts 127.0.1.1 entry
-  await execAsync(`sudo sed -i -E 's/^(127\\.0\\.1\\.1\\s+).*/\\1${safe}/' /etc/hosts`);
+  await execAsync(`sudo -n sed -i -E 's/^(127\\.0\\.1\\.1\\s+).*/\\1${safe}/' /etc/hosts`);
   // Restart avahi to refresh mDNS
-  await execAsync("sudo systemctl restart avahi-daemon").catch(() => {});
+  await execAsync("sudo -n systemctl restart avahi-daemon").catch(() => {});
 }
 
 async function getNetworkStatus(): Promise<NetworkStatus> {
@@ -298,10 +298,10 @@ network={
     psk="${password}"
 }
 `;
-  await execAsync(`sudo bash -c 'cat > ${WPA_SUPPLICANT_CONF} << WPAEOF
+  await execAsync(`sudo -n bash -c 'cat > ${WPA_SUPPLICANT_CONF} << WPAEOF
 ${content}
 WPAEOF'`);
-  await execAsync("sudo wpa_cli -i wlan0 reconfigure").catch(() => {});
+  await execAsync("sudo -n wpa_cli -i wlan0 reconfigure").catch(() => {});
 }
 
 async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: string, gateway?: string, dns?: string): Promise<void> {
@@ -322,11 +322,11 @@ async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: s
     if (dns) content += `static domain_name_servers=${dns}\n`;
   }
 
-  await execAsync(`sudo bash -c 'cat > ${DHCPCD_CONF} << DHCPEOF
+  await execAsync(`sudo -n bash -c 'cat > ${DHCPCD_CONF} << DHCPEOF
 ${content}
 DHCPEOF'`);
   // Restart dhcpcd to apply
-  await execAsync("sudo systemctl restart dhcpcd").catch(() => {});
+  await execAsync("sudo -n systemctl restart dhcpcd").catch(() => {});
 }
 
 // GET /api/system - Get current system status
@@ -377,7 +377,7 @@ export async function POST(request: Request) {
     switch (action) {
       case "realtime":
         // Start ogn-mqtt (Conflicts= will stop igc-simulator)
-        await execAsync("sudo systemctl start ogn-mqtt");
+        await execAsync("sudo -n systemctl start ogn-mqtt");
         return NextResponse.json({ ok: true, mode: "realtime" });
 
       case "history": {
@@ -395,20 +395,20 @@ export async function POST(request: Request) {
 
         // Not running: update systemd override and start
         const overrideDir = "/etc/systemd/system/igc-simulator.service.d";
-        await execAsync(`sudo mkdir -p ${overrideDir}`);
-        await execAsync(`sudo bash -c 'cat > ${overrideDir}/speed.conf << EOF
+        await execAsync(`sudo -n mkdir -p ${overrideDir}`);
+        await execAsync(`sudo -n bash -c 'cat > ${overrideDir}/speed.conf << EOF
 [Service]
 ExecStart=
 ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --dir ${FEELDSCOPE_DIR}/testdata
 EOF'`);
-        await execAsync("sudo systemctl daemon-reload");
-        await execAsync("sudo systemctl start igc-simulator");
+        await execAsync("sudo -n systemctl daemon-reload");
+        await execAsync("sudo -n systemctl start igc-simulator");
         return NextResponse.json({ ok: true, mode: "history", speed: replaySpeed });
       }
 
       case "stop":
         await execAsync(
-          "sudo systemctl stop ogn-mqtt; sudo systemctl stop igc-simulator"
+          "sudo -n systemctl stop ogn-mqtt; sudo -n systemctl stop igc-simulator"
         );
         return NextResponse.json({ ok: true, mode: "stopped" });
 
@@ -417,24 +417,24 @@ EOF'`);
         const adsbInterval = Math.max(1, Math.min(30, parseInt(body.interval, 10) || 3));
         // Write systemd override with the URL and interval
         const adsbOverrideDir = "/etc/systemd/system/adsb-poller.service.d";
-        await execAsync(`sudo mkdir -p ${adsbOverrideDir}`);
+        await execAsync(`sudo -n mkdir -p ${adsbOverrideDir}`);
         const safeUrl = adsbUrl.replace(/'/g, "");
-        await execAsync(`sudo bash -c 'cat > ${adsbOverrideDir}/config.conf << EOF
+        await execAsync(`sudo -n bash -c 'cat > ${adsbOverrideDir}/config.conf << EOF
 [Service]
 ExecStart=
 ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval}
 EOF'`);
-        await execAsync("sudo systemctl daemon-reload");
-        await execAsync("sudo systemctl restart adsb-poller");
+        await execAsync("sudo -n systemctl daemon-reload");
+        await execAsync("sudo -n systemctl restart adsb-poller");
         // Persist config and enable auto-start on boot
         await saveAdsbConfig({ enabled: true, url: adsbUrl, interval: adsbInterval });
-        await execAsync("sudo systemctl enable adsb-poller").catch(() => {});
+        await execAsync("sudo -n systemctl enable adsb-poller").catch(() => {});
         return NextResponse.json({ ok: true, adsb: "started" });
       }
 
       case "adsb-stop": {
-        await execAsync("sudo systemctl stop adsb-poller");
-        await execAsync("sudo systemctl disable adsb-poller").catch(() => {});
+        await execAsync("sudo -n systemctl stop adsb-poller");
+        await execAsync("sudo -n systemctl disable adsb-poller").catch(() => {});
         await removeAdsbConfig();
         // Clear retained ADS-B MQTT messages
         const rid = await detectReceiverId();
@@ -444,12 +444,12 @@ EOF'`);
 
       case "reboot":
         // Respond before rebooting
-        setTimeout(() => execAsync("sudo systemctl reboot"), 500);
+        setTimeout(() => execAsync("sudo -n systemctl reboot"), 500);
         return NextResponse.json({ ok: true, message: "再起動します..." });
 
       case "shutdown":
         // Respond before shutting down
-        setTimeout(() => execAsync("sudo systemctl poweroff"), 500);
+        setTimeout(() => execAsync("sudo -n systemctl poweroff"), 500);
         return NextResponse.json({ ok: true, message: "シャットダウンします..." });
 
       case "airfield-save": {
@@ -517,16 +517,16 @@ EOF'`);
           return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
         }
         // Remove stale log and launch updater as independent systemd transient unit
-        await execAsync("sudo rm -f /tmp/feeldscope-update.log && sudo touch /tmp/feeldscope-update.log && sudo chmod 666 /tmp/feeldscope-update.log");
-        await execAsync(`sudo bash -c 'cat > /tmp/feeldscope-do-update.sh << "SCRIPT"
+        await execAsync("sudo -n rm -f /tmp/feeldscope-update.log && sudo -n touch /tmp/feeldscope-update.log && sudo -n chmod 666 /tmp/feeldscope-update.log");
+        await execAsync(`sudo -n bash -c 'cat > /tmp/feeldscope-do-update.sh << "SCRIPT"
 #!/bin/bash
 cd ${FEELDSCOPE_OGN_DIR}
 exec bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1
 SCRIPT
 chmod +x /tmp/feeldscope-do-update.sh'`);
         // Reset any previous failed unit before starting new one
-        await execAsync("sudo systemctl reset-failed feeldscope-update 2>/dev/null || true");
-        await execAsync("sudo systemd-run --unit=feeldscope-update --description='FEELDSCOPE Update' /tmp/feeldscope-do-update.sh");
+        await execAsync("sudo -n systemctl reset-failed feeldscope-update 2>/dev/null || true");
+        await execAsync("sudo -n systemd-run --unit=feeldscope-update --description='FEELDSCOPE Update' /tmp/feeldscope-do-update.sh");
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
 
@@ -540,11 +540,11 @@ chmod +x /tmp/feeldscope-do-update.sh'`);
       }
 
       case "overlay-enable":
-        await execAsync("sudo overlayctl enable");
+        await execAsync("sudo -n overlayctl enable");
         return NextResponse.json({ ok: true, message: "オーバーレイFSを有効にしました。再起動後に反映されます。" });
 
       case "overlay-disable":
-        await execAsync("sudo overlayctl disable");
+        await execAsync("sudo -n overlayctl disable");
         return NextResponse.json({ ok: true, message: "オーバーレイFSを無効にしました。再起動後に反映されます。" });
 
       default:
