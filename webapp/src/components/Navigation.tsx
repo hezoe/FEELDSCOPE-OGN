@@ -688,11 +688,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.3 */}
+      {/* v1.1.4 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.4</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-17</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="サポート機能追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ヘルプメニューに「サポート」タブを追加</li>
+          <li>不具合内容の入力フォームと診断ZIPダウンロード機能を実装</li>
+          <li>ZIP内容: システム情報・各サービスのsystemdログ・フライトログ・ブラウザ設定</li>
+          <li>OverlayFS ON状態でもブラウザメモリ上でZIPを生成・ダウンロード可能</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.3 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.3</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-14</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="バージョン管理ポリシーの確立">
@@ -817,7 +832,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-14" />
+          <InfoRow label="リリース日" value="2026-04-17" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
