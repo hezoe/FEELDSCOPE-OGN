@@ -530,11 +530,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.12 */}
+      {/* v1.1.13 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.12</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.13</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="滑空場設定の不整合を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>サーバ側 <code>airfield-config.json</code> が欠損している場合にブラウザlocalStorageの古い滑空場座標が表示され続ける問題を修正</li>
+          <li>サーバは常にデフォルト値（関宿滑空場）を返し、nullを返さないように統一</li>
+          <li>滑空場の連続編集時に複数POSTが競合してサーバ最終値が不定になる問題をデバウンス（500ms）+ AbortController で解消</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.12 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.12</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
       </div>
 
       <Card title="ADS-B状態不整合の修正">
@@ -785,7 +799,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-18 (v1.1.12)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.13)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>

@@ -19,12 +19,25 @@ interface AirfieldConfig {
   elevation_m: number;
 }
 
-async function loadAirfieldConfig(): Promise<AirfieldConfig | null> {
+const DEFAULT_AIRFIELD: AirfieldConfig = {
+  name: "関宿滑空場",
+  latitude: 36.0095,
+  longitude: 139.818,
+  elevation_m: 10,
+};
+
+async function loadAirfieldConfig(): Promise<AirfieldConfig> {
   try {
     const data = await readFile(AIRFIELD_CONFIG_PATH, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return {
+      name: typeof parsed.name === "string" ? parsed.name : DEFAULT_AIRFIELD.name,
+      latitude: typeof parsed.latitude === "number" ? parsed.latitude : DEFAULT_AIRFIELD.latitude,
+      longitude: typeof parsed.longitude === "number" ? parsed.longitude : DEFAULT_AIRFIELD.longitude,
+      elevation_m: typeof parsed.elevation_m === "number" ? parsed.elevation_m : DEFAULT_AIRFIELD.elevation_m,
+    };
   } catch {
-    return null;
+    return DEFAULT_AIRFIELD;
   }
 }
 
