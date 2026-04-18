@@ -1183,16 +1183,6 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* System Status */}
-          <Card title="システムステータス">
-            <div className="space-y-2 text-sm">
-              <StatusRow label="Mosquitto (MQTT ブローカー)" active={status?.mosquitto_active} />
-              <StatusRow label="ogn-mqtt (リアルタイム再生)" active={status?.ogn_mqtt_active} />
-              <StatusRow label="igc-simulator (履歴再生)" active={status?.igc_simulator_active} />
-              <StatusRow label="adsb-poller (ADS-B 受信)" active={status?.adsb_poller_active} />
-            </div>
-          </Card>
-
           {/* Overlay FS */}
           <Card title="システム固定化">
             <div className="space-y-3">
@@ -1547,28 +1537,3 @@ function UnitButton({
   );
 }
 
-function StatusRow({
-  label,
-  active,
-}: {
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className="flex items-center justify-between py-1.5 px-3 rounded"
-      style={{ background: "var(--color-bg-card)" }}
-    >
-      <span>{label}</span>
-      <span
-        className="px-2 py-0.5 rounded text-xs font-medium"
-        style={{
-          background: active ? "var(--color-success-dim)" : "rgba(160,160,176,0.15)",
-          color: active ? "var(--color-success)" : "var(--color-text-secondary)",
-        }}
-      >
-        {active ? "稼働中" : "停止"}
-      </span>
-    </div>
-  );
-}
