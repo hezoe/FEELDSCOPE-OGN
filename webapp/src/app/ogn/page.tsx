@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import HelpHint from "@/components/HelpHint";
 
 interface OgnConfig {
   receiverName: string;
@@ -127,7 +128,7 @@ export default function OgnPage() {
         )}
 
         {/* Receiver Status */}
-        <Card title="受信機ステータス（リアルタイム）">
+        <Card title="受信機ステータス（リアルタイム）" helpId="ogn-status">
           <div className="space-y-2 text-sm">
             <StatusRow label="受信機" value={status?.online ? "稼働中" : "停止"} highlight={status?.online} />
             {status?.online && (
@@ -156,7 +157,7 @@ export default function OgnPage() {
         </Card>
 
         {/* Receiver Identity */}
-        <Card title="受信機識別">
+        <Card title="受信機識別" helpId="ogn-identity">
           <div className="space-y-3">
             <Field label="受信機名（APRS Call、英数字9文字以内）">
               <input
@@ -176,7 +177,7 @@ export default function OgnPage() {
         </Card>
 
         {/* Position */}
-        <Card title="アンテナ設置位置">
+        <Card title="アンテナ設置位置" helpId="ogn-position">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="緯度（°）">
               <input
@@ -215,7 +216,7 @@ export default function OgnPage() {
         </Card>
 
         {/* RF Settings */}
-        <Card title="RF（無線）設定">
+        <Card title="RF（無線）設定" helpId="ogn-rf">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="周波数補正 FreqCorr (ppm)">
               <input
@@ -292,7 +293,7 @@ export default function OgnPage() {
         </Card>
 
         {/* OGN Binary URL */}
-        <Card title="OGNバイナリURL（インストール時）">
+        <Card title="OGNバイナリURL（インストール時）" helpId="ogn-binary-url">
           <Field label="OGNBINARYURL">
             <input
               type="text"
@@ -308,7 +309,7 @@ export default function OgnPage() {
         </Card>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <button
             onClick={saveConfig}
             disabled={saving || !config}
@@ -325,6 +326,7 @@ export default function OgnPage() {
           >
             {restarting ? "再起動中..." : "受信機のみ再起動"}
           </button>
+          <HelpHint sectionId="ogn-actions" />
         </div>
 
         <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
@@ -336,14 +338,15 @@ export default function OgnPage() {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, helpId }: { title: string; children: React.ReactNode; helpId?: string }) {
   return (
     <fieldset
       className="p-5"
       style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: 4 }}
     >
-      <legend className="text-sm font-semibold px-2" style={{ color: "var(--color-text-primary)" }}>
+      <legend className="text-sm font-semibold px-2 inline-flex items-center" style={{ color: "var(--color-text-primary)" }}>
         {title}
+        {helpId && <HelpHint sectionId={helpId} />}
       </legend>
       {children}
     </fieldset>

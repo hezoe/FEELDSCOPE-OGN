@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import { useTab, type TabId } from "@/lib/TabContext";
+import { HELP_OPEN_EVENT } from "./HelpHint";
 
 type HelpTab = "manual" | "release-notes" | "version" | "support";
 
@@ -11,6 +12,7 @@ export default function Navigation() {
   const [clock, setClock] = useState("--:--:--");
   const { units } = useUnits();
   const [helpTab, setHelpTab] = useState<HelpTab | null>(null);
+  const [helpScrollTarget, setHelpScrollTarget] = useState<string | null>(null);
 
   useEffect(() => {
     const update = () => {
@@ -27,6 +29,18 @@ export default function Navigation() {
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    function handler(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail === "string") {
+        setHelpTab("manual");
+        setHelpScrollTarget(detail);
+      }
+    }
+    window.addEventListener(HELP_OPEN_EVENT, handler);
+    return () => window.removeEventListener(HELP_OPEN_EVENT, handler);
   }, []);
 
   return (
@@ -88,7 +102,14 @@ export default function Navigation() {
         </div>
       </header>
 
-      {helpTab && <HelpModal tab={helpTab} onTabChange={setHelpTab} onClose={() => setHelpTab(null)} />}
+      {helpTab && (
+        <HelpModal
+          tab={helpTab}
+          onTabChange={(t) => { setHelpTab(t); setHelpScrollTarget(null); }}
+          onClose={() => { setHelpTab(null); setHelpScrollTarget(null); }}
+          scrollTarget={helpScrollTarget}
+        />
+      )}
     </>
   );
 }
@@ -173,11 +194,30 @@ function HelpModal({
   tab,
   onTabChange,
   onClose,
+  scrollTarget,
 }: {
   tab: HelpTab;
   onTabChange: (t: HelpTab) => void;
   onClose: () => void;
+  scrollTarget?: string | null;
 }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!scrollTarget || tab !== "manual") return;
+    // Wait for content to mount, then scroll & highlight
+    const timer = setTimeout(() => {
+      const root = bodyRef.current;
+      if (!root) return;
+      const target = root.querySelector<HTMLElement>(`[data-help-id="${scrollTarget}"]`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("help-flash");
+      setTimeout(() => target.classList.remove("help-flash"), 2200);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [scrollTarget, tab]);
+
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center"
@@ -243,7 +283,7 @@ function HelpModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div ref={bodyRef} className="flex-1 overflow-y-auto p-5">
           <div className="max-w-2xl mx-auto space-y-4">
             {tab === "manual" && <ManualContent />}
             {tab === "release-notes" && <ReleaseNotesContent />}
@@ -261,12 +301,12 @@ function HelpModal({
 function ManualContent() {
   return (
     <>
-      <Card title="FEELDSCOPE とは">
+      <Card id="manual-overview" title="FEELDSCOPE とは">
         <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
           FEELDSCOPE は、OGN（Open Glider Network）の FLARM データおよび ADS-B データをリアルタイムに受信・表示するフライトモニターです。
           Raspberry Pi 上で動作し、滑空場周辺のグライダー・モーターグライダー・曳航機・周辺航空機の位置を地図上に表示します。
         </p>
-        <Section heading="ナビゲーションバー（共通）">
+        <Section id="nav-bar" heading="ナビゲーションバー（共通）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>FEELDSCOPE</strong> — アプリケーション名（左端）</li>
             <li><strong>滑空場名</strong> — 設定で登録した滑空場名を表示</li>
@@ -279,11 +319,16 @@ function ManualContent() {
             <li><strong>時計</strong> — 現在時刻をリアルタイム表示（右端）</li>
           </ul>
         </Section>
+        <Section heading="マニュアルヘルプアイコン">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            各画面のセクション見出しやボタンの横に小さな <strong>?</strong> アイコンが表示されている場合、クリックすると本マニュアルの該当箇所がハイライト付きで開きます。
+          </p>
+        </Section>
       </Card>
 
       {/* ===== 1. マップ画面 ===== */}
-      <Card title="1. マップ画面">
-        <Section heading="マップ操作">
+      <Card id="manual-map" title="1. マップ画面">
+        <Section id="map-controls" heading="マップ操作">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ドラッグ</strong> — 地図を平行移動</li>
             <li><strong>マウスホイール / ピンチ</strong> — 拡大縮小</li>
@@ -291,13 +336,13 @@ function ManualContent() {
             <li><strong>機体クリック</strong> — その機体を選択し、サイドバーで詳細表示</li>
           </ul>
         </Section>
-        <Section heading="HOMEボタン・保存ボタン（マップ右上）">
+        <Section id="map-home-save" heading="HOMEボタン・保存ボタン（マップ右上）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>HOME</strong> — 保存済みの「HOMEビュー」（地図中心位置・ズーム）に瞬時に戻ります。未保存時は滑空場設定の位置を表示</li>
             <li><strong>保存</strong> — 現在表示中の地図の中心位置とズームを「HOMEビュー」として保存（ブラウザに保存）。次回起動時もこの位置から開始</li>
           </ul>
         </Section>
-        <Section heading="サイドバー（左）">
+        <Section id="map-sidebar" heading="サイドバー（左）">
           <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>機体を4カテゴリで一覧表示：</p>
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>警告</strong> — パス不足（赤）または着陸進入中（橙）の機体</li>
@@ -307,7 +352,7 @@ function ManualContent() {
             <li><strong>幅変更</strong> — サイドバーとマップの境界をドラッグで幅変更可能（ブラウザ保存）</li>
           </ul>
         </Section>
-        <Section heading="機体アイコン一覧">
+        <Section id="map-icons" heading="機体アイコン一覧">
           <table className="w-full text-sm mt-2" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "var(--color-bg-primary)" }}>
@@ -327,7 +372,7 @@ function ManualContent() {
             </tbody>
           </table>
         </Section>
-        <Section heading="機体アイコンの色分け">
+        <Section id="map-icon-colors" heading="機体アイコンの色分け">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><span style={{ color: "#4caf50", fontWeight: 600 }}>緑</span> — 通常飛行中</li>
             <li><span style={{ color: "#ff9800", fontWeight: 600 }}>橙</span> — 低高度・着陸進入中（着陸確定後に緑へ復帰）</li>
@@ -336,13 +381,13 @@ function ManualContent() {
             <li><span style={{ color: "#222", fontWeight: 600 }}>黒</span> — Mode-S/Mode-C機体</li>
           </ul>
         </Section>
-        <Section heading="パス判定（安全滑空比による警告）">
+        <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             各機体の現在地から滑空場までの距離 ÷（現在高度 − 滑空場標高）で滑空比を計算し、設定値（デフォルト15:1）を超えると赤点滅で警告します。
             数字が大きいほど効率の良い滑空が必要なことを意味します。
           </p>
         </Section>
-        <Section heading="フライトログテーブル（マップ下部）">
+        <Section id="map-flight-log" heading="フライトログテーブル（マップ下部）">
           <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>FLARM受信機の自動検知でフライトを記録：</p>
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>#</strong> — 行番号</li>
@@ -359,7 +404,7 @@ function ManualContent() {
             データはサーバ側メモリに保存され、毎日 <strong>日本時間 AM 5:00</strong> に自動リセット。複数端末で同じログを参照できます。
           </p>
         </Section>
-        <Section heading="自動検知の閾値">
+        <Section id="map-detection-thresholds" heading="自動検知の閾値">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>離陸検知</strong> — 対地速度が <strong>30 km/h</strong> を超えた瞬間</li>
             <li><strong>着陸検知</strong> — 一度 1500ft AGL を超えた機体が、1500ft AGL以下かつ <strong>10 km/h以下</strong> になった瞬間</li>
@@ -370,12 +415,12 @@ function ManualContent() {
       </Card>
 
       {/* ===== 2. ステータス画面 ===== */}
-      <Card title="2. ステータス画面">
+      <Card id="manual-status" title="2. ステータス画面">
         <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
           5秒間隔で自動更新されるシステム・受信状況のダッシュボード。読み取り専用。
         </p>
 
-        <Section heading="システム概要">
+        <Section id="status-system" heading="システム概要">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="受信機名" desc="OGN受信機の識別名（APRS Call）" />
             <ManualRow label="稼働時間" desc="OS起動からの経過時間" />
@@ -386,7 +431,7 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
-        <Section heading="OGN受信機">
+        <Section id="status-ogn-receiver" heading="OGN受信機">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
             <ManualRow label="ソフトウェア" desc="rtlsdr-ognのバージョンとビルド日" />
@@ -402,7 +447,7 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
-        <Section heading="ADS-B 受信ステータス">
+        <Section id="status-adsb" heading="ADS-B 受信ステータス">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="正常受信中 / 失敗（連続失敗回数を表示）" />
             <ManualRow label="最終取得" desc="最後にtar1090エンドポイントから取得した時刻からの経過" />
@@ -418,7 +463,7 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
-        <Section heading="サービス稼働状況">
+        <Section id="status-services" heading="サービス稼働状況">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="mosquitto" desc="MQTTブローカー（FEELDSCOPE全体の通信ハブ）" />
             <ManualRow label="ogn-mqtt" desc="OGN受信機からのデータをMQTTに変換して配信" />
@@ -431,7 +476,7 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
-        <Section heading="フライトログ統計（本日）">
+        <Section id="status-flight-log-stats" heading="フライトログ統計（本日）">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="総記録数" desc="本日記録されたフライト総数（離陸検知＋編集追加）" />
             <ManualRow label="飛行中" desc="現在飛行中（着陸時刻が未記録）の機体数" />
@@ -444,7 +489,7 @@ function ManualContent() {
       </Card>
 
       {/* ===== 3. 設定画面 ===== */}
-      <Card title="3. 設定画面">
+      <Card id="manual-settings" title="3. 設定画面">
         <p className="text-sm mb-3" style={{ color: "var(--color-text-secondary)" }}>
           画面の上から順に解説します。保存先の種別:
           <strong>ブラウザ</strong>＝当該ブラウザのlocalStorageのみ /
@@ -452,7 +497,7 @@ function ManualContent() {
           <strong>ブラウザ + サーバ</strong>＝両方に保存（読込時はサーバ優先）
         </p>
 
-        <Section heading="3-1. 滑空場設定">
+        <Section id="settings-airfield" heading="3-1. 滑空場設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>滑空場名</strong>（ブラウザ + サーバ） — マップ中心位置のラベル、ナビゲーションバーに表示</li>
             <li><strong>緯度（°）</strong>（ブラウザ + サーバ） — 十進法。マップ初期表示・パス判定の基準</li>
@@ -461,7 +506,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section heading="3-2. データソース切替">
+        <Section id="settings-source" heading="3-2. データソース切替">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>リアルタイム再生</strong>ボタン — OGN FLARMデータ受信モードに切替（ogn-mqtt起動）</li>
             <li><strong>履歴再生</strong>ボタン — IGCファイル再生モード（igc-simulator起動、ogn-mqtt停止）</li>
@@ -473,7 +518,7 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section heading="3-3. IGC ファイル管理（履歴再生用）">
+        <Section id="settings-igc" heading="3-3. IGC ファイル管理（履歴再生用）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>IGC ファイルをアップロード</strong>ボタン — 拡張子 .igc のファイルをサーバに保存</li>
             <li><strong>削除</strong>ボタン — 各ファイルを削除（確認ダイアログ）</li>
@@ -484,7 +529,7 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section heading="3-4. ADS-B 受信設定">
+        <Section id="settings-adsb" heading="3-4. ADS-B 受信設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ADS-B 受信を有効にする</strong>チェックボックス（ブラウザ + サーバ） — adsb-pollerサービスのON/OFF</li>
             <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code></li>
@@ -492,7 +537,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section heading="3-5. 表示設定">
+        <Section id="settings-display" heading="3-5. 表示設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>機体ラベル表示名</strong>（ブラウザ） — コンテスト番号 / 登録番号 / パイロット名 切替</li>
             <li><strong>高度</strong>（ブラウザ） — m / ft</li>
@@ -503,7 +548,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section heading="3-6. ネットワーク設定">
+        <Section id="settings-network" heading="3-6. ネットワーク設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ホスト名（mDNS）</strong> — 英数字とハイフンのみ、63文字以内。設定後 <code>&lt;name&gt;.local</code> でアクセス可能</li>
             <li><strong>Wi-Fi SSID</strong> — 接続先Wi-Fiネットワーク名</li>
@@ -518,7 +563,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="3-7. システムアップデート">
+        <Section id="settings-update" heading="3-7. システムアップデート">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>現在のバージョン</strong>表示 — 稼働中のwebappバージョン</li>
             <li><strong>「v X.Y.Z が利用可能」</strong>バッジ — GitHubリモートに新バージョンがある時に表示</li>
@@ -532,7 +577,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="3-8. システム固定化（OverlayFS）">
+        <Section id="settings-overlay" heading="3-8. システム固定化（OverlayFS）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>現在の状態</strong>表示 — ON（固定化中） / OFF（通常モード）</li>
             <li><strong>「固定化を有効にして再起動」</strong>ボタン — OverlayFSを有効化して再起動を1アクションで実行</li>
@@ -547,7 +592,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="3-9. 自動再起動">
+        <Section id="settings-autoreboot" heading="3-9. 自動再起動">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>毎日決まった時刻に自動再起動する</strong>チェックボックス（サーバ） — 有効化するとcrontabに <code>MM HH * * * /sbin/reboot</code> を追加</li>
             <li><strong>時刻入力</strong>（HH:MM、システムローカルタイムゾーン基準）</li>
@@ -558,7 +603,7 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section heading="3-10. システム電源">
+        <Section id="settings-power" heading="3-10. システム電源">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>再起動</strong>ボタン — システム再起動（確認ダイアログあり）</li>
             <li><strong>シャットダウン</strong>ボタン — システム停止（再起動には電源抜き差しが必要）</li>
@@ -567,33 +612,33 @@ function ManualContent() {
       </Card>
 
       {/* ===== 4. OGN設定画面 ===== */}
-      <Card title="4. OGN設定画面">
+      <Card id="manual-ogn" title="4. OGN設定画面">
         <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
           OGN受信機（rtlsdr-ogn）の全設定をWeb GUIから変更できます。保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と
           <code>/boot/OGN-receiver.conf</code> の両方を更新し、rtlsdr-ognサービスを自動再起動します（受信が数秒中断）。
         </p>
 
-        <Section heading="受信機ステータス（リアルタイム）">
+        <Section id="ogn-status" heading="受信機ステータス（リアルタイム）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             5秒間隔で自動更新。ステータスタブの「OGN受信機」と同じ項目に加え、
             ホスト名・CPU負荷・RAM空き・RTL-SDRシリアル番号・サンプルレートも表示。
           </p>
         </Section>
 
-        <Section heading="受信機識別">
+        <Section id="ogn-identity" heading="受信機識別">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>受信機名（APRS Call）</strong> — 英数字9文字以内。OGN命名規則に従う（日本: <code>ICAO空港コード + 連番</code>、例: <code>RJTTTK001</code>）</li>
           </ul>
         </Section>
 
-        <Section heading="アンテナ設置位置">
+        <Section id="ogn-position" heading="アンテナ設置位置">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>緯度・経度（°）</strong> — アンテナの実際の設置位置。OGNネットワーク上の受信局位置として公開されます</li>
             <li><strong>高度（m）</strong> — アンテナ高度</li>
           </ul>
         </Section>
 
-        <Section heading="RF（無線）設定">
+        <Section id="ogn-rf" heading="RF（無線）設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>FreqCorr（ppm）</strong> — RTL-SDRドングルの水晶誤差補正（R820T系は通常 40〜80 ppm）</li>
             <li><strong>HTTPポート</strong> — 受信機ステータスHTTPサーバのポート（デフォルト 8082）</li>
@@ -607,13 +652,13 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="OGNバイナリURL">
+        <Section id="ogn-binary-url" heading="OGNバイナリURL">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <strong>OGNBINARYURL</strong> — OGNバイナリのダウンロード元URL。日本向けは <code>?version=japan</code> を付与。再インストール時に使用。
           </p>
         </Section>
 
-        <Section heading="アクションボタン">
+        <Section id="ogn-actions" heading="アクションボタン">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>設定を保存して受信機を再起動</strong> — 設定変更を保存＋rtlsdr-ogn再起動</li>
             <li><strong>受信機のみ再起動</strong> — 設定は変更せずrtlsdr-ognだけ再起動</li>
@@ -622,12 +667,12 @@ function ManualContent() {
       </Card>
 
       {/* ===== 5. 機体情報画面 ===== */}
-      <Card title="5. 機体情報画面">
+      <Card id="manual-aircraft-db" title="5. 機体情報画面">
         <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
           FLARMデバイスID（24bit hex）ごとに機体情報をデータベース管理。マップやフライトログでの表示に使用されます。
         </p>
 
-        <Section heading="保存項目">
+        <Section id="aircraft-db-fields" heading="保存項目">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>Device ID</strong> — FLARMの24bit ID（例: <code>DD1234</code>）</li>
             <li><strong>登録番号</strong> — JA番号など（例: <code>JA1234</code>）</li>
@@ -638,7 +683,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section heading="操作">
+        <Section id="aircraft-db-ops" heading="操作">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>+ 新規追加</strong>ボタン — 機体情報を手動追加</li>
             <li><strong>編集</strong>ボタン — 既存レコードを編集</li>
@@ -682,11 +727,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.8 */}
+      {/* v1.1.9 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.8</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.9</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="マニュアルヘルプアイコンを追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>マニュアルに説明が載っているGUIの横に小さな「?」アイコンを配置</li>
+          <li>クリックでヘルプ画面のマニュアルが開き、該当セクションへ自動スクロール＋ハイライト</li>
+          <li>マップ（HOMEボタン / 警告 / 上空 / 凡例 / フライトログ）、ステータス全カード、設定全カード、OGN設定全カード、機体情報画面に対応</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.8 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.8</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
       </div>
 
       <Card title="マニュアル整備（v1.1.7の画面移動を反映）">
@@ -880,7 +939,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-18 (v1.1.8)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.9)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
@@ -1121,9 +1180,10 @@ function SupportContent() {
 
 /* ── Shared sub-components ── */
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
     <section
+      data-help-id={id}
       className="p-4"
       style={{
         background: "var(--color-bg-secondary)",
@@ -1137,9 +1197,9 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Section({ heading, children, id }: { heading: string; children: React.ReactNode; id?: string }) {
   return (
-    <div>
+    <div data-help-id={id}>
       <h4 className="font-semibold mb-1" style={{ color: "var(--color-text-primary)" }}>{heading}</h4>
       {children}
     </div>
