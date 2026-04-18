@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile, writeFile, unlink } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 
 const execAsync = promisify(exec);
 
@@ -53,25 +53,22 @@ interface AdsbSavedConfig {
   interval: number;
 }
 
-async function loadAdsbConfig(): Promise<AdsbSavedConfig | null> {
+async function loadAdsbConfig(): Promise<AdsbSavedConfig> {
   try {
     const data = await readFile(ADSB_CONFIG_PATH, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return {
+      enabled: parsed.enabled === true,
+      url: typeof parsed.url === "string" ? parsed.url : "",
+      interval: typeof parsed.interval === "number" ? parsed.interval : 3,
+    };
   } catch {
-    return null;
+    return { enabled: false, url: "", interval: 3 };
   }
 }
 
 async function saveAdsbConfig(config: AdsbSavedConfig): Promise<void> {
   await writeFile(ADSB_CONFIG_PATH, JSON.stringify(config, null, 2));
-}
-
-async function removeAdsbConfig(): Promise<void> {
-  try {
-    await unlink(ADSB_CONFIG_PATH);
-  } catch {
-    // file may not exist
-  }
 }
 
 async function isOverlayEnabled(): Promise<boolean> {
@@ -435,7 +432,13 @@ EOF'`);
       case "adsb-stop": {
         await execAsync("sudo -n systemctl stop adsb-poller");
         await execAsync("sudo -n systemctl disable adsb-poller").catch(() => {});
-        await removeAdsbConfig();
+        // Persist disabled state (preserve url/interval for re-enable convenience)
+        const prev = await loadAdsbConfig();
+        await saveAdsbConfig({
+          enabled: false,
+          url: prev?.url ?? "",
+          interval: prev?.interval ?? 3,
+        });
         // Clear retained ADS-B MQTT messages
         const rid = await detectReceiverId();
         await execAsync(`mosquitto_pub -t 'ogn/${rid}/aircraft_adsb' -r -n`).catch(() => {});
