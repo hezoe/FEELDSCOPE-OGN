@@ -295,6 +295,10 @@ export default function FlightMap() {
   // Home view state
   const [homeView, setHomeView] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 0, lng: 0, zoom: 11 });
 
+  // Becomes true once the Leaflet map instance is ready. Effects that read
+  // mapRef.current must list this as a dependency so they re-run after init.
+  const [mapReady, setMapReady] = useState(false);
+
   // Resizable panels
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [logHeight, setLogHeight] = useState(160);
@@ -418,7 +422,13 @@ export default function FlightMap() {
 
     fieldMarkerRef.current = marker;
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; fieldMarkerRef.current = null; };
+    setMapReady(true);
+    return () => {
+      setMapReady(false);
+      map.remove();
+      mapRef.current = null;
+      fieldMarkerRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitsLoaded]);
 
@@ -461,7 +471,7 @@ export default function FlightMap() {
     // Ensure markers stay above tiles
     const markerPane = map.getPane("markerPane");
     if (markerPane) markerPane.style.zIndex = "650";
-  }, [units.mapSource]);
+  }, [units.mapSource, mapReady]);
 
   // OGN receiver marker: poll /api/ogn for receiver location and status
   useEffect(() => {
@@ -518,7 +528,7 @@ export default function FlightMap() {
         ognReceiverMarkerRef.current = null;
       }
     };
-  }, []);
+  }, [mapReady]);
 
   // Update field marker when airfield settings change
   useEffect(() => {
