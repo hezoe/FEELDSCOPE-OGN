@@ -126,6 +126,38 @@ export default function StatusPage() {
           </div>
         </Card>
 
+        {/* System Status */}
+        <Card title="システムステータス">
+          <div className="space-y-2 text-sm">
+            {[
+              { label: "Mosquitto (MQTT ブローカー)", name: "mosquitto" },
+              { label: "ogn-mqtt (リアルタイム再生)", name: "ogn-mqtt" },
+              { label: "igc-simulator (履歴再生)", name: "igc-simulator" },
+              { label: "adsb-poller (ADS-B 受信)", name: "adsb-poller" },
+            ].map(({ label, name }) => {
+              const svc = data?.services.find(s => s.name === name);
+              return (
+                <div
+                  key={name}
+                  className="flex items-center justify-between py-1.5 px-3 rounded"
+                  style={{ background: "var(--color-bg-card)" }}
+                >
+                  <span>{label}</span>
+                  <span
+                    className="px-2 py-0.5 rounded text-xs font-medium"
+                    style={{
+                      background: svc?.active ? "var(--color-success-dim)" : "rgba(160,160,176,0.15)",
+                      color: svc?.active ? "var(--color-success)" : "var(--color-text-secondary)",
+                    }}
+                  >
+                    {svc?.active ? "稼働中" : "停止"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
         {/* OGN Receiver */}
         <Card title="OGN 受信機">
           <div className="space-y-2">
