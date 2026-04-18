@@ -36,7 +36,7 @@ interface SystemStatus {
   mosquitto_active: boolean;
   adsb_poller_active: boolean;
   overlay_enabled: boolean;
-  adsb_config: AdsbSavedConfig | null;
+  adsb_config: AdsbSavedConfig;
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
@@ -111,39 +111,14 @@ export default function SettingsPage() {
     return () => clearInterval(interval);
   }, [fetchStatus, fetchFiles]);
 
-  // Restore adsb settings from server-side config and sync service state
+  // Mirror server-side adsb config into the UI (server is the source of truth).
+  // No auto-start/stop side effects here — state changes only on explicit user action.
   const adsbSynced = useRef(false);
   useEffect(() => {
     if (adsbSynced.current || !unitsLoaded || !status) return;
     adsbSynced.current = true;
-
-    // If server has a saved config, restore it to the UI (covers reboot / new browser)
-    const serverCfg = status.adsb_config;
-    if (serverCfg && (!units.adsb.enabled || !units.adsb.url)) {
-      setAdsb(serverCfg);
-    }
-
-    // Use server config as source of truth if available, otherwise fall back to localStorage
-    const cfg = serverCfg ?? units.adsb;
-    const shouldRun = cfg.enabled && !!cfg.url;
-    const isRunning = status.adsb_poller_active;
-
-    if (shouldRun && !isRunning) {
-      // Setting says enabled but service is stopped -> start it
-      fetch("/api/system", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "adsb-start", url: cfg.url, interval: cfg.interval }),
-      }).then(() => fetchStatus()).catch(() => {});
-    } else if (!shouldRun && isRunning) {
-      // Setting says disabled but service is running -> stop it
-      fetch("/api/system", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "adsb-stop" }),
-      }).then(() => fetchStatus()).catch(() => {});
-    }
-  }, [unitsLoaded, status, units.adsb, fetchStatus, setAdsb]);
+    setAdsb(status.adsb_config);
+  }, [unitsLoaded, status, setAdsb]);
 
   // Sync auto-reboot settings from server (once)
   useEffect(() => {
