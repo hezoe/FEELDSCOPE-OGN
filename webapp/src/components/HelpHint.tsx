@@ -2,10 +2,23 @@
 
 import React from "react";
 
-export const HELP_OPEN_EVENT = "feeldscope:open-help";
+const HELP_WINDOW_NAME = "feeldscope-help";
+const HELP_WINDOW_FEATURES = "width=900,height=800,resizable=yes,scrollbars=yes";
 
-export function openHelp(sectionId: string) {
-  window.dispatchEvent(new CustomEvent(HELP_OPEN_EVENT, { detail: sectionId }));
+export type HelpTab = "manual" | "release-notes" | "version" | "support";
+
+function openHelpUrl(url: string) {
+  const w = window.open(url, HELP_WINDOW_NAME, HELP_WINDOW_FEATURES);
+  if (w) w.focus();
+}
+
+export function openHelpSection(sectionId: string) {
+  const params = new URLSearchParams({ tab: "manual", section: sectionId });
+  openHelpUrl(`/help?${params.toString()}`);
+}
+
+export function openHelpTab(tab: HelpTab) {
+  openHelpUrl(`/help?tab=${tab}`);
 }
 
 export default function HelpHint({
@@ -25,7 +38,7 @@ export default function HelpHint({
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        openHelp(sectionId);
+        openHelpSection(sectionId);
       }}
       title={title}
       aria-label={title}
