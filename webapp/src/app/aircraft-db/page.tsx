@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { AircraftRecord, AircraftTypeCode, AircraftDatabase } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
+import HelpHint from "@/components/HelpHint";
 
 const EMPTY_RECORD: Omit<AircraftRecord, "device_id"> = {
   glider_type: "",
@@ -100,7 +101,10 @@ export default function AircraftDbPage() {
   return (
       <div className="flex-1 overflow-auto p-4" style={{ background: "var(--color-bg-primary)", color: "var(--color-text-primary)" }}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">機体情報データベース</h2>
+          <h2 className="text-lg font-bold inline-flex items-center">
+            機体情報データベース
+            <HelpHint sectionId="manual-aircraft-db" />
+          </h2>
           <div className="flex items-center gap-3">
             {overlayEnabled && <span className="text-xs" style={{ color: "var(--color-warning)" }}>固定化中 — 変更は再起動時にリセット</span>}
             <button
@@ -111,6 +115,7 @@ export default function AircraftDbPage() {
             >
               + 追加
             </button>
+            <HelpHint sectionId="aircraft-db-ops" title="操作の説明を表示" />
           </div>
         </div>
 

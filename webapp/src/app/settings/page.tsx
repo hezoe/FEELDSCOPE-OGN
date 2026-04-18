@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
+import HelpHint from "@/components/HelpHint";
 
 interface IGCFile {
   name: string;
@@ -273,7 +274,7 @@ export default function SettingsPage() {
           )}
 
           {/* Airfield Settings */}
-          <Card title="滑空場設定">
+          <Card title="滑空場設定" helpId="settings-airfield">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
@@ -360,7 +361,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Mode Selection */}
-          <Card title="データソース切替">
+          <Card title="データソース切替" helpId="settings-source">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <ModeButton
                 label="リアルタイム再生"
@@ -411,7 +412,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* IGC Files — right after mode selection for discoverability */}
-          <Card title="IGC ファイル管理（履歴再生用）">
+          <Card title="IGC ファイル管理（履歴再生用）" helpId="settings-igc">
             <div className="mb-4">
               <label
                 className="inline-flex items-center gap-2 px-4 py-2 rounded cursor-pointer text-sm transition-colors"
@@ -492,7 +493,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* ADS-B Settings */}
-          <Card title="ADS-B 受信設定">
+          <Card title="ADS-B 受信設定" helpId="settings-adsb">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -574,7 +575,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Display Settings */}
-          <Card title="表示設定">
+          <Card title="表示設定" helpId="settings-display">
             {/* Display Name Mode */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
@@ -697,7 +698,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Network Settings */}
-          <Card title="ネットワーク設定">
+          <Card title="ネットワーク設定" helpId="settings-network">
             <div className="space-y-6">
               {/* Warning */}
               <div
@@ -1026,7 +1027,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* System Update */}
-          <Card title="システムアップデート">
+          <Card title="システムアップデート" helpId="settings-update">
             <div className="space-y-4">
               <div className="flex items-center gap-4 text-sm">
                 <span style={{ color: "var(--color-text-secondary)" }}>現在のバージョン:</span>
@@ -1184,7 +1185,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Overlay FS */}
-          <Card title="システム固定化">
+          <Card title="システム固定化" helpId="settings-overlay">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium">現在の状態:</span>
@@ -1289,7 +1290,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Auto Reboot */}
-          <Card title="自動再起動">
+          <Card title="自動再起動" helpId="settings-autoreboot">
             <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -1374,7 +1375,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* System Power */}
-          <Card title="システム電源">
+          <Card title="システム電源" helpId="settings-power">
             <div className="flex gap-4">
               <button
                 onClick={async () => {
@@ -1447,7 +1448,7 @@ export default function SettingsPage() {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, helpId }: { title: string; children: React.ReactNode; helpId?: string }) {
   return (
     <fieldset
       className="p-5"
@@ -1458,10 +1459,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       }}
     >
       <legend
-        className="text-sm font-semibold px-2"
+        className="text-sm font-semibold px-2 inline-flex items-center"
         style={{ color: "var(--color-text-primary)" }}
       >
         {title}
+        {helpId && <HelpHint sectionId={helpId} />}
       </legend>
       {children}
     </fieldset>

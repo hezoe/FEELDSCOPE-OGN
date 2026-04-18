@@ -120,3 +120,15 @@ input:focus, select:focus {
 .table-striped tbody tr:hover {
   background: var(--color-bg-hover);
 }
+
+/* Help modal — flash highlight when scrolled to a section */
+@keyframes help-flash {
+  0%   { background: rgba(0, 103, 192, 0.30); }
+  60%  { background: rgba(0, 103, 192, 0.18); }
+  100% { background: transparent; }
+}
+.help-flash {
+  animation: help-flash 2.2s ease-out;
+  border-radius: 4px;
+  scroll-margin-top: 4px;
+}

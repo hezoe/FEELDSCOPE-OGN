@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import HelpHint from "@/components/HelpHint";
 
 interface SystemSummary {
   uptime: string;
@@ -113,7 +114,7 @@ export default function StatusPage() {
         )}
 
         {/* System Summary */}
-        <Card title="システム概要">
+        <Card title="システム概要" helpId="status-system">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             <Stat label="受信機名" value={data?.receiver_id || "—"} />
             <Stat label="稼働時間" value={data?.system?.uptime || "—"} />
@@ -127,7 +128,7 @@ export default function StatusPage() {
         </Card>
 
         {/* System Status */}
-        <Card title="システムステータス">
+        <Card title="システムステータス" helpId="status-services">
           <div className="space-y-2 text-sm">
             {[
               { label: "Mosquitto (MQTT ブローカー)", name: "mosquitto" },
@@ -159,7 +160,7 @@ export default function StatusPage() {
         </Card>
 
         {/* OGN Receiver */}
-        <Card title="OGN 受信機">
+        <Card title="OGN 受信機" helpId="status-ogn-receiver">
           <div className="space-y-2">
             <Stat label="状態" value={data?.ogn_receiver?.online ? "稼働中" : "停止"} accent={data?.ogn_receiver?.online ? "success" : "danger"} />
             {data?.ogn_receiver?.online && (
@@ -180,7 +181,7 @@ export default function StatusPage() {
         </Card>
 
         {/* ADS-B Reception */}
-        <Card title="ADS-B 受信ステータス">
+        <Card title="ADS-B 受信ステータス" helpId="status-adsb">
           <div className="space-y-2">
             {!data?.adsb_status ? (
               <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
@@ -215,7 +216,7 @@ export default function StatusPage() {
         </Card>
 
         {/* Services */}
-        <Card title="サービス稼働状況">
+        <Card title="サービス稼働状況" helpId="status-services">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {data?.services.map(s => (
               <div key={s.name} className="flex items-center justify-between py-1.5 px-3 rounded" style={{ background: "var(--color-bg-card)" }}>
@@ -232,7 +233,7 @@ export default function StatusPage() {
         </Card>
 
         {/* Flight Log */}
-        <Card title="フライトログ統計（本日）">
+        <Card title="フライトログ統計（本日）" helpId="status-flight-log-stats">
           <div className="grid grid-cols-3 gap-2">
             <Stat label="総記録数" value={String(data?.flight_log.total ?? 0)} mono />
             <Stat label="飛行中" value={String(data?.flight_log.flying ?? 0)} mono accent={data && data.flight_log.flying > 0 ? "success" : undefined} />
@@ -251,10 +252,13 @@ export default function StatusPage() {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, helpId }: { title: string; children: React.ReactNode; helpId?: string }) {
   return (
     <fieldset className="p-5" style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: 4 }}>
-      <legend className="text-sm font-semibold px-2" style={{ color: "var(--color-text-primary)" }}>{title}</legend>
+      <legend className="text-sm font-semibold px-2 inline-flex items-center" style={{ color: "var(--color-text-primary)" }}>
+        {title}
+        {helpId && <HelpHint sectionId={helpId} />}
+      </legend>
       {children}
     </fieldset>
   );

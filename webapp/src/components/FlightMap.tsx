@@ -18,6 +18,7 @@ import type {
   AircraftRecord,
 } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
+import HelpHint from "@/components/HelpHint";
 
 // ── Colors ──
 const COLOR_NORMAL = "#2e7d32";   // green
@@ -910,22 +911,25 @@ export default function FlightMap() {
           {/* Map */}
           <div className="flex-1 relative min-h-0">
             <div ref={mapContainerRef} className="w-full h-full" />
-            <div className="absolute top-2.5 right-2.5 z-[1000] flex flex-col gap-1">
-              <button
-                onClick={() => {
-                  const hv = homeView.lat !== 0 ? homeView : { lat: airfield.latitude, lng: airfield.longitude, zoom: 11 };
-                  mapRef.current?.setView([hv.lat, hv.lng], hv.zoom);
-                }}
-                className="px-2.5 py-1.5 text-xs rounded font-semibold"
-                style={{
-                  background: "#fff",
-                  color: "var(--color-text-primary)",
-                  border: "1px solid var(--color-border)",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                }}
-              >
-                HOME
-              </button>
+            <div className="absolute top-2.5 right-2.5 z-[1000] flex flex-col gap-1 items-end">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const hv = homeView.lat !== 0 ? homeView : { lat: airfield.latitude, lng: airfield.longitude, zoom: 11 };
+                    mapRef.current?.setView([hv.lat, hv.lng], hv.zoom);
+                  }}
+                  className="px-2.5 py-1.5 text-xs rounded font-semibold"
+                  style={{
+                    background: "#fff",
+                    color: "var(--color-text-primary)",
+                    border: "1px solid var(--color-border)",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                  }}
+                >
+                  HOME
+                </button>
+                <HelpHint sectionId="map-home-save" title="HOME / 保存ボタンの説明" />
+              </div>
               <button
                 onClick={() => {
                   const map = mapRef.current;
@@ -977,6 +981,7 @@ export default function FlightMap() {
             >
               フライトログ
               <span className="font-normal" style={{ color: "var(--color-text-secondary)" }}>({flightLog.length}件)</span>
+              <HelpHint sectionId="map-flight-log" title="フライトログの説明" />
             </div>
             <div
               ref={logTableRef}
@@ -1180,6 +1185,7 @@ export default function FlightMap() {
               >
                 <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLOR_DANGER }} />
                 警告 ({dangerList.length})
+                <HelpHint sectionId="map-path-warning" title="警告の判定基準" />
               </div>
               {dangerList.map(([id, ac]) => {
                 const lost = isLost(ac);
@@ -1218,6 +1224,7 @@ export default function FlightMap() {
             >
               <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLOR_NORMAL }} />
               上空 ({airborne.length})
+              <HelpHint sectionId="map-sidebar" title="サイドバーの説明" />
             </div>
             {airborne.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs" style={{ color: "var(--color-text-secondary)" }}>
@@ -1347,8 +1354,9 @@ export default function FlightMap() {
 
           {/* Legend */}
           <div className="mt-auto px-3 py-2" style={{ borderTop: "1px solid var(--color-border)", background: "var(--color-bg-tertiary)" }}>
-            <div className="text-xs font-semibold mb-1.5" style={{ color: "var(--color-text-primary)" }}>
+            <div className="text-xs font-semibold mb-1.5 flex items-center" style={{ color: "var(--color-text-primary)" }}>
               凡例
+              <HelpHint sectionId="map-icon-colors" title="アイコン色分けの説明" />
             </div>
             <div className="grid grid-cols-1 gap-1 text-xs">
               <div className="flex items-center gap-2">
