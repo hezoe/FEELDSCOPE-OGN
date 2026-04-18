@@ -532,13 +532,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="3-8. システムステータス">
-          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            読み取り専用。Mosquitto / ogn-mqtt / igc-simulator / adsb-poller の稼働状態を5秒間隔で表示（詳細はステータスタブで）。
-          </p>
-        </Section>
-
-        <Section heading="3-9. システム固定化（OverlayFS）">
+        <Section heading="3-8. システム固定化（OverlayFS）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>現在の状態</strong>表示 — ON（固定化中） / OFF（通常モード）</li>
             <li><strong>「固定化を有効にして再起動」</strong>ボタン — OverlayFSを有効化して再起動を1アクションで実行</li>
@@ -553,7 +547,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section heading="3-10. 自動再起動">
+        <Section heading="3-9. 自動再起動">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>毎日決まった時刻に自動再起動する</strong>チェックボックス（サーバ） — 有効化するとcrontabに <code>MM HH * * * /sbin/reboot</code> を追加</li>
             <li><strong>時刻入力</strong>（HH:MM、システムローカルタイムゾーン基準）</li>
@@ -564,7 +558,7 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section heading="3-11. システム電源">
+        <Section heading="3-10. システム電源">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>再起動</strong>ボタン — システム再起動（確認ダイアログあり）</li>
             <li><strong>シャットダウン</strong>ボタン — システム停止（再起動には電源抜き差しが必要）</li>
@@ -688,17 +682,44 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.6 */}
+      {/* v1.1.8 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.8</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="マニュアル整備（v1.1.7の画面移動を反映）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>マニュアル/セットアップガイドから「設定タブ 3-8 システムステータス」節を削除</li>
+          <li>ステータスタブ説明に「システムステータス（Mosquitto / ogn-mqtt / igc-simulator / adsb-poller）」を明記</li>
+          <li>設定タブ内のセクション番号を繰上げ（3-9〜3-11 → 3-8〜3-10）</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.7 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.7</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-17</span>
+      </div>
+
+      <Card title="システムステータスをステータスタブへ移動">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>サービス稼働表示（Mosquitto / ogn-mqtt / igc-simulator / adsb-poller）を設定タブからステータスタブへ集約</li>
+          <li>設定タブはシステム設定に専念、ステータスタブはすべての稼働情報を一画面で閲覧可能に</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.6 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.6</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-17</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="sudo -n 対応（VPS環境でのsudo修正）">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>APIからのsudo呼び出しを全て sudo -n に変更（PTY不要な非対話モード）</li>
-          <li>VPS環境（use_ptyデフォルト設定）での権限エラーを解消</li>
+          <li>APIからのsudo呼び出しを全て sudo -n に変更(PTY不要な非対話モード)</li>
+          <li>VPS環境(use_ptyデフォルト設定)での権限エラーを解消</li>
         </ul>
       </Card>
 
@@ -813,6 +834,7 @@ function ReleaseNotesContent() {
       <Card title="ステータスタブ">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
           <li>システム概要（稼働時間、CPU負荷、CPU温度、RAM、ディスク）</li>
+          <li>システムステータス（Mosquitto / ogn-mqtt / igc-simulator / adsb-poller の稼働状態）</li>
           <li>OGN受信機の詳細ステータス</li>
           <li>ADS-B受信の詳細統計（取得元URL、応答時間、累計成功率、機体数の内訳、連続失敗回数、最終エラー）</li>
           <li>全サービスの稼働状況と稼働時間</li>
@@ -858,7 +880,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-17 (v1.1.6)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.8)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
