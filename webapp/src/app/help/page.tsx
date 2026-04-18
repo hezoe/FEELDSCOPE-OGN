@@ -530,11 +530,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.13 */}
+      {/* v1.1.14 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.13</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.14</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="マップ初期表示を保存済みHOMEビューに">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ハードリロード時に地図の中心が滑空場設定値に戻ってしまう問題を修正</li>
+          <li>HOMEビューが保存されていれば、ハードリロード時の初期表示もそのHOMEビューを使用</li>
+          <li>滑空場設定がサーバから読み込まれるのを待ってから地図を初期化する（HOMEビュー未保存時の滑空場中心表示の精度向上）</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.13 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.13</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
       </div>
 
       <Card title="滑空場設定の不整合を修正">
@@ -799,7 +813,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-18 (v1.1.13)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.14)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>

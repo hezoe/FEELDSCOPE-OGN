@@ -271,7 +271,7 @@ export default function FlightMap() {
   const [selectedAircraft, setSelectedAircraft] = useState<string | null>(null);
   const [, setUpdateTick] = useState(0);
   const [now, setNow] = useState(0);
-  const { units } = useUnits();
+  const { units, unitsLoaded } = useUnits();
   const [flightLog, setFlightLogRaw] = useState<FlightLogEntry[]>([]);
   const setFlightLog = useCallback((log: FlightLogEntry[]) => {
     setFlightLogRaw(log);
@@ -371,14 +371,25 @@ export default function FlightMap() {
   const ognReceiverMarkerRef = useRef<L.Marker | null>(null);
   const tileLayersRef = useRef<L.TileLayer[]>([]);
 
-  // Initialize map
+  // Initialize map (wait for units to load so airfield reflects server config)
   useEffect(() => {
-    if (mapRef.current || !mapContainerRef.current) return;
+    if (mapRef.current || !mapContainerRef.current || !unitsLoaded) return;
 
-    const center: L.LatLngExpression = [airfield.latitude, airfield.longitude];
+    // Saved home view takes precedence over the airfield default.
+    let savedHome: { lat: number; lng: number; zoom: number } | null = null;
+    try {
+      const hv = localStorage.getItem("ogn-home-view");
+      if (hv) savedHome = JSON.parse(hv);
+    } catch { /* ignore */ }
+
+    const center: L.LatLngExpression = savedHome
+      ? [savedHome.lat, savedHome.lng]
+      : [airfield.latitude, airfield.longitude];
+    const initialZoom = savedHome?.zoom ?? 11;
+
     const map = L.map(mapContainerRef.current, {
       center,
-      zoom: 11,
+      zoom: initialZoom,
       zoomControl: false,
     });
 
@@ -388,7 +399,7 @@ export default function FlightMap() {
     const airfieldPane = map.createPane("airfieldPane");
     airfieldPane.style.zIndex = "350";
 
-    const marker = L.circleMarker(center, {
+    const marker = L.circleMarker([airfield.latitude, airfield.longitude], {
       radius: 8,
       color: "#d32f2f",
       fillColor: "#ef5350",
@@ -409,7 +420,7 @@ export default function FlightMap() {
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; fieldMarkerRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [unitsLoaded]);
 
   // Swap tile layers when mapSource changes
   useEffect(() => {
