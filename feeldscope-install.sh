@@ -167,11 +167,30 @@ mkdir -p "$FEELDSCOPE_DIR"
 cp "$SCRIPT_DIR/ogn-mqtt.py"       "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/adsb-poller.py"    "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
-cp "$SCRIPT_DIR/aircraft-db.json"  "$FEELDSCOPE_DIR/"
-cp "$SCRIPT_DIR/adsb-config.json"  "$FEELDSCOPE_DIR/"
 
-# Copy testdata
-cp -r "$SCRIPT_DIR/testdata" "$FEELDSCOPE_DIR/"
+# Site-specific data files (gitignored). Use source if present, otherwise create defaults.
+if [ -f "$SCRIPT_DIR/aircraft-db.json" ]; then
+    cp "$SCRIPT_DIR/aircraft-db.json" "$FEELDSCOPE_DIR/"
+elif [ ! -f "$FEELDSCOPE_DIR/aircraft-db.json" ]; then
+    echo '{}' > "$FEELDSCOPE_DIR/aircraft-db.json"
+fi
+if [ -f "$SCRIPT_DIR/adsb-config.json" ]; then
+    cp "$SCRIPT_DIR/adsb-config.json" "$FEELDSCOPE_DIR/"
+elif [ ! -f "$FEELDSCOPE_DIR/adsb-config.json" ]; then
+    cat > "$FEELDSCOPE_DIR/adsb-config.json" <<'ADSBEOF'
+{
+  "enabled": false,
+  "url": "",
+  "interval": 3
+}
+ADSBEOF
+fi
+
+# Copy testdata (optional, may only contain .gitkeep after fresh clone)
+mkdir -p "$FEELDSCOPE_DIR/testdata"
+if [ -d "$SCRIPT_DIR/testdata" ]; then
+    cp -r "$SCRIPT_DIR/testdata/." "$FEELDSCOPE_DIR/testdata/" 2>/dev/null || true
+fi
 
 # Copy webapp source
 cp -r "$SCRIPT_DIR/webapp" "$FEELDSCOPE_DIR/"

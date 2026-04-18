@@ -530,11 +530,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.10 */}
+      {/* v1.1.11 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.10</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.11</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="フレッシュインストール対応">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><code>feeldscope-install.sh</code>: gitignore対象の <code>aircraft-db.json</code> / <code>adsb-config.json</code> が無い場合は空のデフォルトを自動生成するよう修正</li>
+          <li>git cloneからのフレッシュインストールで Step 4 が失敗する問題を解消</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.10 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.10</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
       </div>
 
       <Card title="ヘルプウィンドウを別ウィンドウ化">
@@ -756,7 +769,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-18 (v1.1.10)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.11)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
