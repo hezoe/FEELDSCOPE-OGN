@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import {
   UnitPreferences,
   DEFAULT_UNITS,
@@ -47,17 +47,19 @@ const UnitContext = createContext<UnitContextType>({
 export function UnitProvider({ children }: { children: ReactNode }) {
   const [units, setUnits] = useState<UnitPreferences>(DEFAULT_UNITS);
   const [unitsLoaded, setUnitsLoaded] = useState(false);
+  const airfieldSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const airfieldAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const local = loadUnits();
     fetch("/api/system")
       .then((res) => res.json())
       .then((data) => {
-        if (data.airfield_config) {
-          setUnits({ ...local, airfield: data.airfield_config });
-        } else {
-          setUnits(local);
-        }
+        // Server airfield is the source of truth. Display-only unit prefs stay in localStorage.
+        const airfield: AirfieldConfig = data.airfield_config ?? local.airfield;
+        const merged = { ...local, airfield };
+        setUnits(merged);
+        saveUnits(merged);
         setUnitsLoaded(true);
       })
       .catch(() => {
@@ -76,17 +78,25 @@ export function UnitProvider({ children }: { children: ReactNode }) {
     const next = { ...units, airfield };
     setUnits(next);
     saveUnits(next);
-    fetch("/api/system", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "airfield-save",
-        name: airfield.name,
-        latitude: airfield.latitude,
-        longitude: airfield.longitude,
-        elevation_m: airfield.elevation_m,
-      }),
-    }).catch(() => {});
+    // Debounce save to avoid races when multiple fields are edited quickly.
+    if (airfieldSaveTimer.current) clearTimeout(airfieldSaveTimer.current);
+    airfieldSaveTimer.current = setTimeout(() => {
+      if (airfieldAbortRef.current) airfieldAbortRef.current.abort();
+      const controller = new AbortController();
+      airfieldAbortRef.current = controller;
+      fetch("/api/system", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "airfield-save",
+          name: airfield.name,
+          latitude: airfield.latitude,
+          longitude: airfield.longitude,
+          elevation_m: airfield.elevation_m,
+        }),
+        signal: controller.signal,
+      }).catch(() => {});
+    }, 500);
   }
 
   return (
