@@ -530,11 +530,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.14 */}
+      {/* v1.1.15 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.14</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.15</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="マップタイルが読み込まれない不具合を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.1.14 で地図初期化を unitsLoaded 待機にした副作用で、タイルレイヤ追加 / OGN受信機マーカー の副効果がマップ生成前に1回だけ実行され、地図が白いまま表示される問題を修正</li>
+          <li>内部的に <code>mapReady</code> state を導入し、マップインスタンス生成完了後にタイル・マーカー系の副効果を再実行するよう依存関係を修正</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.14 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.14</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-18</span>
       </div>
 
       <Card title="マップ初期表示を保存済みHOMEビューに">
@@ -813,7 +826,7 @@ function VersionContent() {
           </div>
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>OGN FLARM リアルタイムフライトモニター</p>
           <InfoRow label="バージョン" value={version} />
-          <InfoRow label="リリース日" value="2026-04-18 (v1.1.14)" />
+          <InfoRow label="リリース日" value="2026-04-18 (v1.1.15)" />
           <InfoRow label="著作権" value="Hiroshi Ezoe" />
         </div>
       </Card>
