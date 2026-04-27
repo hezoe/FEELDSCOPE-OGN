@@ -34,13 +34,11 @@ function adsbColor(pos: AircraftPosition): string {
 
 // ── Feeldscope SVG icons ──
 function svgGlider(color: string, heading: number): string {
-  // High aspect ratio wings - long thin wings, slim fuselage
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-11 L.8,-3 L14,-0.5 L14,0.5 L.8,1.5 L.4,8 L2.5,9.5 L2.5,10.5 L-2.5,10.5 L-2.5,9.5 L-.4,8 L-.8,1.5 L-14,0.5 L-14,-0.5 L-.8,-3Z" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-11 Q0.6,-9 1.05,-6 L0.9,-3.5 Q1,-1 0.85,1 L0.6,5.5 Q0.3,8.5 0,10.5 Q-0.3,8.5 -0.6,5.5 L-0.85,1 Q-1,-1 -0.9,-3.5 L-1.05,-6 Q-0.6,-9 0,-11Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M0.8,-2.2 L15,-2.2 L14.5,-1.5 L0.8,0.2Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M-0.8,-2.2 L-15,-2.2 L-14.5,-1.5 L-0.8,0.2Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M0.5,7.5 L5.5,9 L5.5,9.5 L0.5,9.5Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M-0.5,7.5 L-5.5,9 L-5.5,9.5 L-0.5,9.5Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/></svg>`;
 }
 
 function svgTow(color: string, heading: number): string {
-  // Piper-style rectangular wings
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-12 L1.5,-4 L1.5,-2 L10,-2 L10,1 L1.5,1 L1,9 L4,10 L4,11.5 L-4,11.5 L-4,10 L-1,9 L-1.5,1 L-10,1 L-10,-2 L-1.5,-2 L-1.5,-4Z" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0.35,-9.41 L2.89,-9.06 L0.98,-8.77 L0.93,-5.7 L12.16,-5.59 L13.2,-4.49 L13.2,-3.56 L12.68,-2.63 L11.06,-1.77 L0.75,-1.65 L0.23,4.26 L2.78,5.12 L3.42,5.93 L3.42,6.51 L2.72,7.15 L1.33,7.44 L0.35,6.8 L0.06,9.81 L-0.35,6.8 L-0.98,7.38 L-3.18,6.92 L-3.53,5.99 L-2.95,5.18 L-0.41,4.31 L-0.98,-1.71 L-11.29,-1.88 L-12.97,-3.1 L-13.2,-4.49 L-12.68,-5.41 L-11.58,-5.76 L-1.04,-5.76 L-1.04,-8.83 L-3.13,-9.18 L-0.41,-9.41 L-0.06,-9.81 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgJet(color: string, heading: number): string {
@@ -48,18 +46,15 @@ function svgJet(color: string, heading: number): string {
 }
 
 function svgPowered(color: string, heading: number): string {
-  // Propeller shown as horizontal line at nose
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-11 L1.5,-4 L9,-1 L9,1 L1.5,2 L1,9 L3.5,10 L3.5,11 L-3.5,11 L-3.5,10 L-1,9 L-1.5,2 L-9,1 L-9,-1 L-1.5,-4Z" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-12" x2="3" y2="-12" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M-0.02,-10.34 L0.68,-9.59 L3.07,-9.21 L0.73,-9.12 L1.29,-8.75 L1.66,-5.51 L3.92,-4.71 L7.85,-4.71 L13.2,-4.1 L13.2,-1.66 L7.9,0.02 L1.66,-0.02 L0.49,7.85 L0.87,6.96 L4.67,7.06 L4.9,7.43 L4.71,9.5 L3.02,9.54 L2.6,9.92 L0.63,9.87 L0.3,9.45 L0.3,8.7 L0.02,10.34 L-0.26,8.79 L-0.3,9.68 L-0.68,9.92 L-2.51,9.92 L-3.07,9.5 L-4.71,9.45 L-4.71,7.1 L-0.59,7.1 L-1.52,0.07 L-7.67,0.02 L-13.01,-1.57 L-13.2,-4.06 L-8.04,-4.71 L-3.87,-4.71 L-1.62,-5.51 L-1.24,-8.79 L-0.59,-9.12 L-2.88,-9.21 L-0.59,-9.59 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgHelicopter(color: string, heading: number): string {
-  // Top: rotor line, middle: round body, bottom: V-shaped skid gear
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><line x1="-12" y1="-10" x2="12" y2="-10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="0" y1="-10" x2="0" y2="-6" stroke="${color}" stroke-width="1.2"/><circle cx="0" cy="-1" r="5.5" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-4" y1="4.5" x2="-6" y2="10" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><line x1="4" y1="4.5" x2="6" y2="10" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><line x1="-7" y1="10" x2="-5" y2="10" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="10" x2="7" y2="10" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M-0.21,-9.1 L0.41,-9 L1.09,-8.07 L1.71,-6.41 L1.97,-4.64 L10.01,-8.79 L10.58,-8.58 L10.63,-8.27 L10.06,-7.81 L2.02,-3.55 L2.02,-2.1 L1.87,-0.91 L5.71,7.34 L5.81,8.12 L5.34,8.32 L4.98,7.96 L1.45,0.54 L0.99,2.26 L0.67,7.39 L3.58,7.91 L3.58,8.58 L0.67,8.58 L0.52,11.23 L0.31,11.38 L0.21,13.2 L0.1,11.38 L-0.36,11.02 L-0.52,12.47 L-0.57,9.67 L-0.41,10.76 L-0.16,10.76 L-0.36,8.64 L-3.16,8.64 L-3.22,7.96 L-0.36,7.55 L-0.57,4.9 L-0.62,3.81 L-0.88,1.79 L-1.24,0.65 L-1.66,-0.91 L-10.06,3.24 L-10.63,3.09 L-10.53,2.46 L-2.59,-1.43 L-1.82,-1.89 L-1.92,-2.36 L-1.92,-2.88 L-2.02,-3.09 L-1.97,-3.81 L-1.87,-4.69 L-6.07,-12.73 L-5.91,-13.1 L-5.34,-13.2 L-1.66,-6.3 L-0.88,-8.32 L-0.26,-9.05 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgParaglider(color: string, heading: number): string {
-  // Hill-curved ram-air canopy
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M-10,-3 Q-5,-10 0,-10 Q5,-10 10,-3 L10,-1 Q5,-6 0,-6 Q-5,-6 -10,-1Z" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-7" y1="-2" x2="0" y2="6" stroke="${color}" stroke-width=".7"/><line x1="7" y1="-2" x2="0" y2="6" stroke="${color}" stroke-width=".7"/><line x1="-3" y1="-3" x2="0" y2="6" stroke="${color}" stroke-width=".5" opacity=".5"/><line x1="3" y1="-3" x2="0" y2="6" stroke="${color}" stroke-width=".5" opacity=".5"/><circle cx="0" cy="7" r="2" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M2.44,-5.28 C4.1,-5.2 6.3,-5.0 7.57,-4.87 C8.8,-4.7 9.4,-4.5 10.08,-4.31 C10.8,-4.1 11.5,-3.7 11.94,-3.47 C12.4,-3.2 12.5,-3.1 12.73,-2.77 C12.9,-2.5 13.2,-2.5 13.2,-1.65 C13.2,-0.8 13.7,1.5 12.78,2.35 C11.9,3.2 9.5,3.1 7.89,3.38 C6.3,3.7 4.3,3.7 2.96,3.98 C1.7,4.3 1.1,5.3 0.07,5.28 C-0.9,5.3 -1.7,4.3 -3,3.98 C-4.3,3.7 -6.4,3.7 -8.03,3.38 C-9.7,3.1 -11.9,3.2 -12.78,2.35 C-13.6,1.5 -13.2,-0.7 -13.2,-1.56 C-13.2,-2.4 -13.1,-2.2 -12.87,-2.54 C-12.7,-2.9 -12.5,-3.1 -11.99,-3.42 C-11.5,-3.7 -10.7,-4.1 -10.03,-4.31 C-9.3,-4.5 -9.1,-4.7 -7.8,-4.82 C-6.5,-5.0 -4.1,-5.2 -2.35,-5.28 C-0.6,-5.4 0.8,-5.3 2.44,-5.28 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgHangglider(color: string, heading: number): string {
