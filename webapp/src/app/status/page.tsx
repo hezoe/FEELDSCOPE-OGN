@@ -32,6 +32,7 @@ interface OgnReceiver {
 }
 
 interface AdsbStatus {
+  service_active?: boolean;
   url?: string;
   interval_sec?: number;
   last_attempt_utc?: string;
@@ -186,6 +187,10 @@ export default function StatusPage() {
             {!data?.adsb_status ? (
               <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
                 ADS-B受信は未設定または停止中です。設定 → 「ADS-B 受信設定」から有効化してください。
+              </p>
+            ) : !data.adsb_status.last_attempt_utc ? (
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                ADS-B受信を起動中です。データ到着までしばらくお待ちください…
               </p>
             ) : (
               <>

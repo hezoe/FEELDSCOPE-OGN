@@ -425,14 +425,16 @@ EOF'`);
       case "adsb-start": {
         const adsbUrl = body.url || "";
         const adsbInterval = Math.max(1, Math.min(30, parseInt(body.interval, 10) || 3));
-        // Write systemd override with the URL and interval
+        // webapp と adsb-poller でトピック宛先を一致させるため receiver-id を明示
+        const ridForPoller = (await detectReceiverId()).replace(/'/g, "");
+        // Write systemd override with the URL, interval and receiver-id
         const adsbOverrideDir = "/etc/systemd/system/adsb-poller.service.d";
         await execAsync(`sudo -n mkdir -p ${adsbOverrideDir}`);
         const safeUrl = adsbUrl.replace(/'/g, "");
         await execAsync(`sudo -n bash -c 'cat > ${adsbOverrideDir}/config.conf << EOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval}
+ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval} --receiver-id ${ridForPoller}
 EOF'`);
         await execAsync("sudo -n systemctl daemon-reload");
         await execAsync("sudo -n systemctl restart adsb-poller");
@@ -452,9 +454,11 @@ EOF'`);
           url: prev?.url ?? "",
           interval: prev?.interval ?? 3,
         });
-        // Clear retained ADS-B MQTT messages
+        // Clear retained ADS-B MQTT messages（receiverIdが変わった過去残存にも対応するためワイルドカードクリアは不可、
+        // 主要トピックだけ明示クリア。adsb_status の取り残しが「停止中なのに正常受信中」と誤表示する原因）
         const rid = await detectReceiverId();
         await execAsync(`mosquitto_pub -t 'ogn/${rid}/aircraft_adsb' -r -n`).catch(() => {});
+        await execAsync(`mosquitto_pub -t 'ogn/${rid}/adsb_status'   -r -n`).catch(() => {});
         return NextResponse.json({ ok: true, adsb: "stopped" });
       }
 
