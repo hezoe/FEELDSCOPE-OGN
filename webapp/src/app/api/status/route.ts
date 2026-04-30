@@ -191,12 +191,31 @@ export async function GET() {
     getFlightLogStats(),
   ]);
 
+  // サービス状態と retained を整合させる:
+  //  - サービス inactive    → null（未設定/停止中）
+  //  - active かつ retained 到着 → retained に service_active=true を付与
+  //  - active かつ retained 未着 → 最小オブジェクト { service_active:true } で「起動中」を伝える
+  const adsbActive = services.some(s => s.name === "adsb-poller" && s.active);
+  const ognMqttActive = services.some(s => s.name === "ogn-mqtt" && s.active);
+
+  const adsbStatusOut = !adsbActive
+    ? null
+    : adsbStatus
+      ? { ...adsbStatus, service_active: true }
+      : { service_active: true };
+
+  const ognMqttStatusOut = !ognMqttActive
+    ? null
+    : ognMqttStatus
+      ? { ...ognMqttStatus, service_active: true }
+      : { service_active: true };
+
   return NextResponse.json({
     receiver_id: receiverId,
     system,
     ogn_receiver: ognReceiver,
-    ogn_mqtt_status: ognMqttStatus,
-    adsb_status: adsbStatus,
+    ogn_mqtt_status: ognMqttStatusOut,
+    adsb_status: adsbStatusOut,
     services,
     flight_log: flightLogStats,
   });

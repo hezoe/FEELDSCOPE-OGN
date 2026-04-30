@@ -530,11 +530,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.18 */}
+      {/* v1.1.20 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.18</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.20</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-30</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="ADS-B 受信ステータスの誤表示を修正（OFF/ON 両方向）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OFF なのに「正常受信中」: adsb-poller 停止時に retained MQTT <code>adsb_status</code> をクリアするように修正</li>
+          <li>ON なのに「停止中」: webapp と adsb-poller でレシーバーID（MQTTトピック宛先）が一致しないと retained 取得失敗。ON 時に webapp 側で検出した receiver-id を <code>--receiver-id</code> として明示的に渡すよう修正</li>
+          <li>サービス起動直後など retained 未到着の状態を「停止中」と誤判定しないよう、Status API が <code>service_active</code> を別フィールドで返し、UI で「起動中（データ待ち）」を新表示</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.18 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.18</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-30</span>
       </div>
 
       <Card title="ハンググライダー・ドローンのアイコンを刷新">
