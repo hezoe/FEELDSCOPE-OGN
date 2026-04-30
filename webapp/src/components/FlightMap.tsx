@@ -58,8 +58,7 @@ function svgParaglider(color: string, heading: number): string {
 }
 
 function svgHangglider(color: string, heading: number): string {
-  // Delta wing with concave trailing edge (pinched at bottom)
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-8 L12,6 Q0,2 -12,6Z" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5" fill-opacity=".8"/><circle cx="0" cy="3" r="1.5" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0.05,-4.51 L-11.02,0.28 L-11.99,0.98 C-12.4,1.3 -13.0,2.1 -13.2,2.46 C-13.4,2.8 -13.3,2.8 -13.2,2.93 C-13.1,3.1 -12.9,3.3 -12.74,3.44 C-12.5,3.6 -12.5,3.7 -12.04,3.72 C-11.6,3.8 -11.5,4.0 -10.04,3.67 L-3.35,1.77 L-0.51,1.35 L-0.14,2.84 L-0.05,4.51 L0.09,2.84 L0.51,1.35 L7.62,3.3 L8.83,3.72 L10.83,4.28 C11.4,4.4 12.1,4.3 12.5,4.14 C12.9,4.0 13.1,3.7 13.2,3.44 C13.3,3.2 13.1,2.9 12.83,2.56 C12.6,2.2 12.3,1.8 11.81,1.39 L9.95,0.19 L0.09,-4.51 L0.05,-4.51 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgSkydiver(color: string, heading: number): string {
@@ -71,7 +70,7 @@ function svgBalloon(color: string): string {
 }
 
 function svgUav(color: string, heading: number): string {
-  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><rect x="-3" y="-3" width="6" height="6" rx="1" fill="${color}" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-3" x2="-9" y2="-9" stroke="${color}" stroke-width="1.5"/><line x1="3" y1="-3" x2="9" y2="-9" stroke="${color}" stroke-width="1.5"/><line x1="-3" y1="3" x2="-9" y2="9" stroke="${color}" stroke-width="1.5"/><line x1="3" y1="3" x2="9" y2="9" stroke="${color}" stroke-width="1.5"/><circle cx="-9" cy="-9" r="3" fill="none" stroke="${color}" stroke-width=".8"/><circle cx="9" cy="-9" r="3" fill="none" stroke="${color}" stroke-width=".8"/><circle cx="-9" cy="9" r="3" fill="none" stroke="${color}" stroke-width=".8"/><circle cx="9" cy="9" r="3" fill="none" stroke="${color}" stroke-width=".8"/></svg>`;
+  return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M-0.59,-11.66 L-0.81,-4.07 L-5.98,-6.98 L-5.44,-8.27 L-5.39,-9.94 L-5.98,-11.4 L-7.33,-12.63 L-8.73,-13.12 L-10.34,-13.01 L-11.69,-12.31 L-12.77,-11.02 L-13.15,-9.89 L-13.09,-8.27 L-11.75,-6.17 L-9.75,-5.31 L-8.46,-5.36 L-6.95,-5.95 L-2.37,-2.51 L-2.48,2.61 L-6.68,6.22 L-8.08,5.47 L-10.02,5.36 L-11.75,6.17 L-12.93,7.79 L-13.2,9.4 L-12.72,11.13 L-11.64,12.36 L-9.86,13.12 L-7.87,12.9 L-6.14,11.61 L-5.33,9.46 L-5.76,7.35 L-0.97,3.74 L1.51,3.8 L5.98,6.98 L5.39,8.65 L5.5,10.32 L6.2,11.66 L7.76,12.85 L10.34,13.01 L11.8,12.26 L12.66,11.23 L13.15,9.99 L13.15,8.43 L12.55,7.03 L11.75,6.17 L9.7,5.31 L8.51,5.36 L6.95,5.95 L2.86,2.61 L2.86,-2.45 L7.33,-5.74 L9.81,-5.31 L12.12,-6.49 L13.2,-8.76 L13.04,-10.43 L12.23,-11.83 L11.31,-12.58 L9.81,-13.12 L7.33,-12.63 L6.09,-11.5 L5.39,-9.78 L5.5,-8.16 L6.2,-6.6 L1.24,-4.07 L1.08,-11.66 C0.8,-12.9 -0.3,-12.9 -0.59,-11.66 Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`;
 }
 
 function svgByType(typeCode: string | undefined, color: string, heading: number): string {

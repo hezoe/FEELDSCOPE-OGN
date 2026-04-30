@@ -519,10 +519,10 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
   { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M-0.02,-10.34 L0.68,-9.59 L3.07,-9.21 L0.73,-9.12 L1.29,-8.75 L1.66,-5.51 L3.92,-4.71 L7.85,-4.71 L13.2,-4.1 L13.2,-1.66 L7.9,0.02 L1.66,-0.02 L0.49,7.85 L0.87,6.96 L4.67,7.06 L4.9,7.43 L4.71,9.5 L3.02,9.54 L2.6,9.92 L0.63,9.87 L0.3,9.45 L0.3,8.7 L0.02,10.34 L-0.26,8.79 L-0.3,9.68 L-0.68,9.92 L-2.51,9.92 L-3.07,9.5 L-4.71,9.45 L-4.71,7.1 L-0.59,7.1 L-1.52,0.07 L-7.67,0.02 L-13.01,-1.57 L-13.2,-4.06 L-8.04,-4.71 L-3.87,-4.71 L-1.62,-5.51 L-1.24,-8.79 L-0.59,-9.12 L-2.88,-9.21 L-0.59,-9.59 Z" fill="#4caf50" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`, label: "動力機", desc: "プロペラ機" },
   { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M-0.21,-9.1 L0.41,-9 L1.09,-8.07 L1.71,-6.41 L1.97,-4.64 L10.01,-8.79 L10.58,-8.58 L10.63,-8.27 L10.06,-7.81 L2.02,-3.55 L2.02,-2.1 L1.87,-0.91 L5.71,7.34 L5.81,8.12 L5.34,8.32 L4.98,7.96 L1.45,0.54 L0.99,2.26 L0.67,7.39 L3.58,7.91 L3.58,8.58 L0.67,8.58 L0.52,11.23 L0.31,11.38 L0.21,13.2 L0.1,11.38 L-0.36,11.02 L-0.52,12.47 L-0.57,9.67 L-0.41,10.76 L-0.16,10.76 L-0.36,8.64 L-3.16,8.64 L-3.22,7.96 L-0.36,7.55 L-0.57,4.9 L-0.62,3.81 L-0.88,1.79 L-1.24,0.65 L-1.66,-0.91 L-10.06,3.24 L-10.63,3.09 L-10.53,2.46 L-2.59,-1.43 L-1.82,-1.89 L-1.92,-2.36 L-1.92,-2.88 L-2.02,-3.09 L-1.97,-3.81 L-1.87,-4.69 L-6.07,-12.73 L-5.91,-13.1 L-5.34,-13.2 L-1.66,-6.3 L-0.88,-8.32 L-0.26,-9.05 Z" fill="#4caf50" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`, label: "ヘリコプター", desc: "" },
   { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M2.44,-5.28 C4.1,-5.2 6.3,-5.0 7.57,-4.87 C8.8,-4.7 9.4,-4.5 10.08,-4.31 C10.8,-4.1 11.5,-3.7 11.94,-3.47 C12.4,-3.2 12.5,-3.1 12.73,-2.77 C12.9,-2.5 13.2,-2.5 13.2,-1.65 C13.2,-0.8 13.7,1.5 12.78,2.35 C11.9,3.2 9.5,3.1 7.89,3.38 C6.3,3.7 4.3,3.7 2.96,3.98 C1.7,4.3 1.1,5.3 0.07,5.28 C-0.9,5.3 -1.7,4.3 -3,3.98 C-4.3,3.7 -6.4,3.7 -8.03,3.38 C-9.7,3.1 -11.9,3.2 -12.78,2.35 C-13.6,1.5 -13.2,-0.7 -13.2,-1.56 C-13.2,-2.4 -13.1,-2.2 -12.87,-2.54 C-12.7,-2.9 -12.5,-3.1 -11.99,-3.42 C-11.5,-3.7 -10.7,-4.1 -10.03,-4.31 C-9.3,-4.5 -9.1,-4.7 -7.8,-4.82 C-6.5,-5.0 -4.1,-5.2 -2.35,-5.28 C-0.6,-5.4 0.8,-5.3 2.44,-5.28 Z" fill="#4caf50" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`, label: "パラグライダー", desc: "" },
-  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0,-8 L12,6 Q0,2 -12,6Z" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5" fill-opacity=".8"/><circle cx="0" cy="3" r="1.5" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".3"/></svg>`, label: "ハンググライダー", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M0.05,-4.51 L-11.02,0.28 L-11.99,0.98 C-12.4,1.3 -13.0,2.1 -13.2,2.46 C-13.4,2.8 -13.3,2.8 -13.2,2.93 C-13.1,3.1 -12.9,3.3 -12.74,3.44 C-12.5,3.6 -12.5,3.7 -12.04,3.72 C-11.6,3.8 -11.5,4.0 -10.04,3.67 L-3.35,1.77 L-0.51,1.35 L-0.14,2.84 L-0.05,4.51 L0.09,2.84 L0.51,1.35 L7.62,3.3 L8.83,3.72 L10.83,4.28 C11.4,4.4 12.1,4.3 12.5,4.14 C12.9,4.0 13.1,3.7 13.2,3.44 C13.3,3.2 13.1,2.9 12.83,2.56 C12.6,2.2 12.3,1.8 11.81,1.39 L9.95,0.19 L0.09,-4.51 L0.05,-4.51 Z" fill="#4caf50" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`, label: "ハンググライダー", desc: "" },
   { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><circle cx="0" cy="-6" r="3" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="0" y1="-3" x2="0" y2="5" stroke="#4caf50" stroke-width="2" stroke-linecap="round"/><line x1="-7" y1="-1" x2="7" y2="-1" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="-5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/><line x1="0" y1="5" x2="5" y2="11" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round"/></svg>`, label: "スカイダイバー", desc: "" },
   { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><ellipse cx="0" cy="-3" rx="8" ry="10" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="7" x2="-2" y2="10" stroke="#4caf50" stroke-width=".7"/><line x1="3" y1="7" x2="2" y2="10" stroke="#4caf50" stroke-width=".7"/><rect x="-3" y="10" width="6" height="4" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".4"/></svg>`, label: "バルーン", desc: "" },
-  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><rect x="-3" y="-3" width="6" height="6" rx="1" fill="#4caf50" stroke="rgba(0,0,0,.4)" stroke-width=".5"/><line x1="-3" y1="-3" x2="-9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="-3" x2="9" y2="-9" stroke="#4caf50" stroke-width="1.5"/><line x1="-3" y1="3" x2="-9" y2="9" stroke="#4caf50" stroke-width="1.5"/><line x1="3" y1="3" x2="9" y2="9" stroke="#4caf50" stroke-width="1.5"/></svg>`, label: "UAV / ドローン", desc: "" },
+  { svg: `<svg width="24" height="24" viewBox="-15 -15 30 30"><path d="M-0.59,-11.66 L-0.81,-4.07 L-5.98,-6.98 L-5.44,-8.27 L-5.39,-9.94 L-5.98,-11.4 L-7.33,-12.63 L-8.73,-13.12 L-10.34,-13.01 L-11.69,-12.31 L-12.77,-11.02 L-13.15,-9.89 L-13.09,-8.27 L-11.75,-6.17 L-9.75,-5.31 L-8.46,-5.36 L-6.95,-5.95 L-2.37,-2.51 L-2.48,2.61 L-6.68,6.22 L-8.08,5.47 L-10.02,5.36 L-11.75,6.17 L-12.93,7.79 L-13.2,9.4 L-12.72,11.13 L-11.64,12.36 L-9.86,13.12 L-7.87,12.9 L-6.14,11.61 L-5.33,9.46 L-5.76,7.35 L-0.97,3.74 L1.51,3.8 L5.98,6.98 L5.39,8.65 L5.5,10.32 L6.2,11.66 L7.76,12.85 L10.34,13.01 L11.8,12.26 L12.66,11.23 L13.15,9.99 L13.15,8.43 L12.55,7.03 L11.75,6.17 L9.7,5.31 L8.51,5.36 L6.95,5.95 L2.86,2.61 L2.86,-2.45 L7.33,-5.74 L9.81,-5.31 L12.12,-6.49 L13.2,-8.76 L13.04,-10.43 L12.23,-11.83 L11.31,-12.58 L9.81,-13.12 L7.33,-12.63 L6.09,-11.5 L5.39,-9.78 L5.5,-8.16 L6.2,-6.6 L1.24,-4.07 L1.08,-11.66 C0.8,-12.9 -0.3,-12.9 -0.59,-11.66 Z" fill="#4caf50" stroke="rgba(0,0,0,.5)" stroke-width=".6" stroke-linejoin="round"/></svg>`, label: "UAV / ドローン", desc: "" },
   { svg: `<svg width="24" height="24" viewBox="-12 -12 24 24"><path d="M0,-10 L1.5,-4 L8,-1 L8,0.5 L1.5,1.5 L1,6 L3.5,7.5 L3.5,8.5 L-3.5,8.5 L-3.5,7.5 L-1,6 L-1.5,1.5 L-8,0.5 L-8,-1 L-1.5,-4Z" fill="#1565c0" stroke="rgba(255,255,255,.5)" stroke-width=".5"/></svg>`, label: "ADS-B（青） / Mode-S/C（黒）", desc: "tar1090経由のADS-B機体" },
   { svg: `<svg width="24" height="24" viewBox="-11 -11 22 22"><path d="M0,-9 L4,8 L0,5 L-4,8 Z" fill="#00b894" stroke="rgba(0,0,0,.5)" stroke-width="0.7"/><line x1="-3" y1="-2" x2="3" y2="-2" stroke="#00b894" stroke-width="1.2"/><line x1="-5" y1="-5" x2="5" y2="-5" stroke="#00b894" stroke-width="1.2"/></svg>`, label: "OGN受信機（アンテナ）", desc: "OGN設定の緯度経度に表示。緑=稼働中、グレー=停止" },
 ];
@@ -530,11 +530,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.16 */}
+      {/* v1.1.18 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.18</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-30</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="ハンググライダー・ドローンのアイコンを刷新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ハンググライダー：実機シルエットをトレースした翼形状に更新</li>
+          <li>ドローン：6ローター機体を実機形状でトレース、機首側に向き表現を追加</li>
+          <li>マニュアル（凡例）も同じパスで統一</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.16 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.16</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-27</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="機種別アイコンを刷新">
