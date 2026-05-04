@@ -9,9 +9,11 @@ interface OgnConfig {
   longitude: number;
   altitude: number;
   freqCorr: number;
-  gsmCenterFreq: number;
-  gsmGain: number;
   httpPort: number;
+  gain: number;
+  minNoise: number;
+  maxNoise: number;
+  detectSNR: number;
   enableBias: boolean;
   ognBinaryUrl: string;
 }
@@ -35,6 +37,11 @@ interface OgnStatus {
   ognGain?: string;
   noise?: string;
   liveTime?: string;
+  detectSNR?: string;
+  aircraftsLast12h?: string;
+  aircraftsLastHour?: string;
+  aircraftsLastMinute?: string;
+  positionsLastMinute?: string;
 }
 
 export default function OgnPage() {
@@ -64,7 +71,7 @@ export default function OgnPage() {
 
   async function saveConfig() {
     if (!config) return;
-    if (!confirm("OGN設定を保存して受信機を再起動しますか？\n受信が一時的に中断されます。")) return;
+    if (!confirm("OGN設定を保存して受信機を再起動しますか？\n受信が一時的に中断され、AGCの再収束に約1分かかります。")) return;
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -110,6 +117,17 @@ export default function OgnPage() {
     setConfig({ ...config, [key]: value });
   }
 
+  function applyPreset(preset: "default" | "weak-signal" | "noisy-env") {
+    if (!config) return;
+    if (preset === "default") {
+      setConfig({ ...config, gain: 7.7, minNoise: 5.0, maxNoise: 10.0, detectSNR: 3.0 });
+    } else if (preset === "weak-signal") {
+      setConfig({ ...config, gain: 7.7, minNoise: 8.0, maxNoise: 15.0, detectSNR: 2.5 });
+    } else if (preset === "noisy-env") {
+      setConfig({ ...config, gain: 7.7, minNoise: 3.0, maxNoise: 8.0, detectSNR: 5.0 });
+    }
+  }
+
   return (
     <main className="flex-1 flex items-start justify-center overflow-y-auto py-6 px-4 rounded-md" style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}>
       <div
@@ -148,9 +166,17 @@ export default function OgnPage() {
                 <StatusRow label="サンプルレート" value={status.sampleRate || "—"} />
                 <StatusRow label="周波数補正（実測）" value={status.freqCorrLive || "—"} />
                 <StatusRow label="周波数プラン" value={status.freqPlan || "—"} />
-                <StatusRow label="OGN受信ゲイン（実測）" value={status.ognGain || "—"} />
-                <StatusRow label="ノイズレベル" value={status.noise || "—"} />
-                <StatusRow label="Live Time" value={status.liveTime || "—"} />
+                <div style={{ borderTop: "1px solid var(--color-border)", margin: "8px 0" }} />
+                <StatusRow label="AGC実行中ゲイン" value={status.ognGain || "—"} highlightAccent />
+                <StatusRow label="ノイズレベル（実測）" value={status.noise || "—"} highlightAccent />
+                <StatusRow label="DetectSNR" value={status.detectSNR || "—"} />
+                <div style={{ borderTop: "1px solid var(--color-border)", margin: "8px 0" }} />
+                <StatusRow label="受信機体数（直近1分）" value={status.aircraftsLastMinute || "0/0"} highlightAccent />
+                <StatusRow label="受信機体数（直近1時間）" value={status.aircraftsLastHour || "0/0"} />
+                <StatusRow label="受信機体数（直近12時間）" value={status.aircraftsLast12h || "0/0"} />
+                <StatusRow label="ポジション受信数（直近1分）" value={status.positionsLastMinute || "0/0"} highlightAccent />
+                <div style={{ borderTop: "1px solid var(--color-border)", margin: "8px 0" }} />
+                <StatusRow label="Live Time" value={`${status.liveTime || "—"} (※ v0.3.3.ARMの表示バグで常に0%)`} />
               </>
             )}
           </div>
@@ -215,8 +241,8 @@ export default function OgnPage() {
           </p>
         </Card>
 
-        {/* RF Settings */}
-        <Card title="RF（無線）設定" helpId="ogn-rf">
+        {/* RF Settings (basic) */}
+        <Card title="RF（無線）基本設定" helpId="ogn-rf">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="周波数補正 FreqCorr (ppm)">
               <input
@@ -228,7 +254,7 @@ export default function OgnPage() {
                 style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
               />
               <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                RTL-SDRドングルの水晶誤差補正。R820T系は通常 40〜80 ppm。gsm_scan で測定可能
+                RTL-SDRドングルの水晶誤差補正。R820T系は通常 40〜80 ppm。0でも実用上問題なし
               </p>
             </Field>
             <Field label="HTTPポート">
@@ -241,35 +267,6 @@ export default function OgnPage() {
               />
               <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                 受信機ステータスHTTPサーバのポート（デフォルト: 8082）
-              </p>
-            </Field>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="GSM中心周波数 (MHz)">
-              <input
-                type="number"
-                step="0.1"
-                value={config?.gsmCenterFreq ?? 922.4}
-                onChange={(e) => update("gsmCenterFreq", parseFloat(e.target.value))}
-                className="w-full px-3 py-1.5 text-sm rounded font-mono"
-                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-              />
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                周波数キャリブレーションに使うGSMセル周波数。gsm_scanで最良値を探す（日本は922.4MHz付近）
-              </p>
-            </Field>
-            <Field label="GSMゲイン (dB)">
-              <input
-                type="number"
-                step="0.1"
-                value={config?.gsmGain ?? 25}
-                onChange={(e) => update("gsmGain", parseFloat(e.target.value))}
-                className="w-full px-3 py-1.5 text-sm rounded font-mono"
-                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-              />
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                GSM受信時のRF入力ゲイン（GSM信号は強力なため低めに設定）
               </p>
             </Field>
           </div>
@@ -289,6 +286,116 @@ export default function OgnPage() {
               Bias-T 対応のアンテナ用LNA等を使用する場合のみ有効化してください。
               通常のアンテナで有効にすると RTL-SDRドングルが故障する恐れがあります。
             </p>
+          </div>
+        </Card>
+
+        {/* AGC / Demodulator (v1.1.23) */}
+        <Card title="AGC（自動利得制御）・デコーダ設定" helpId="ogn-agc">
+          <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+            OGN-RFは内部AGCで受信ゲインを自動調整します。各パラメータの意味と調整指針は
+            ヘルプの「AGC（自動利得制御）」セクションを参照してください。
+          </p>
+
+          {/* Presets */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
+              プリセット
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => applyPreset("default")}
+                className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              >
+                標準（滑空場 / 郊外）
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset("weak-signal")}
+                className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              >
+                弱信号（遠距離・低出力FLARM）
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset("noisy-env")}
+                className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              >
+                高ノイズ環境（都市部）
+              </button>
+            </div>
+            <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+              プリセットを選択するとフォームの値だけ更新されます。「設定を保存」を押すまで反映されません。
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Initial Gain (dB)">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="50"
+                value={config?.gain ?? 7.7}
+                onChange={(e) => update("gain", parseFloat(e.target.value))}
+                className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                AGC開始時のゲイン。実動作中はAGCが自動調整。標準: <code>7.7</code>（近距離FLARM飽和回避）
+              </p>
+            </Field>
+
+            <Field label="DetectSNR (dB)">
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="20"
+                value={config?.detectSNR ?? 3.0}
+                onChange={(e) => update("detectSNR", parseFloat(e.target.value))}
+                className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                FLARMパケットをデコードする閾値。低いほど弱信号を拾うが誤検出も増。標準: <code>3.0</code>
+              </p>
+            </Field>
+
+            <Field label="MinNoise (dB)">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="30"
+                value={config?.minNoise ?? 5.0}
+                onChange={(e) => update("minNoise", parseFloat(e.target.value))}
+                className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                AGC下限。実測ノイズがこれを下回ると AGC はゲインを上げる。標準: <code>5.0</code>
+              </p>
+            </Field>
+
+            <Field label="MaxNoise (dB)">
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="40"
+                value={config?.maxNoise ?? 10.0}
+                onChange={(e) => update("maxNoise", parseFloat(e.target.value))}
+                className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                AGC上限。実測ノイズがこれを上回ると AGC はゲインを下げる。標準: <code>10.0</code>
+              </p>
+            </Field>
           </div>
         </Card>
 
@@ -364,14 +471,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function StatusRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function StatusRow({ label, value, highlight, highlightAccent }: { label: string; value: string; highlight?: boolean; highlightAccent?: boolean }) {
+  const color = highlight === true
+    ? "var(--color-success)"
+    : highlight === false
+      ? "var(--color-danger)"
+      : highlightAccent
+        ? "var(--color-accent)"
+        : "var(--color-text-primary)";
   return (
     <div className="flex items-center justify-between py-1 px-3 rounded" style={{ background: "var(--color-bg-card)" }}>
       <span style={{ color: "var(--color-text-secondary)" }}>{label}</span>
-      <span
-        className="font-mono font-semibold"
-        style={{ color: highlight === true ? "var(--color-success)" : highlight === false ? "var(--color-danger)" : "var(--color-text-primary)" }}
-      >
+      <span className="font-mono font-semibold" style={{ color }}>
         {value}
       </span>
     </div>

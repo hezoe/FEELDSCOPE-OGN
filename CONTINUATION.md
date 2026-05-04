@@ -1,5 +1,36 @@
 # FEELDSCOPE-OGN 作業継続メモ
 
+## 2026-05-04 (続編2) AGC設定の Web UI 化 + GSM 関連削除 — v1.1.23
+
+### 動機
+v1.1.22 で MinNoise/MaxNoise/DetectSNR を調整して受信を回復したが、
+これらは SSH で `/boot/rtlsdr-ogn.conf` を直編集する必要があり、設置者ごとの環境チューニングが困難だった。
+また GSM は日本では2012年に停波済みでキャリブレーション不可能なのに UI に GSM中心周波数 / GSMゲインの設定欄が残っていた。
+
+### 実装
+1. **AGC 4パラメータの Web UI 化** — `/ogn` ページに「AGC・デコーダ設定」セクション追加
+   - Initial Gain / MinNoise / MaxNoise / DetectSNR を編集可能
+   - 3つのプリセット（標準 / 弱信号 / 高ノイズ）でワンクリック切替
+2. **ライブ AGC 状態表示** — Status タブと OGN ステータスカード両方に追加
+   - AGC実行中ゲイン、Measured noise、DetectSNR
+   - 受信機体数（直近1分・1時間・12時間）、ポジション受信数（直近1分）
+   - ogn-decode HTTP（port 8083）からの取得を api/status と api/ogn の両方に実装
+3. **GSM 完全撤去**
+   - `app/ogn/page.tsx`: GSM 中心周波数 / GSM ゲインの入力欄削除
+   - `app/help/page.tsx`: GSM 関連の説明削除（line 243, 448-449）
+   - `app/api/ogn/route.ts`: GSM フィールドを interface・パース・conf 生成から削除
+   - 新生成 conf は GSM セクション無し（既存 conf は再保存時に GSM が消える）
+4. **ヘルプ拡充**
+   - 「AGC（自動利得制御）」セクション新設：動作ロジック、4パラメータ説明、4環境別調整ガイド表
+   - Status マニュアルに「受信機体数」「ポジション受信数」「DetectSNR」の説明追加
+   - Live Time の説明を「v0.3.3.ARM の表示バグで常に0%」に修正
+
+### 後方互換性
+- 既存 conf に MinNoise/MaxNoise/DetectSNR が無い場合、API パース時にデフォルト値（5.0/10.0/3.0）を返す
+- ユーザーが「設定を保存」を押すと新フォーマット（GSM なし、AGC パラメータあり）に書き換わる
+
+---
+
 ## 2026-05-04 (続編) 弱信号環境向け AGC / DetectSNR 再調整 — v1.1.22
 
 ### 経緯と再発した問題
