@@ -1,5 +1,49 @@
 # FEELDSCOPE-OGN 作業継続メモ
 
+## 2026-05-04 (続編) 弱信号環境向け AGC / DetectSNR 再調整 — v1.1.22
+
+### 経緯と再発した問題
+
+V1.1.21 完成後、OverlayFS 再有効化＆再起動 → 本番アンテナに交換 → 受信ゼロ → テストダイポールに戻しても受信回復せず。
+rtl_power 計測で FLARM 3チャネルのピークは見えるが、以前の -5 dB ではなく **-28〜-31 dB** と約25dB弱い状態。
+Aircrafts received 0/0 が継続し、ogn-rf 自体は CPU 93% で正常稼働（Live Time 0.0% 表示は v0.3.3.ARM の表示バグ確定）。
+
+### GainMode=0 の挙動を誤解していた
+
+v1.1.21 の install スクリプトコメントには「Gain=7.7 を初期値として AGC が ~32dB まで自動上昇」と書いていた。
+これは**半分正しく半分間違い**：
+- librtlsdr の HW AGC（GainMode=1）は使われない（手動モード）
+- しかし **OGN-RF 内部に独自の noise-window AGC** が存在し、これが Gain index を自動ステップする
+- ステップは MinNoise/MaxNoise の窓に基づき：noise < MinNoise → gain↑、noise > MaxNoise → gain↓
+
+デフォルト MinNoise=2.0 / MaxNoise=6.0 では、AGC が gain index 16（29.7 dB）で止まり、
+弱信号（-30dB帯）が DetectSNR=6.0 の閾値に届かず全て破棄されていた。
+
+### 設定変更と効果
+
+| 項目 | v1.1.21 | v1.1.22 | 効果 |
+|---|---|---|---|
+| MinNoise | (default 2.0) | **5.0** | AGC をより高gainに踏み込ませる |
+| MaxNoise | (default 6.0) | **10.0** | gainヘッドルーム拡張、飽和余裕も維持 |
+| DetectSNR | 6.0 | **3.0** | 弱信号もデコード対象に |
+| 実効AGC | gain index 16 = 29.7 dB | **gain index 20 = 37.2 dB (+7.5dB)** | |
+| Aircrafts/min | 0 | **2** | |
+| Positions/min | 0 | **119**（ロスゼロ） | |
+
+### アンテナ別検証（A / B / テストダイポール 3本同時テスト）
+
+3本とも**完全同一の AGC 収束ポイント**（37.2 dB / noise 5.5 dB / 119 pos/min）。
+これは LNA + SDR 内部ノイズが antenna 入力差を吸収しているか、近距離2機なら antenna gain 差が見えない状況。
+飛行運用での比較は実機運用後の課題として残す（Aircrafts received over hour の総数比較が判定材料）。
+
+### 副次的気づき
+
+- `RF input noise` の値は「絶対dB」ではなく OGN 内部の参照に対する比率。低 gain で値も下がる
+- ogn-rf 0.3.3.ARM の Live Time 0.0% は**表示バグで実害なし**（CPU 93% で実処理は走っている）
+- /boot/rtlsdr-ogn.conf 編集後は init.d が起動時に /home/pi/rtlsdr-ogn.conf へ自動コピー、即時反映には service restart も必要
+
+---
+
 ## 2026-05-04 滝川フィールドテスト — V4対応＋日本FLARM受信成功
 
 ### 経緯と発見

@@ -274,10 +274,13 @@ fi
 #
 # We replace it with a Japan-optimized config that:
 #   - Sets FreqPlan = 7 (Japan, 922.4 MHz center, 50 kHz × 3 ch FLARM)
-#   - Sets a low initial Gain (7.7 dB) — AGC walks up to ~32 dB based on noise.
+#   - Sets a low initial Gain (7.7 dB) — AGC walks up based on MinNoise/MaxNoise.
 #     A high initial Gain (49.6) caused decode failures in field tests with V4.
+#   - MinNoise = 5.0 / MaxNoise = 10.0 — pushes AGC to gain index ~20 (37 dB)
+#     for weak signal environments. Defaults (2.0/6.0) settled too low (~29 dB)
+#     and missed FLARM packets at the Takikawa field test (2026-05-04).
+#   - DetectSNR = 3.0 — catches weak signals; default 6.0 missed marginal packets.
 #   - Wider ScanMargin (80 kHz) to cover all 3 Japan FLARM channels
-#   - Lower DetectSNR (6 dB) for better long-range pickup
 #   - Adds HTTP section so ogn-rf/ogn-decode expose status pages on :8082/:8083
 # =============================================================================
 
@@ -300,11 +303,14 @@ LAT_VAL="${EXISTING_LAT:-35.6977}"
 LON_VAL="${EXISTING_LON:-139.7548}"
 
 # Check whether existing /boot/rtlsdr-ogn.conf already has the Japan-tuned settings
+# (including the 2026-05-04 weak-signal AGC tuning: MinNoise=5.0 / DetectSNR=3.0).
 NEED_REGEN=true
 if [ -f "$OGN_CONF_BOOT" ] \
    && grep -q "FreqPlan = 7" "$OGN_CONF_BOOT" \
    && grep -q "RF.OGN\|RF:OGN\|OGN:" "$OGN_CONF_BOOT" \
-   && grep -q "HTTP:" "$OGN_CONF_BOOT"; then
+   && grep -q "HTTP:" "$OGN_CONF_BOOT" \
+   && grep -q "MinNoise = 5.0" "$OGN_CONF_BOOT" \
+   && grep -q "DetectSNR  = 3.0\|DetectSNR = 3.0" "$OGN_CONF_BOOT"; then
     NEED_REGEN=false
     log_info "Existing $OGN_CONF_BOOT already has Japan FLARM config — preserved"
 fi
@@ -322,14 +328,17 @@ RF:
 
   OGN:
   { GainMode = 0;
-    Gain     = 7.7;      # Initial gain — AGC auto-adjusts up based on MinNoise/MaxNoise.
+    Gain     = 7.7;      # Initial gain — OGN steps it up via internal noise-window AGC.
                          # Low starting value avoids ADC saturation when test FLARMs are nearby (<5m).
-                         # For long-range deployment, AGC will walk this up automatically.
+    MinNoise = 5.0;      # Force AGC to push gain until measured noise reaches 5 dB.
+                         # Default 2.0 settled at ~29 dB and missed weak FLARM packets.
+    MaxNoise = 10.0;     # Cap above which AGC backs off (default 6.0 was too tight).
   };
 };
 
 Demodulator:
-{ DetectSNR  = 6.0;      # Lower SNR threshold for weak signals
+{ DetectSNR  = 3.0;      # Lower SNR threshold to catch weak signals.
+                         # Default 6.0 missed marginal FLARM packets at Takikawa (2026-05-04).
   ScanMargin = 80.0;     # Wider margin to cover 3 Japan FLARM channels (922.351/.402/.449 MHz)
 };
 
