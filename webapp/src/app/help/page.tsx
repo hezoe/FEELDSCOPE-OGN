@@ -238,12 +238,15 @@ function ManualContent() {
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
             <ManualRow label="ソフトウェア" desc="rtlsdr-ognのバージョンとビルド日" />
-            <ManualRow label="Live Time" desc="OGN受信機が信号処理に費やしている時間の比率（高いほどCPU余裕なし）" />
+            <ManualRow label="Live Time" desc="本来は信号処理に費やしているCPU時間の比率（v0.3.3.ARMでは表示バグで常に0.0%、実害なし）" />
             <ManualRow label="中心周波数（実測）" desc="実際にRTL-SDRが受信している周波数" />
-            <ManualRow label="周波数補正（実測）" desc="GSM校正後の補正値" />
+            <ManualRow label="周波数補正（実測）" desc="水晶誤差補正の実測値（FreqCorr 設定値ベース）" />
             <ManualRow label="周波数プラン" desc="使用中の周波数規格（日本は7: Japan）" />
-            <ManualRow label="OGN受信ゲイン" desc="自動ゲイン制御後の現在値" />
-            <ManualRow label="ノイズレベル" desc="周辺雑音レベル（小さいほど受信良好、3〜6dB程度が理想）" />
+            <ManualRow label="AGC実行中ゲイン" desc="OGN内部AGCが現在使用しているゲイン値（標準環境で 25-40 dB あたりに収束）" />
+            <ManualRow label="ノイズレベル" desc="OGN内部の参照に対するノイズ比。MinNoise(標準5)〜MaxNoise(標準10)の範囲に収まるようAGC調整" />
+            <ManualRow label="DetectSNR" desc="FLARMパケットをデコードする閾値（標準3dB）。受信が振るわない場合下げる" />
+            <ManualRow label="受信機体数（直近1分/1時間/12時間）" desc="OGN受信機がデコードできた機体数。「位置あり/合計」形式" />
+            <ManualRow label="ポジション受信数（直近1分）" desc="デコード成功したFLARMポジションパケットの数。1機あたり毎秒1個程度が定常" />
             <ManualRow label="NTP誤差" desc="ネットワーク時刻同期との誤差。FLARMはタイムスロット方式なので時刻精度が重要" />
             <ManualRow label="NTP周波数補正" desc="システムクロックの周波数補正値" />
             <ManualRow label="RTL-SDR" desc="使用中のRTL-SDRデバイス名・チューナー型番" />
@@ -441,17 +444,95 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section id="ogn-rf" heading="RF（無線）設定">
+        <Section id="ogn-rf" heading="RF（無線）基本設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>FreqCorr（ppm）</strong> — RTL-SDRドングルの水晶誤差補正（R820T系は通常 40〜80 ppm）</li>
+            <li><strong>FreqCorr（ppm）</strong> — RTL-SDRドングルの水晶誤差補正（R820T系は通常 40〜80 ppm、0でも実用上問題なし）</li>
             <li><strong>HTTPポート</strong> — 受信機ステータスHTTPサーバのポート（デフォルト 8082）</li>
-            <li><strong>GSM中心周波数（MHz）</strong> — 周波数キャリブレーション用（日本: 922.4MHz付近）</li>
-            <li><strong>GSMゲイン（dB）</strong> — GSM受信時のRF入力ゲイン（GSM信号は強力なため低めに）</li>
             <li><strong>Bias-T 電源供給</strong>チェックボックス — アンテナ用LNAなどへの電源供給</li>
           </ul>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
             <strong>⚠ Bias-T警告:</strong> Bias-T対応のLNA等を使う場合のみ有効化してください。
             通常アンテナで有効化するとRTL-SDRドングルが故障する恐れがあります。
+          </div>
+        </Section>
+
+        <Section id="ogn-agc" heading="AGC（自動利得制御）・デコーダ設定">
+          <p className="text-sm mb-3" style={{ color: "var(--color-text-secondary)" }}>
+            <strong>AGC（Automatic Gain Control / 自動利得制御）</strong>とは、受信機が周辺の電波環境に応じて
+            アンプの増幅率（ゲイン）を自動調整する仕組みです。OGN-RFには独自の <strong>noise-window AGC</strong> が組み込まれており、
+            測定したノイズレベルが <code>MinNoise</code>〜<code>MaxNoise</code> の範囲に収まるようにゲインを上下にステップさせます。
+          </p>
+
+          <div className="p-3 rounded text-xs mb-3" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+            <strong>📊 AGCの動作ロジック：</strong>
+            <ul className="list-disc ml-5 mt-1 space-y-0.5">
+              <li>実測ノイズ <strong>&lt; MinNoise</strong> → 「環境が静かすぎる、ゲインを上げて環境ノイズを聞き取る」→ ゲイン↑</li>
+              <li>実測ノイズ <strong>&gt; MaxNoise</strong> → 「ゲイン上げすぎで自己ノイズが暴れている」→ ゲイン↓</li>
+              <li>実測ノイズが範囲内 → ゲイン維持</li>
+            </ul>
+            <p className="mt-2">
+              これにより、アンテナ利得や設置環境に応じて<strong>自動的に最適なゲインに収束</strong>します。
+              ステータスタブの「AGC実行中ゲイン」「ノイズレベル」で現在の状態が観察できます。
+            </p>
+          </div>
+
+          <p className="text-sm font-semibold mb-1" style={{ color: "var(--color-text-primary)" }}>各パラメータ</p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>
+              <strong>Initial Gain（dB）</strong> — AGC起動時のゲイン初期値。標準: <code>7.7</code>。
+              低めにしておくと、受信機のすぐ近くにFLARM端末があってもADC飽和を避けられる。
+              実動作中はAGCが勝手にステップアップする。
+            </li>
+            <li>
+              <strong>DetectSNR（dB）</strong> — FLARMパケットを「有効」と判断する SNR（信号対ノイズ比）の閾値。
+              標準: <code>3.0</code>。下げる（例: 2.5）→ 弱信号も拾えるが誤検出も増える。上げる（例: 6.0）→ 確実な信号のみ取るが取りこぼし増。
+            </li>
+            <li>
+              <strong>MinNoise（dB）</strong> — AGCの「最低ノイズ目標」。標準: <code>5.0</code>。
+              高くするほど AGC がゲインを高い側に押し上げる。<strong>弱信号環境ではこれを上げる</strong>のが効く（5→8）。
+            </li>
+            <li>
+              <strong>MaxNoise（dB）</strong> — AGCの「最大許容ノイズ」。標準: <code>10.0</code>。
+              低すぎると AGC のヘッドルームが狭くなる。<strong>高ノイズ環境ではこれを下げる</strong>（10→8）と過剰増幅を防げる。
+            </li>
+          </ul>
+
+          <p className="text-sm font-semibold mt-4 mb-1" style={{ color: "var(--color-text-primary)" }}>調整ガイド</p>
+          <table className="w-full text-xs mt-1" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <th className="text-left py-1 px-2" style={{ color: "var(--color-text-secondary)" }}>環境 / 症状</th>
+                <th className="text-left py-1 px-2" style={{ color: "var(--color-text-secondary)" }}>推奨パラメータ</th>
+                <th className="text-left py-1 px-2" style={{ color: "var(--color-text-secondary)" }}>判断材料</th>
+              </tr>
+            </thead>
+            <tbody style={{ color: "var(--color-text-secondary)" }}>
+              <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <td className="py-1 px-2"><strong>標準</strong>（滑空場・郊外）</td>
+                <td className="py-1 px-2 font-mono">Min=5 Max=10 SNR=3</td>
+                <td className="py-1 px-2">プリセット「標準」</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <td className="py-1 px-2"><strong>弱信号</strong>（遠距離機体重視 / 受信機体ゼロ）</td>
+                <td className="py-1 px-2 font-mono">Min=8 Max=15 SNR=2.5</td>
+                <td className="py-1 px-2">AGC実行中ゲインが MAX(49.6)に張り付き、機体ゼロ</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <td className="py-1 px-2"><strong>高ノイズ</strong>（都市部 / 強い干渉源近接）</td>
+                <td className="py-1 px-2 font-mono">Min=3 Max=8 SNR=5</td>
+                <td className="py-1 px-2">AGC実行中ゲインが低位（10dB以下）固定 / ノイズが10超え常態</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <td className="py-1 px-2"><strong>近接FLARM試験</strong>（端末を1m以内）</td>
+                <td className="py-1 px-2 font-mono">Initial=0 SNR=6</td>
+                <td className="py-1 px-2">飽和回避のため AGC スタートを最低に、誤検出抑制で SNR 厳しめ</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="mt-3 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            <strong>💡 調整のコツ：</strong> 一度に1つのパラメータだけ動かす。「設定を保存」後 AGC 再収束に約1分。
+            ステータスの「受信機体数（直近1分）」で効果判定。0/0 が続く場合は MinNoise を +2、それでもダメなら DetectSNR を −0.5。
           </div>
         </Section>
 
@@ -530,11 +611,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.22 */}
+      {/* v1.1.23 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.22</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.23</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-05-04</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OGN受信機 AGC設定をWeb UIから調整可能に">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN設定タブに「AGC（自動利得制御）・デコーダ設定」セクションを追加。Initial Gain / MinNoise / MaxNoise / DetectSNR をブラウザから編集可能に（従来はSSHで <code>/boot/rtlsdr-ogn.conf</code> を直編集する必要があった）</li>
+          <li>標準 / 弱信号 / 高ノイズ環境向けの3つのプリセットを用意（ボタン1クリックで適切な値をフォームに反映）</li>
+          <li>ステータスタブのOGN受信機セクションに「受信機体数（直近1分・1時間）」「ポジション受信数」「DetectSNR」を追加。設定変更の効果がリアルタイムに分かるように</li>
+          <li>ヘルプに「AGC（自動利得制御）」セクションを追加。動作ロジック、各パラメータの意味、環境別調整ガイドを掲載</li>
+          <li>日本ではGSMが2012年に停波済みでキャリブレーション不可能なため、GSM中心周波数 / GSMゲインの設定UIと <code>/boot/rtlsdr-ogn.conf</code> の GSM セクションをまるごと削除</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.22 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.22</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-05-04</span>
       </div>
 
       <Card title="弱信号環境向けに OGN 受信感度を強化">

@@ -108,9 +108,32 @@ async function getOgnReceiverStatus() {
       ogn_gain: get("RF.OGN.Gain"),
       noise: get("Measured noise"),
       live_time: get("Live Time"),
+      // Decoder-side stats (port 8083)
+      ...(await getDecoderStats()),
     };
   } catch {
     return { online: false };
+  }
+}
+
+async function getDecoderStats() {
+  try {
+    const { stdout } = await execAsync(`curl -s --max-time 3 http://localhost:8083/`);
+    if (!stdout) return {};
+    const get = (label: string): string | undefined => {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`<td>${escaped}</td>\\s*<td[^>]*><b>([^<]*)</b>`, "i");
+      const m = stdout.match(re);
+      return m ? m[1].replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16))).trim() : undefined;
+    };
+    return {
+      detect_snr: get("Demodulator.DetectSNR"),
+      aircrafts_last_min: get("Aircrafts received over last minute"),
+      aircrafts_last_hour: get("Aircrafts received over last hour"),
+      positions_last_min: get("Positions received over last minute"),
+    };
+  } catch {
+    return {};
   }
 }
 

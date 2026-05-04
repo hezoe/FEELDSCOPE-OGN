@@ -29,6 +29,10 @@ interface OgnReceiver {
   ogn_gain?: string;
   noise?: string;
   live_time?: string;
+  detect_snr?: string;
+  aircrafts_last_min?: string;
+  aircrafts_last_hour?: string;
+  positions_last_min?: string;
 }
 
 interface AdsbStatus {
@@ -171,11 +175,15 @@ export default function StatusPage() {
                 <Stat label="中心周波数（実測）" value={data.ogn_receiver.center_freq || "—"} mono />
                 <Stat label="周波数補正（実測）" value={data.ogn_receiver.freq_corr_live || "—"} mono />
                 <Stat label="周波数プラン" value={data.ogn_receiver.freq_plan || "—"} mono />
-                <Stat label="OGN受信ゲイン" value={data.ogn_receiver.ogn_gain || "—"} mono />
-                <Stat label="ノイズレベル" value={data.ogn_receiver.noise || "—"} mono />
+                <Stat label="AGC実行中ゲイン" value={data.ogn_receiver.ogn_gain || "—"} mono accent="success" />
+                <Stat label="ノイズレベル" value={data.ogn_receiver.noise || "—"} mono accent="success" />
+                <Stat label="DetectSNR" value={data.ogn_receiver.detect_snr || "—"} mono />
                 <Stat label="NTP誤差" value={data.ogn_receiver.ntp_error || "—"} mono />
                 <Stat label="NTP周波数補正" value={data.ogn_receiver.ntp_freq_corr || "—"} mono />
                 <Stat label="RTL-SDR" value={`${data.ogn_receiver.rtlsdr_name || "—"} (${data.ogn_receiver.rtlsdr_tuner || "—"})`} />
+                <Stat label="受信機体数（直近1分）" value={data.ogn_receiver.aircrafts_last_min || "0/0"} mono accent="success" />
+                <Stat label="受信機体数（直近1時間）" value={data.ogn_receiver.aircrafts_last_hour || "0/0"} mono />
+                <Stat label="ポジション受信数（直近1分）" value={data.ogn_receiver.positions_last_min || "0/0"} mono accent="success" />
               </div>
             )}
           </div>

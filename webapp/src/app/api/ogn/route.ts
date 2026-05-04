@@ -15,9 +15,12 @@ interface OgnConfig {
   longitude: number;           // Position.Longitude
   altitude: number;            // Position.Altitude
   freqCorr: number;            // RF.FreqCorr
-  gsmCenterFreq: number;       // RF.GSM.CenterFreq
-  gsmGain: number;             // RF.GSM.Gain
   httpPort: number;            // HTTP.Port
+  // AGC / demodulator (added v1.1.23)
+  gain: number;                // RF.OGN.Gain (initial value, OGN auto-steps from here)
+  minNoise: number;            // RF.OGN.MinNoise (target noise floor)
+  maxNoise: number;            // RF.OGN.MaxNoise (saturation guard)
+  detectSNR: number;           // Demodulator.DetectSNR (decode threshold)
   // From /boot/OGN-receiver.conf (boot config / install)
   enableBias: boolean;         // enableBias="1"
   ognBinaryUrl: string;        // OGNBINARYURL
@@ -42,6 +45,12 @@ interface OgnStatus {
   ognGain?: string;
   noise?: string;
   liveTime?: string;
+  // Decoder side (from port 8083)
+  detectSNR?: string;
+  aircraftsLast12h?: string;
+  aircraftsLastHour?: string;
+  aircraftsLastMinute?: string;
+  positionsLastMinute?: string;
 }
 
 async function readRtlsdrConf(): Promise<string> {
@@ -76,39 +85,49 @@ async function getOgnConfig(): Promise<OgnConfig> {
     longitude: parseFloat(extractField(rtl, /Longitude\s*=\s*([0-9.\-]+)/, "0")),
     altitude: parseFloat(extractField(rtl, /Altitude\s*=\s*([0-9.\-]+)/, "0")),
     freqCorr: parseFloat(extractField(rtl, /FreqCorr\s*=\s*([0-9.\-]+)\s*;/, "0")),
-    gsmCenterFreq: parseFloat(extractField(rtl, /CenterFreq\s*=\s*([0-9.]+)/, "922.4")),
-    gsmGain: parseFloat(extractField(rtl, /GSM:[\s\S]*?Gain\s*=\s*([0-9.]+)/, "25")),
     httpPort: parseInt(extractField(rtl, /HTTP:\s*\{\s*Port\s*=\s*(\d+)/, "8082"), 10),
+    gain: parseFloat(extractField(rtl, /OGN:[\s\S]*?Gain\s*=\s*([0-9.\-]+)/, "7.7")),
+    minNoise: parseFloat(extractField(rtl, /MinNoise\s*=\s*([0-9.\-]+)/, "5.0")),
+    maxNoise: parseFloat(extractField(rtl, /MaxNoise\s*=\s*([0-9.\-]+)/, "10.0")),
+    detectSNR: parseFloat(extractField(rtl, /DetectSNR\s*=\s*([0-9.\-]+)/, "3.0")),
     enableBias: /^enableBias\s*=\s*"1"/m.test(recv),
     ognBinaryUrl: extractField(recv, /OGNBINARYURL\s*=\s*"([^"]*)"/),
   };
 }
 
-/** Build a fresh rtlsdr-ogn.conf from config */
+/** Build a fresh rtlsdr-ogn.conf from config (Japan FLARM optimized, no GSM) */
 function buildRtlsdrConf(c: OgnConfig): string {
   return `RF:
-{
-  FreqCorr = ${c.freqCorr};          # [ppm]      "big" R820T sticks have 40-80ppm correction factors, measure it with gsm_scan
+{ FreqPlan   = 7;        # 7 = Japan (922.4 MHz FLARM band, 50 kHz x 3 ch)
+  FreqCorr   = ${c.freqCorr};
+  SampleRate = 2.0;
 
-  GSM:                     # for frequency calibration based on GSM signals
-  { CenterFreq  = ${c.gsmCenterFreq};   # [MHz] find the best GSM frequency with gsm_scan
-    Gain        = ${c.gsmGain};   # [dB]  RF input gain (beware that GSM signals are very strong !)
-  } ;
-} ;
+  OGN:
+  { GainMode = 0;          # OGN-RF internal noise-window AGC steps from here
+    Gain     = ${c.gain};        # initial gain (dB) — AGC auto-adjusts
+    MinNoise = ${c.minNoise};        # AGC raises gain until measured noise reaches this
+    MaxNoise = ${c.maxNoise};       # AGC lowers gain if noise exceeds this
+  };
+};
+
+Demodulator:
+{ DetectSNR  = ${c.detectSNR};        # SNR threshold for FLARM packet decode
+  ScanMargin = 80.0;     # cover 3 Japan FLARM channels (922.351 / .402 / .449)
+};
+
 Position:
-{ Latitude   =   ${c.latitude}; # [deg] Antenna coordinates
-  Longitude  =   ${c.longitude}; # [deg]
-  Altitude   =        ${c.altitude}; # [m]   Altitude above sea leavel
-} ;
+{ Latitude   =   ${c.latitude};
+  Longitude  =   ${c.longitude};
+  Altitude   =        ${c.altitude};
+};
 
 APRS:
-{ Call = "${c.receiverName}";     # APRS callsign (max. 9 characters)
-} ;
-
+{ Call = "${c.receiverName}";
+};
 
 HTTP:
 { Port = ${c.httpPort};
-} ;
+};
 `;
 }
 
@@ -119,6 +138,10 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
   }
   if (c.latitude < -90 || c.latitude > 90) throw new Error("緯度は -90〜90 の範囲です");
   if (c.longitude < -180 || c.longitude > 180) throw new Error("経度は -180〜180 の範囲です");
+  if (c.gain < 0 || c.gain > 50) throw new Error("Initial Gain は 0〜50 dB の範囲です");
+  if (c.minNoise < 0 || c.minNoise > 30) throw new Error("MinNoise は 0〜30 dB の範囲です");
+  if (c.maxNoise <= c.minNoise || c.maxNoise > 40) throw new Error("MaxNoise は MinNoise より大きく 40 以下である必要があります");
+  if (c.detectSNR < 1 || c.detectSNR > 20) throw new Error("DetectSNR は 1〜20 dB の範囲です");
 
   const conf = buildRtlsdrConf(c);
 
@@ -138,8 +161,6 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
       recv = recv.replace(/^Longitude=".*"/m, `Longitude="${c.longitude}"`);
       recv = recv.replace(/^#?\s*Altitude=".*"/m, `Altitude="${c.altitude}"`);
       recv = recv.replace(/^FreqCorr=".*"/m, `FreqCorr="${c.freqCorr}"`);
-      recv = recv.replace(/^GSMCenterFreq=".*"/m, `GSMCenterFreq="${c.gsmCenterFreq}"`);
-      recv = recv.replace(/^#?\s*GSMGain=".*"/m, `GSMGain="${c.gsmGain}"`);
       recv = recv.replace(/^#?\s*enableBias=".*"/m, `enableBias="${c.enableBias ? "1" : "0"}"`);
       if (c.ognBinaryUrl) {
         recv = recv.replace(/^OGNBINARYURL=".*"/m, `OGNBINARYURL="${c.ognBinaryUrl}"`);
@@ -171,7 +192,7 @@ async function getOgnStatus(httpPort: number): Promise<OgnStatus> {
     if (!html) return { online: false };
 
     const softwareMatch = html.match(/RTLSDR OGN RF processor ([^\/]+)\/([^<]+)/);
-    return {
+    const base: OgnStatus = {
       online: true,
       software: softwareMatch ? `${softwareMatch[1].trim()} (${softwareMatch[2].trim()})` : undefined,
       hostname: extractStatusField(html, "Host name"),
@@ -191,6 +212,20 @@ async function getOgnStatus(httpPort: number): Promise<OgnStatus> {
       noise: extractStatusField(html, "Measured noise"),
       liveTime: extractStatusField(html, "Live Time"),
     };
+
+    // Also fetch decoder stats from port 8083 (rf port + 1 by convention)
+    try {
+      const { stdout: dec } = await execAsync(`curl -s --max-time 3 http://localhost:${httpPort + 1}/`);
+      if (dec) {
+        base.detectSNR = extractStatusField(dec, "Demodulator.DetectSNR");
+        base.aircraftsLast12h = extractStatusField(dec, "Aircrafts received over last 12 hours");
+        base.aircraftsLastHour = extractStatusField(dec, "Aircrafts received over last hour");
+        base.aircraftsLastMinute = extractStatusField(dec, "Aircrafts received over last minute");
+        base.positionsLastMinute = extractStatusField(dec, "Positions received over last minute");
+      }
+    } catch { /* decoder unreachable, leave undefined */ }
+
+    return base;
   } catch {
     return { online: false };
   }
@@ -213,7 +248,7 @@ export async function POST(request: Request) {
       case "save": {
         const c: OgnConfig = body.config;
         await saveOgnConfig(c);
-        return NextResponse.json({ ok: true, message: "OGN設定を保存し、受信機を再起動しました。" });
+        return NextResponse.json({ ok: true, message: "OGN設定を保存し、受信機を再起動しました。AGCの再収束に約1分かかります。" });
       }
       case "restart": {
         await execAsync("sudo /etc/init.d/rtlsdr-ogn restart");
