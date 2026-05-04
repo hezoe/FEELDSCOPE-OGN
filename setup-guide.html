@@ -45,7 +45,7 @@
 <div class="req">
   <div class="req-item"><strong>ハードウェア</strong>Raspberry Pi 4 (2GB+)</div>
   <div class="req-item"><strong>SDカード</strong>8GB 以上 (16GB 推奨)</div>
-  <div class="req-item"><strong>SDRドングル</strong>RTL-SDR (868/922 MHz 対応)</div>
+  <div class="req-item"><strong>SDRドングル</strong>RTL-SDR Blog V3 / V4 推奨（922 MHz 帯対応）</div>
   <div class="req-item"><strong>ネットワーク</strong>Wi-Fi または Ethernet</div>
 </div>
 
@@ -156,13 +156,24 @@ cd FEELDSCOPE-OGN
 sudo bash feeldscope-install.sh</code></pre>
 <p>インストーラーが以下を自動的に行います:</p>
 <ul>
-  <li>システムパッケージの導入 (mosquitto, Python paho-mqtt, git)</li>
+  <li>システムパッケージの導入 (mosquitto, Python paho-mqtt, git, cmake, libusb-dev)</li>
   <li>Node.js 20.x のインストール (armhf 対応)</li>
   <li>Mosquitto の WebSocket 設定</li>
   <li>FEELDSCOPE ファイルのデプロイ</li>
+  <li><strong>RTL-SDR Blog 公式ドライバ (V4 対応版) のビルド・インストール</strong>
+    &mdash; OGN 公式イメージ同梱の librtlsdr 0.6.0 は RTL-SDR Blog V4 を正しく扱えず、
+    922 MHz 帯で PLL がロックせず受信不能になります（V3 は問題なし）。
+    インストーラはドロップイン互換のドライバに自動差し替えします。</li>
+  <li><strong>OGN 設定の日本 FLARM 最適化</strong>
+    &mdash; FreqPlan = 7 (Japan, 922.4 MHz中心、50 kHz × 3 ch)、Gain は AGC 動作の初期値を低めにしてV4のADC飽和を回避、ScanMargin 80 kHz で全3チャネル捕捉。</li>
   <li>Webアプリのビルド (Next.js)</li>
   <li>systemd サービスの登録・起動</li>
 </ul>
+<div class="info">
+  <strong>SDR ドングルについて</strong>:
+  RTL-SDR Blog <strong>V3</strong> と <strong>V4</strong> はどちらも本ソフトでサポートしますが、推奨は V4 (TCXO 内蔵で周波数安定、感度も高い)。<br>
+  互換クローン品の RTL2832 ドングルでも動作することはありますが、922 MHz の PLL ロックや感度が個体差で大きくバラつくため、本番運用では純正品を推奨します。
+</div>
 <div class="warn">
   ビルドには RPi4 で <strong>10〜15分程度</strong>かかります。途中で電源を切らないでください。
 </div>
