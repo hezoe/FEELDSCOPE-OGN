@@ -530,11 +530,40 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.20 */}
+      {/* v1.1.22 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.22</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-05-04</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="弱信号環境向けに OGN 受信感度を強化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>FLARM受信用のAGCを再調整（MinNoise 2.0→5.0 / MaxNoise 6.0→10.0）。AGCを高gain側（約37 dB）まで踏み込ませることで、遠距離・低出力FLARMの受信を改善</li>
+          <li>デコード閾値（DetectSNR）を 6.0 → 3.0 に下げ、ノイズフロアぎりぎりの弱信号もパケット化対象に</li>
+          <li>滝川滑空場フィールドテストで、変更前0機/分→変更後2機/分・119ポジション/分の安定受信を確認</li>
+          <li>新規インストール（feeldscope-install.sh）にも反映済み</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.21 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.21</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-05-04</span>
+      </div>
+
+      <Card title="RTL-SDR Blog V4 対応 + 日本FLARM最適化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN公式イメージ同梱の librtlsdr 0.6.0 が RTL-SDR Blog V4 を扱えず922MHz帯で受信不能になる問題を解消（rtl-sdr-blog 公式フォークドライバを自動インストール）</li>
+          <li>/boot/rtlsdr-ogn.conf を日本FLARM最適化テンプレートで生成（FreqPlan=7=Japan、922.4 MHz中心、3チャネル対応）</li>
+          <li>setup-guide.html に V3/V4 注意書きを追加</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.20 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.20</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-04-30</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="ADS-B 受信ステータスの誤表示を修正（OFF/ON 両方向）">
