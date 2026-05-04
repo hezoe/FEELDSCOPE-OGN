@@ -1,5 +1,79 @@
 # FEELDSCOPE-OGN 作業継続メモ
 
+## 2026-05-04 滝川フィールドテスト — V4対応＋日本FLARM受信成功
+
+### 経緯と発見
+
+自宅でV3使用時に動作確認 → 持出前にV4にスワップ → 滝川フィールドで起動するも機体検出ゼロ。
+切り分けで以下の **2つの根本問題** を特定し恒久対策を実施。
+
+#### 問題1: librtlsdr 0.6.0 が RTL-SDR Blog V4 非対応
+
+OGN公式イメージに含まれる `librtlsdr0:armhf 0.6.0-3` は V4 を正しく扱えず：
+- `rtl_test` で `[R82XX] PLL not locked!` エラー
+- ogn-rf の `Live Time` が 0% のまま動かない
+- 922 MHz 帯で受信信号が一切立たない (ノイズフロア -1 dB前後)
+
+**対策**: rtl-sdr-blog ドライバ (https://github.com/rtlsdrblog/rtl-sdr-blog) をビルド・差し替え。
+インストール後は ldconfig 経由で `/usr/local/lib/arm-linux-gnueabihf/librtlsdr.so.0` が優先され、
+`rtl_test` が `RTL-SDR Blog V4 Detected` を出力、Live Time が正常値 (60-95%) に。
+V3 にも互換性があるドロップイン代替なので、`feeldscope-install.sh` で常に投入する。
+
+#### 問題2: OGN-RF 設定が日本FLARMに適合していない
+
+`/boot/rtlsdr-ogn.conf` の元構成は以下の問題を持つ:
+- `RF.OGN` セクションが省略 → ogn-rf が欧州デフォルト 868.8 MHz で動作 (日本FLARMは922.4 MHz)
+- `RF.GSM.CenterFreq = 922.4` は GSMキャリブ用の指定で、FLARM受信周波数ではない
+- 日本ではGSMが2012年に停波済みなので GSM キャリブ自体が不可能
+
+**対策**: `/boot/rtlsdr-ogn.conf` を以下のテンプレートで再生成:
+```
+RF:
+{ FreqPlan   = 7;        # 7 = Japan
+  FreqCorr   = 0;
+  SampleRate = 2.0;
+  OGN:
+  { GainMode = 0;
+    Gain     = 7.7;      # 低初期値、AGCで自動上昇
+  };
+};
+Demodulator:
+{ DetectSNR  = 6.0;
+  ScanMargin = 80.0;
+};
+```
+
+#### 問題3 (補足): Gain MAX (49.6 dB) で V4 が ADC 飽和
+
+至近距離のFLARM (1〜3m) を Gain MAX で受けると ADC 飽和、デコード不可。
+Gain 初期値を 7.7 に下げることで AGC が適切に追従し、SNR 55dB クリーンに復号。
+航空機は通常 km 単位で離れるので、AGC は MaxNoise(6.0) を超えない範囲で勝手にゲインを上げる。
+
+### 検証データ (滝川フィールド)
+
+| 周波数 | Measured (max-hold 60s) |
+|---|---|
+| 868 MHz EU FLARM band | 完全無音 (アンテナノイズフロアのみ) |
+| 922.351 MHz | -5.18 dB ピーク |
+| 922.402 MHz | -5.22 dB ピーク (日本FLARM中心) |
+| 922.449 MHz | -5.18 dB ピーク |
+
+→ **日本FLARMは 922.4 MHz中心、50 kHz 間隔で 3 チャネル**を使用していることを実測確認。
+
+### コミット内容 (このセッション)
+
+- `feeldscope-install.sh`: Step 5 として rtl-sdr-blog ドライバビルド・インストールを追加 (8→9ステップ構成)
+- `feeldscope-install.sh`: Step 6 (旧 Step 5) で `/boot/rtlsdr-ogn.conf` を日本FLARM最適化テンプレートで再生成
+- `setup-guide.html`: V3/V4 の差分と Gain 設定に関する注意書きを追加
+- 受信機 RJTTTK001 (旧 TestJP) → 滝川 TAKIKAWA1 として運用開始
+
+### 残作業
+
+- フレッシュインストール (新OGNイメージ + 新インストーラ) で V4 対応動作を最終検証
+- 設定UIから Gain 等のパラメータを変えられるようにする (今は SSH で /boot/rtlsdr-ogn.conf 直編集)
+
+---
+
 ## 現在の状態 (2026-04-27)
 
 ### 完了した作業

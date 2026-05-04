@@ -86,9 +86,9 @@ echo ""
 # Step 1: System packages
 # =============================================================================
 
-log_info "[1/8] Installing system packages..."
+log_info "[1/9] Installing system packages..."
 apt-get update -qq
-apt-get install -y -qq mosquitto mosquitto-clients python3-pip git
+apt-get install -y -qq mosquitto mosquitto-clients python3-pip git cmake libusb-1.0-0-dev
 
 # Install paho-mqtt for Python
 pip3 install --break-system-packages paho-mqtt 2>/dev/null || pip3 install paho-mqtt
@@ -97,7 +97,7 @@ pip3 install --break-system-packages paho-mqtt 2>/dev/null || pip3 install paho-
 # Step 2: Node.js
 # =============================================================================
 
-log_info "[2/8] Installing Node.js ${NODE_MAJOR}.x..."
+log_info "[2/9] Installing Node.js ${NODE_MAJOR}.x..."
 NODE_INSTALLED=false
 if command -v node &>/dev/null; then
     current_node=$(node -v | cut -d. -f1 | tr -d v)
@@ -141,7 +141,7 @@ log_info "Node.js $(node -v), npm $(npm -v)"
 # Step 3: Configure Mosquitto
 # =============================================================================
 
-log_info "[3/8] Configuring Mosquitto with WebSocket support..."
+log_info "[3/9] Configuring Mosquitto with WebSocket support..."
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf" /etc/mosquitto/conf.d/feeldscope.conf
 
 # Disable the default listener if it conflicts
@@ -160,7 +160,7 @@ log_info "Mosquitto configured (MQTT :1883, WebSocket :9001)"
 # Step 4: Deploy FEELDSCOPE files
 # =============================================================================
 
-log_info "[4/8] Deploying FEELDSCOPE files to $FEELDSCOPE_DIR..."
+log_info "[4/9] Deploying FEELDSCOPE files to $FEELDSCOPE_DIR..."
 mkdir -p "$FEELDSCOPE_DIR"
 
 # Copy Python scripts
@@ -201,58 +201,167 @@ chown -R pi:pi "$FEELDSCOPE_DIR"
 log_info "Files deployed to $FEELDSCOPE_DIR"
 
 # =============================================================================
-# Step 5: Ensure rtlsdr-ogn.conf has HTTP section
+# Step 5: Install RTL-SDR Blog V4 driver (replaces stock librtlsdr 0.6.0)
+# =============================================================================
+#
+# The OGN official image ships with librtlsdr 0.6.0 which does NOT support
+# RTL-SDR Blog V4 properly (PLL fails to lock at 922 MHz Japan FLARM band,
+# Live Time stays at 0%, no aircraft are decoded).
+#
+# The rtl-sdr-blog driver fork is a drop-in replacement that fully supports
+# V4 and remains compatible with V3. We always install it.
+#
+# Reference: https://github.com/rtlsdrblog/rtl-sdr-blog
 # =============================================================================
 
-log_info "[5/8] Configuring OGN HTTP interface..."
+log_info "[5/9] Installing RTL-SDR Blog V4 driver..."
+
+# Detect SDR variant for logging only
+SDR_VARIANT="unknown"
+if command -v rtl_test &>/dev/null; then
+    if rtl_test 2>&1 | grep -q "Blog V4"; then
+        SDR_VARIANT="V4"
+    elif rtl_test 2>&1 | grep -q "RTL2832"; then
+        SDR_VARIANT="V3 or other"
+    fi
+fi
+log_info "Detected SDR: ${SDR_VARIANT}"
+
+# Skip rebuild if newer driver already installed
+if [ -f /usr/local/lib/arm-linux-gnueabihf/librtlsdr.so.0 ] \
+   && /usr/local/bin/rtl_test 2>&1 | grep -q "RTL-SDR Blog V4 Detected"; then
+    log_info "RTL-SDR Blog driver already installed at /usr/local/lib"
+else
+    # Stop OGN to release the SDR before linking against the new lib
+    if [ -f /etc/init.d/rtlsdr-ogn ]; then
+        service rtlsdr-ogn stop 2>/dev/null || true
+        sleep 2
+    fi
+
+    cd /tmp
+    rm -rf rtl-sdr-blog
+    if ! git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog.git 2>&1 | tail -2; then
+        log_error "Failed to clone rtl-sdr-blog. Check network."
+        exit 1
+    fi
+    cd rtl-sdr-blog
+    mkdir -p build && cd build
+    cmake ../ -DINSTALL_UDEV_RULES=ON -DDETACH_KERNEL_DRIVER=ON >/dev/null 2>&1
+    make -j2 >/dev/null 2>&1
+    make install >/dev/null 2>&1
+    cp ../rtl-sdr.rules /etc/udev/rules.d/
+    ldconfig
+    udevadm control --reload-rules
+    udevadm trigger
+    log_info "RTL-SDR Blog driver installed (supports V3 and V4)"
+fi
+
+# Verify ogn-rf will pick up the new lib
+if ldd /home/pi/rtlsdr-ogn/ogn-rf 2>/dev/null | grep -q "/usr/local/lib.*librtlsdr"; then
+    log_info "ogn-rf is now linked against the new driver"
+else
+    log_warn "ogn-rf may still link the old librtlsdr (will take effect after restart)"
+fi
+
+# =============================================================================
+# Step 6: Generate / verify OGN config (Japan FLARM-optimized)
+# =============================================================================
+#
+# The stock config-manager generates a config with:
+#   - GSM section (922.4 MHz) but no RF.OGN section
+#     → ogn-rf falls back to European default 868.8 MHz (wrong for Japan)
+#   - GainMode that may cause AGC oscillation with V4
+#
+# We replace it with a Japan-optimized config that:
+#   - Sets FreqPlan = 7 (Japan, 922.4 MHz center, 50 kHz × 3 ch FLARM)
+#   - Sets a low initial Gain (7.7 dB) — AGC walks up to ~32 dB based on noise.
+#     A high initial Gain (49.6) caused decode failures in field tests with V4.
+#   - Wider ScanMargin (80 kHz) to cover all 3 Japan FLARM channels
+#   - Lower DetectSNR (6 dB) for better long-range pickup
+#   - Adds HTTP section so ogn-rf/ogn-decode expose status pages on :8082/:8083
+# =============================================================================
+
+log_info "[6/9] Configuring OGN for Japan FLARM..."
 
 OGN_CONF="/home/pi/rtlsdr-ogn.conf"
 OGN_CONF_BOOT="/boot/rtlsdr-ogn.conf"
 
-if [ -f "$OGN_CONF_BOOT" ]; then
-    # /boot/rtlsdr-ogn.conf already exists (config-manager is bypassed)
-    OGN_CONF_SRC="$OGN_CONF_BOOT"
-elif [ -f "$OGN_CONF" ]; then
-    OGN_CONF_SRC="$OGN_CONF"
-else
-    log_warn "rtlsdr-ogn.conf not found. OGN config-manager may not have run yet."
-    log_warn "Skipping HTTP config. You may need to rerun this installer after first OGN boot."
-    OGN_CONF_SRC=""
+# Pull receiver name and position from /boot/OGN-receiver.conf if user already set them
+EXISTING_NAME=""
+EXISTING_LAT=""
+EXISTING_LON=""
+if [ -f /boot/OGN-receiver.conf ]; then
+    EXISTING_NAME=$(grep -i '^ReceiverName=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
+    EXISTING_LAT=$(grep -i '^Latitude=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
+    EXISTING_LON=$(grep -i '^Longitude=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
+fi
+RECV_NAME="${EXISTING_NAME:-NEWRECV01}"
+LAT_VAL="${EXISTING_LAT:-35.6977}"
+LON_VAL="${EXISTING_LON:-139.7548}"
+
+# Check whether existing /boot/rtlsdr-ogn.conf already has the Japan-tuned settings
+NEED_REGEN=true
+if [ -f "$OGN_CONF_BOOT" ] \
+   && grep -q "FreqPlan = 7" "$OGN_CONF_BOOT" \
+   && grep -q "RF.OGN\|RF:OGN\|OGN:" "$OGN_CONF_BOOT" \
+   && grep -q "HTTP:" "$OGN_CONF_BOOT"; then
+    NEED_REGEN=false
+    log_info "Existing $OGN_CONF_BOOT already has Japan FLARM config — preserved"
 fi
 
-if [ -n "$OGN_CONF_SRC" ]; then
-    if grep -q "HTTP:" "$OGN_CONF_SRC"; then
-        log_info "HTTP section already present in $OGN_CONF_SRC"
-    else
-        log_info "Adding HTTP section to OGN config..."
-        # Append HTTP section (Port 8082 for ogn-rf; ogn-decode auto-uses 8083)
-        cat >> "$OGN_CONF_SRC" <<'OGNEOF'
+if [ "$NEED_REGEN" = true ]; then
+    if [ -f "$OGN_CONF_BOOT" ]; then
+        cp "$OGN_CONF_BOOT" "${OGN_CONF_BOOT}.bak.$(date +%Y%m%d-%H%M%S)"
+        log_info "Backed up old config to ${OGN_CONF_BOOT}.bak.*"
+    fi
+    cat > "$OGN_CONF_BOOT" <<OGNEOF
+RF:
+{ FreqPlan   = 7;        # 7 = Japan (922.4 MHz FLARM band, 50 kHz x 3 ch)
+  FreqCorr   = 0;
+  SampleRate = 2.0;
+
+  OGN:
+  { GainMode = 0;
+    Gain     = 7.7;      # Initial gain — AGC auto-adjusts up based on MinNoise/MaxNoise.
+                         # Low starting value avoids ADC saturation when test FLARMs are nearby (<5m).
+                         # For long-range deployment, AGC will walk this up automatically.
+  };
+};
+
+Demodulator:
+{ DetectSNR  = 6.0;      # Lower SNR threshold for weak signals
+  ScanMargin = 80.0;     # Wider margin to cover 3 Japan FLARM channels (922.351/.402/.449 MHz)
+};
+
+Position:
+{ Latitude  = ${LAT_VAL};
+  Longitude = ${LON_VAL};
+  Altitude  = 23;
+};
+
+APRS:
+{ Call = "${RECV_NAME}";
+};
 
 HTTP:
 { Port = 8082;
-} ;
+};
 OGNEOF
-        log_info "HTTP section added"
-    fi
-    # Ensure /boot copy exists so config-manager is bypassed on future boots
-    if [ "$OGN_CONF_SRC" != "$OGN_CONF_BOOT" ]; then
-        cp "$OGN_CONF_SRC" "$OGN_CONF_BOOT"
-        log_info "Copied to $OGN_CONF_BOOT (bypasses config-manager)"
-    fi
-    # Also sync to /home/pi for immediate use
-    cp "$OGN_CONF_BOOT" "$OGN_CONF"
-
-    # Restart OGN to apply HTTP config
-    log_info "Restarting OGN receiver..."
-    service rtlsdr-ogn restart || log_warn "Failed to restart OGN. You may need to reboot."
-    sleep 5
+    log_info "Wrote new $OGN_CONF_BOOT (FreqPlan=Japan, Gain auto-AGC, Recv=${RECV_NAME})"
 fi
 
+# Mirror to /home/pi (init.d copies /boot to /home/pi on every start anyway)
+cp "$OGN_CONF_BOOT" "$OGN_CONF"
+
+log_info "Restarting OGN receiver..."
+service rtlsdr-ogn restart || log_warn "Failed to restart OGN. You may need to reboot."
+sleep 5
+
 # =============================================================================
-# Step 6: Build webapp
+# Step 7: Build webapp
 # =============================================================================
 
-log_info "[6/8] Building FEELDSCOPE webapp (this may take a few minutes)..."
+log_info "[7/9] Building FEELDSCOPE webapp (this may take a few minutes)..."
 cd "$FEELDSCOPE_DIR/webapp"
 # Remove stale node_modules to ensure clean install with correct deps
 rm -rf node_modules package-lock.json .next
@@ -266,10 +375,10 @@ fi
 log_info "Webapp built successfully"
 
 # =============================================================================
-# Step 6: Install systemd services
+# Step 8: Install systemd services
 # =============================================================================
 
-log_info "[7/8] Installing systemd services..."
+log_info "[8/9] Installing systemd services..."
 cp "$SCRIPT_DIR/config/ogn-mqtt.service"          /etc/systemd/system/
 cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
@@ -278,10 +387,10 @@ cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 systemctl daemon-reload
 
 # =============================================================================
-# Step 7: Enable and start services
+# Step 9: Enable and start services
 # =============================================================================
 
-log_info "[8/8] Starting FEELDSCOPE services..."
+log_info "[9/9] Starting FEELDSCOPE services..."
 
 # Core services: ogn-mqtt + webapp (always enabled)
 systemctl enable ogn-mqtt.service
