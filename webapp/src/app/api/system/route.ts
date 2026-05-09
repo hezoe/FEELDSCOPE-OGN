@@ -404,12 +404,13 @@ export async function POST(request: Request) {
         }
 
         // Not running: update systemd override and start
+        const ridForSim = (await detectReceiverId()).replace(/'/g, "");
         const overrideDir = "/etc/systemd/system/igc-simulator.service.d";
         await execAsync(`sudo -n mkdir -p ${overrideDir}`);
         await execAsync(`sudo -n bash -c 'cat > ${overrideDir}/speed.conf << EOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --dir ${FEELDSCOPE_DIR}/testdata
+ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --receiver-id ${ridForSim} --dir ${FEELDSCOPE_DIR}/testdata
 EOF'`);
         await execAsync("sudo -n systemctl daemon-reload");
         await execAsync("sudo -n systemctl start igc-simulator");

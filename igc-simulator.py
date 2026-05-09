@@ -33,7 +33,10 @@ MQTT_BASE_TOPIC = "ogn"
 
 
 def _detect_receiver_id():
-    """Auto-detect receiver ID from OGN configuration files."""
+    """Auto-detect receiver ID from env var or OGN configuration files."""
+    env_id = os.environ.get("FEELDSCOPE_RECEIVER_ID", "").strip()
+    if env_id:
+        return env_id
     try:
         with open("/boot/OGN-receiver.conf", "r") as f:
             for line in f:
