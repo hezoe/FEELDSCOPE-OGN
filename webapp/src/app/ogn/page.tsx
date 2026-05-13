@@ -53,11 +53,13 @@ export default function OgnPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
+  // 編集中の config が定期取得で上書きされないよう、初回ロード + 保存/再起動後のみ config を更新する。
+  // status は live 値なので 5秒毎に再取得して良い。
+  const fetchAll = useCallback(async (refreshConfig: boolean = true) => {
     try {
       const res = await fetch("/api/ogn");
       const data = await res.json();
-      setConfig(data.config);
+      if (refreshConfig) setConfig(data.config);
       setStatus(data.status);
     } catch {
       setError("OGN情報の取得に失敗しました");
@@ -65,8 +67,8 @@ export default function OgnPage() {
   }, []);
 
   useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 5000);
+    fetchAll(true);
+    const interval = setInterval(() => fetchAll(false), 5000);
     return () => clearInterval(interval);
   }, [fetchAll]);
 
