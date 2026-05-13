@@ -16,6 +16,7 @@ interface OgnConfig {
   detectSNR: number;
   enableBias: boolean;
   ognBinaryUrl: string;
+  enableCoreOGNTeamRemoteAdmin: boolean;
 }
 
 interface OgnStatus {
@@ -285,6 +286,23 @@ export default function OgnPage() {
               <strong style={{ color: "var(--color-warning)" }}>警告:</strong>
               Bias-T 対応のアンテナ用LNA等を使用する場合のみ有効化してください。
               通常のアンテナで有効にすると RTL-SDRドングルが故障する恐れがあります。
+            </p>
+          </div>
+
+          <div className="mt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config?.enableCoreOGNTeamRemoteAdmin ?? false}
+                onChange={(e) => update("enableCoreOGNTeamRemoteAdmin", e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium">OGN Core チームによるリモート管理を有効にする</span>
+            </label>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+              OGN Core チームの保守作業 (公式アップデート・障害調査等) のためのリモートアクセスを許可します。
+              既定では <strong>無効</strong>。必要な場合のみオンにしてください。
+              （<code>/boot/OGN-receiver.conf</code> の <code>EnableCoreOGNTeamRemoteAdmin</code>）
             </p>
           </div>
         </Card>
