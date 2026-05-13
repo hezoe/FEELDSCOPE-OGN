@@ -24,6 +24,7 @@ interface OgnConfig {
   // From /boot/OGN-receiver.conf (boot config / install)
   enableBias: boolean;         // enableBias="1"
   ognBinaryUrl: string;        // OGNBINARYURL
+  enableCoreOGNTeamRemoteAdmin: boolean; // EnableCoreOGNTeamRemoteAdmin="true"
 }
 
 interface OgnStatus {
@@ -92,6 +93,7 @@ async function getOgnConfig(): Promise<OgnConfig> {
     detectSNR: parseFloat(extractField(rtl, /DetectSNR\s*=\s*([0-9.\-]+)/, "3.0")),
     enableBias: /^enableBias\s*=\s*"1"/m.test(recv),
     ognBinaryUrl: extractField(recv, /OGNBINARYURL\s*=\s*"([^"]*)"/),
+    enableCoreOGNTeamRemoteAdmin: /^EnableCoreOGNTeamRemoteAdmin\s*=\s*"true"/mi.test(recv),
   };
 }
 
@@ -164,6 +166,14 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
       recv = recv.replace(/^#?\s*enableBias=".*"/m, `enableBias="${c.enableBias ? "1" : "0"}"`);
       if (c.ognBinaryUrl) {
         recv = recv.replace(/^OGNBINARYURL=".*"/m, `OGNBINARYURL="${c.ognBinaryUrl}"`);
+      }
+      // EnableCoreOGNTeamRemoteAdmin: replace if line exists, otherwise append (default OFF)
+      const remoteAdminLine = `EnableCoreOGNTeamRemoteAdmin="${c.enableCoreOGNTeamRemoteAdmin ? "true" : "false"}"`;
+      if (/^#?\s*EnableCoreOGNTeamRemoteAdmin\s*=/mi.test(recv)) {
+        recv = recv.replace(/^#?\s*EnableCoreOGNTeamRemoteAdmin\s*=.*$/mi, remoteAdminLine);
+      } else {
+        if (!recv.endsWith("\n")) recv += "\n";
+        recv += remoteAdminLine + "\n";
       }
       const tmp2 = "/tmp/OGN-receiver.conf.new";
       await writeFile(tmp2, recv);
