@@ -187,6 +187,16 @@ if [ -f "$SCRIPT_DIR/installer/catvpn-enroll.sh" ]; then
     log_info "  Deployed /usr/local/bin/catvpn-enroll"
 fi
 
+# 4h. Zero-touch auto-claim: VPS側にこの hostname 用の保留トークンがあれば自動加入
+#     - 既に登録済 (wg0.conf 存在) なら catvpn-enroll 内部で即exit
+#     - 保留トークンが無ければ 404 で正常終了
+#     - ネットワーク不通でもエラーは飲み込む (アップデート全体は成功扱い)
+if [ -x /usr/local/bin/catvpn-enroll ] && [ ! -f /etc/wireguard/wg0.conf ]; then
+    log_info "  Attempting CATVPN auto-claim for hostname '$(hostname)'..."
+    /usr/local/bin/catvpn-enroll --auto 2>&1 | sed 's/^/    /' || \
+        log_warn "  auto-claim skipped (no pending token or error; continuing)"
+fi
+
 # 4f. Restart wg-quick@wg0 if conf was modified
 if [ "$NEED_WG_RESTART" = "true" ] && systemctl is-active wg-quick@wg0 >/dev/null 2>&1; then
     log_info "  Restarting wg-quick@wg0 to apply DNS removal"

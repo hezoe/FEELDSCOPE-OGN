@@ -4,21 +4,31 @@
 # 1コマンドで WireGuard + SSH CA セットアップを完了する。
 #
 # Usage:
-#   sudo ./catvpn-enroll.sh <TOKEN> [API_URL]
+#   sudo ./catvpn-enroll.sh <TOKEN>           # トークンモード (admin手渡し)
+#   sudo ./catvpn-enroll.sh --auto            # 自動モード (hostname経由でVPSの保留トークンを使用)
+#   sudo ./catvpn-enroll.sh <TOKEN> <API_URL> # API URLを上書き
 #
 # Defaults:
 #   API_URL = https://cathub.ezoe.net
 #
-# 冪等: 同じトークンで複数回実行できない（API側でトークンを失効させる）が、
-# WireGuard / sshd の設定変更部分は重複チェック付き。
+# 冪等: 既に /etc/wireguard/wg0.conf がある場合は何もせず終了 (0で正常終了)。
 
 set -euo pipefail
 
-TOKEN="${1:-}"
-API="${2:-https://cathub.ezoe.net}"
+MODE=""
+TOKEN=""
+API="https://cathub.ezoe.net"
 
-if [ -z "$TOKEN" ]; then
+if [ "${1:-}" = "--auto" ]; then
+    MODE="auto"
+    API="${2:-$API}"
+elif [ -n "${1:-}" ]; then
+    MODE="token"
+    TOKEN="$1"
+    API="${2:-$API}"
+else
     echo "Usage: $0 <TOKEN> [API_URL]" >&2
+    echo "       $0 --auto [API_URL]" >&2
     exit 1
 fi
 
@@ -29,6 +39,12 @@ fi
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 err() { echo "ERROR: $*" >&2; }
+
+# ---------- 0. Idempotency: skip if already enrolled ----------
+if [ -f /etc/wireguard/wg0.conf ] && grep -q "^Address" /etc/wireguard/wg0.conf; then
+    log "Already enrolled (/etc/wireguard/wg0.conf exists). Nothing to do."
+    exit 0
+fi
 
 # ---------- 1. prerequisites ----------
 log "[1/8] Checking prerequisites..."
@@ -79,7 +95,36 @@ BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE" "$RESP_FILE" 2>/dev/null || true' EXIT
 RESP_FILE=$(mktemp)
 
-python3 -c "
+SELF_HOSTNAME=$(hostname)
+
+if [ "$MODE" = "auto" ]; then
+    # auto モード: hostname を渡して保留中のトークンを VPS側で照合
+    python3 -c "
+import json
+print(json.dumps({
+    'hostname': '$SELF_HOSTNAME',
+    'wg_pubkey': '$WG_PUB',
+    'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
+}))
+" > "$BODY_FILE"
+
+    HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/claim" \
+        -H "Content-Type: application/json" \
+        --data-binary "@$BODY_FILE")
+
+    if [ "$HTTP_CODE" = "404" ]; then
+        log "  No pending enrollment for hostname '$SELF_HOSTNAME'. Skipping (this is normal)."
+        exit 0
+    fi
+    if [ "$HTTP_CODE" != "200" ]; then
+        err "claim API returned HTTP $HTTP_CODE"
+        cat "$RESP_FILE" >&2
+        echo >&2
+        exit 1
+    fi
+else
+    # token モード: 既存の /enroll を使用
+    python3 -c "
 import json
 print(json.dumps({
     'wg_pubkey': '$WG_PUB',
@@ -87,16 +132,17 @@ print(json.dumps({
 }))
 " > "$BODY_FILE"
 
-HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/enroll" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    --data-binary "@$BODY_FILE")
+    HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/enroll" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        --data-binary "@$BODY_FILE")
 
-if [ "$HTTP_CODE" != "200" ]; then
-    err "API returned HTTP $HTTP_CODE"
-    cat "$RESP_FILE" >&2
-    echo >&2
-    exit 1
+    if [ "$HTTP_CODE" != "200" ]; then
+        err "API returned HTTP $HTTP_CODE"
+        cat "$RESP_FILE" >&2
+        echo >&2
+        exit 1
+    fi
 fi
 
 # ---------- 5. レスポンス解析 ----------
