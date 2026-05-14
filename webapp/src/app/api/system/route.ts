@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile, writeFile } from "fs/promises";
+import { existsSync } from "fs";
 
 const execAsync = promisify(exec);
 
@@ -549,6 +550,43 @@ EOF'`);
             ? "リモートサポート(CATVPN)を有効にしました。"
             : "リモートサポート(CATVPN)を無効にしました。外部からの保守接続は遮断されました。",
         });
+      }
+
+      case "catvpn-enroll": {
+        const token = (body.token || "").trim();
+        // catvpn API のトークン仕様 (16進32文字)
+        if (!/^[a-f0-9]{32}$/i.test(token)) {
+          return NextResponse.json(
+            { error: "不正なトークン形式です。管理者から発行された32桁の16進文字列を入力してください。" },
+            { status: 400 }
+          );
+        }
+        if (!existsSync("/usr/local/bin/catvpn-enroll")) {
+          return NextResponse.json(
+            { error: "登録スクリプトが見つかりません。先にシステムアップデートを実行してください。" },
+            { status: 500 }
+          );
+        }
+        try {
+          const { stdout } = await execAsync(
+            `sudo -n /usr/local/bin/catvpn-enroll ${token} 2>&1`,
+            { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 }
+          );
+          return NextResponse.json({
+            ok: true,
+            message: "CATVPNに登録しました。リモートサポートが有効になりました。",
+            log: stdout,
+          });
+        } catch (e: unknown) {
+          const err = e as { stdout?: string; stderr?: string; message?: string };
+          return NextResponse.json(
+            {
+              error: "登録に失敗しました。トークンの有効期限切れ・既使用・ネットワーク不通などをご確認ください。",
+              log: (err.stdout || "") + (err.stderr || "") || err.message || "",
+            },
+            { status: 500 }
+          );
+        }
       }
 
       case "auto-reboot-save": {
