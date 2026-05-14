@@ -139,6 +139,49 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
   return { current, latest, updateAvailable };
 }
 
+// ── Remote support (CATVPN / wg-quick@wg0) helpers ──
+
+interface RemoteSupportStatus {
+  configured: boolean;  // /etc/wireguard/wg0.conf exists
+  enabled: boolean;     // systemctl is-enabled wg-quick@wg0
+  active: boolean;      // systemctl is-active wg-quick@wg0
+}
+
+async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
+  // /etc/wireguard/wg0.conf は root:root 0600 が普通なので sudo で存在確認する
+  let configured = false;
+  try {
+    await execAsync("sudo -n test -f /etc/wireguard/wg0.conf");
+    configured = true;
+  } catch { /* not configured or no sudo */ }
+
+  let enabled = false;
+  try {
+    const { stdout } = await execAsync("systemctl is-enabled wg-quick@wg0 2>/dev/null || true");
+    enabled = stdout.trim() === "enabled";
+  } catch { /* ignore */ }
+
+  let active = false;
+  try {
+    const { stdout } = await execAsync("systemctl is-active wg-quick@wg0 2>/dev/null || true");
+    active = stdout.trim() === "active";
+  } catch { /* ignore */ }
+
+  return { configured, enabled, active };
+}
+
+async function setRemoteSupport(enable: boolean): Promise<void> {
+  const status = await getRemoteSupportStatus();
+  if (!status.configured) {
+    throw new Error("CATVPN未登録: /etc/wireguard/wg0.conf がありません。管理者にお問い合わせください。");
+  }
+  if (enable) {
+    await execAsync("sudo -n systemctl enable --now wg-quick@wg0");
+  } else {
+    await execAsync("sudo -n systemctl disable --now wg-quick@wg0");
+  }
+}
+
 // ── Auto-reboot (cron) helpers ──
 
 interface AutoRebootConfig {
@@ -354,12 +397,13 @@ export async function GET() {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const [adsbConfig, airfieldConfig, network, version, autoReboot] = await Promise.all([
+  const [adsbConfig, airfieldConfig, network, version, autoReboot, remoteSupport] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
     getNetworkStatus(),
     getVersionInfo(),
     getAutoRebootConfig(),
+    getRemoteSupportStatus(),
   ]);
 
   return NextResponse.json({
@@ -375,6 +419,7 @@ export async function GET() {
     network,
     version,
     auto_reboot: autoReboot,
+    remote_support: remoteSupport,
   });
 }
 
@@ -493,6 +538,17 @@ EOF'`);
           return NextResponse.json({ error: e instanceof Error ? e.message : "ホスト名設定に失敗しました" }, { status: 400 });
         }
         return NextResponse.json({ ok: true, message: `ホスト名を ${name} に設定しました。${name}.local でアクセス可能になります。` });
+      }
+
+      case "remote-support-save": {
+        const enable = !!body.enabled;
+        await setRemoteSupport(enable);
+        return NextResponse.json({
+          ok: true,
+          message: enable
+            ? "リモートサポート(CATVPN)を有効にしました。"
+            : "リモートサポート(CATVPN)を無効にしました。外部からの保守接続は遮断されました。",
+        });
       }
 
       case "auto-reboot-save": {

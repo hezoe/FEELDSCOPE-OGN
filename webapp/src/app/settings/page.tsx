@@ -40,6 +40,7 @@ interface SystemStatus {
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
+  remote_support: { configured: boolean; enabled: boolean; active: boolean } | null;
 }
 
 export default function SettingsPage() {
@@ -55,6 +56,10 @@ export default function SettingsPage() {
   const [autoRebootMinute, setAutoRebootMinute] = useState(0);
   const [autoRebootSaving, setAutoRebootSaving] = useState(false);
   const autoRebootSynced = useRef(false);
+  // Remote support (CATVPN)
+  const [remoteSupportEnabled, setRemoteSupportEnabled] = useState(true); // default ON
+  const [remoteSupportSaving, setRemoteSupportSaving] = useState(false);
+  const remoteSupportSynced = useRef(false);
   // System update
   const [updating, setUpdating] = useState(false);
   const [updateLog, setUpdateLog] = useState<string | null>(null);
@@ -127,6 +132,13 @@ export default function SettingsPage() {
     setAutoRebootEnabled(status.auto_reboot.enabled);
     setAutoRebootHour(status.auto_reboot.hour);
     setAutoRebootMinute(status.auto_reboot.minute);
+  }, [status]);
+
+  // Sync remote-support setting from server (once)
+  useEffect(() => {
+    if (remoteSupportSynced.current || !status?.remote_support) return;
+    remoteSupportSynced.current = true;
+    setRemoteSupportEnabled(status.remote_support.enabled);
   }, [status]);
 
   // Sync network settings from server
@@ -1346,6 +1358,73 @@ export default function SettingsPage() {
                 rootのcrontabに <code>{autoRebootEnabled ? `${autoRebootMinute} ${autoRebootHour} * * * /sbin/reboot` : "（再起動行を削除）"}</code> を設定します。
                 毎日決まった時刻にシステム全体を再起動することで、メモリリークや一時ファイルの蓄積を防ぎます。
               </p>
+            </div>
+          </Card>
+
+          {/* Remote Support (CATVPN) */}
+          <Card title="リモートサポート" helpId="settings-remote-support">
+            <div className="space-y-3">
+              {status?.remote_support && !status.remote_support.configured ? (
+                <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                  CATVPN未登録のため、リモートサポートは利用できません。
+                </p>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={remoteSupportEnabled}
+                      onChange={(e) => setRemoteSupportEnabled(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">リモートサポートを許可する</span>
+                  </label>
+
+                  <div className="text-xs flex items-center gap-2" style={{ color: "var(--color-text-secondary)" }}>
+                    <span>現在の状態:</span>
+                    {status?.remote_support?.active ? (
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>🟢 接続中</span>
+                    ) : (
+                      <span>⚫ 停止中</span>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      setRemoteSupportSaving(true);
+                      setError(null);
+                      try {
+                        const res = await fetch("/api/system", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: "remote-support-save",
+                            enabled: remoteSupportEnabled,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        remoteSupportSynced.current = false;
+                        await fetchStatus();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "リモートサポート設定の保存に失敗しました");
+                      }
+                      setRemoteSupportSaving(false);
+                    }}
+                    disabled={remoteSupportSaving}
+                    className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                    style={{ background: "var(--color-accent)", color: "#fff", opacity: remoteSupportSaving ? 0.5 : 1, cursor: remoteSupportSaving ? "wait" : "pointer" }}
+                  >
+                    {remoteSupportSaving ? "適用中..." : "適用"}
+                  </button>
+
+                  <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                    ON: 管理者が CATVPN(暗号化トンネル) 経由でリモート診断・保守できます。<br />
+                    OFF: WireGuardトンネルを停止し、外部からの保守接続を完全に遮断します。<br />
+                    (本機の地図表示・受信動作・LAN内アクセスには影響しません)
+                  </p>
+                </>
+              )}
             </div>
           </Card>
 
