@@ -60,6 +60,10 @@ export default function SettingsPage() {
   const [remoteSupportEnabled, setRemoteSupportEnabled] = useState(true); // default ON
   const [remoteSupportSaving, setRemoteSupportSaving] = useState(false);
   const remoteSupportSynced = useRef(false);
+  // CATVPN enrollment
+  const [enrollToken, setEnrollToken] = useState("");
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollLog, setEnrollLog] = useState<string | null>(null);
   // System update
   const [updating, setUpdating] = useState(false);
   const [updateLog, setUpdateLog] = useState<string | null>(null);
@@ -1365,9 +1369,69 @@ export default function SettingsPage() {
           <Card title="リモートサポート" helpId="settings-remote-support">
             <div className="space-y-3">
               {status?.remote_support && !status.remote_support.configured ? (
-                <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                  CATVPN未登録のため、リモートサポートは利用できません。
-                </p>
+                <>
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    CATVPN未登録です。管理者から発行された<strong>登録トークン</strong>を入力すると、
+                    リモートサポートを有効化できます。
+                  </p>
+                  <input
+                    type="text"
+                    value={enrollToken}
+                    onChange={(e) => setEnrollToken(e.target.value.trim())}
+                    placeholder="32桁の16進トークン"
+                    className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+                  />
+                  <div className="flex gap-3 items-center">
+                    <button
+                      onClick={async () => {
+                        if (!/^[a-f0-9]{32}$/i.test(enrollToken)) {
+                          setError("トークン形式が不正です (32桁の16進数)");
+                          return;
+                        }
+                        if (!confirm("CATVPNに登録します。よろしいですか?\n登録後はリモートサポート用の保守通信が許可されます。")) return;
+                        setEnrolling(true);
+                        setError(null);
+                        setEnrollLog(null);
+                        try {
+                          const res = await fetch("/api/system", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "catvpn-enroll", token: enrollToken }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) {
+                            setError(data.error || "登録に失敗しました");
+                            setEnrollLog(data.log || null);
+                          } else {
+                            setEnrollLog(data.log || null);
+                            setEnrollToken("");
+                            remoteSupportSynced.current = false;
+                            await fetchStatus();
+                          }
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "登録通信に失敗しました");
+                        }
+                        setEnrolling(false);
+                      }}
+                      disabled={enrolling || !enrollToken}
+                      className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                      style={{ background: "var(--color-accent)", color: "#fff", opacity: (enrolling || !enrollToken) ? 0.5 : 1, cursor: enrolling ? "wait" : "pointer" }}
+                    >
+                      {enrolling ? "登録中..." : "登録する"}
+                    </button>
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      登録には10〜20秒程度かかります
+                    </span>
+                  </div>
+                  {enrollLog && (
+                    <pre className="text-xs rounded p-2 max-h-48 overflow-auto" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>{enrollLog}</pre>
+                  )}
+                  <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                    トークンは管理者にお問い合わせください。
+                    登録すると WireGuard + SSH CA が自動セットアップされ、有効/無効の切替が可能になります。
+                  </p>
+                </>
               ) : (
                 <>
                   <label className="flex items-center gap-2 cursor-pointer">

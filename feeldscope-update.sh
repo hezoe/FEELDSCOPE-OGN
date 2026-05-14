@@ -180,6 +180,13 @@ systemctl enable --now chrony 2>/dev/null || true
 systemctl enable fake-hwclock 2>/dev/null || true
 [ -x /sbin/fake-hwclock ] && /sbin/fake-hwclock save 2>/dev/null || true
 
+# 4g. Deploy CATVPN enroll script to /usr/local/bin/catvpn-enroll
+#     (Web UIから sudo -n /usr/local/bin/catvpn-enroll <TOKEN> で呼び出せる)
+if [ -f "$SCRIPT_DIR/installer/catvpn-enroll.sh" ]; then
+    install -m 755 "$SCRIPT_DIR/installer/catvpn-enroll.sh" /usr/local/bin/catvpn-enroll
+    log_info "  Deployed /usr/local/bin/catvpn-enroll"
+fi
+
 # 4f. Restart wg-quick@wg0 if conf was modified
 if [ "$NEED_WG_RESTART" = "true" ] && systemctl is-active wg-quick@wg0 >/dev/null 2>&1; then
     log_info "  Restarting wg-quick@wg0 to apply DNS removal"
