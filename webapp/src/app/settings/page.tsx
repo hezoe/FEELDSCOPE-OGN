@@ -40,7 +40,7 @@ interface SystemStatus {
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
-  remote_support: { configured: boolean; enabled: boolean; active: boolean } | null;
+  remote_support: { configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string } | null;
 }
 
 export default function SettingsPage() {
@@ -1443,6 +1443,21 @@ export default function SettingsPage() {
                     />
                     <span className="text-sm font-medium">リモートサポートを許可する</span>
                   </label>
+
+                  {status?.remote_support?.catvpn_hostname && (
+                    <div className="rounded p-2 text-xs space-y-1" style={{ background: "var(--color-bg-secondary)" }}>
+                      <div>
+                        <span style={{ color: "var(--color-text-secondary)" }}>管理者に伝えるホスト名:</span>{" "}
+                        <code className="font-mono font-bold select-all">{status.remote_support.catvpn_hostname}</code>
+                      </div>
+                      {status.remote_support.assigned_ip && (
+                        <div>
+                          <span style={{ color: "var(--color-text-secondary)" }}>CATVPN IP:</span>{" "}
+                          <code className="font-mono">{status.remote_support.assigned_ip}</code>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="text-xs flex items-center gap-2" style={{ color: "var(--color-text-secondary)" }}>
                     <span>現在の状態:</span>
