@@ -143,9 +143,11 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
 // ── Remote support (CATVPN / wg-quick@wg0) helpers ──
 
 interface RemoteSupportStatus {
-  configured: boolean;  // /etc/wireguard/wg0.conf exists
-  enabled: boolean;     // systemctl is-enabled wg-quick@wg0
-  active: boolean;      // systemctl is-active wg-quick@wg0
+  configured: boolean;       // /etc/wireguard/wg0.conf exists
+  enabled: boolean;          // systemctl is-enabled wg-quick@wg0
+  active: boolean;           // systemctl is-active wg-quick@wg0
+  catvpn_hostname?: string;  // FQDN like takikawa-01.feeldscope.wg (admin can ssh to this)
+  assigned_ip?: string;      // CATVPN-assigned IP (e.g., 10.66.20.12)
 }
 
 async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
@@ -168,7 +170,21 @@ async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
     active = stdout.trim() === "active";
   } catch { /* ignore */ }
 
-  return { configured, enabled, active };
+  // /etc/catvpn/identity に CATVPN固有ホスト名 (例: feeldscope-1a2b3c.feeldscope.wg) と
+  // 割当IPが記録されている。これは catvpn-enroll.sh が登録時に書き込む。
+  let catvpn_hostname: string | undefined;
+  let assigned_ip: string | undefined;
+  try {
+    const data = await readFile("/etc/catvpn/identity", "utf-8");
+    for (const line of data.split("\n")) {
+      const m = line.match(/^(\w+)=(.*)$/);
+      if (!m) continue;
+      if (m[1] === "hostname") catvpn_hostname = m[2].trim();
+      if (m[1] === "assigned_ip") assigned_ip = m[2].trim();
+    }
+  } catch { /* not enrolled yet */ }
+
+  return { configured, enabled, active, catvpn_hostname, assigned_ip };
 }
 
 async function setRemoteSupport(enable: boolean): Promise<void> {

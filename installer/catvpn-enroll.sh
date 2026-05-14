@@ -97,8 +97,25 @@ RESP_FILE=$(mktemp)
 
 SELF_HOSTNAME=$(hostname)
 
+# CATVPN固有ホスト名: MAC 末尾6 hexから生成 (例: feeldscope-1a2b3c)
+# OSのhostname (feeldscope, takikawa-01 等) とは独立した CATVPN内アイデンティティ。
+derive_catvpn_hostname() {
+    local mac
+    for ifname in eth0 wlan0; do
+        if [ -f "/sys/class/net/$ifname/address" ]; then
+            mac=$(cat "/sys/class/net/$ifname/address" 2>/dev/null | tr -d ':' | tr 'A-Z' 'a-z')
+            if [ -n "$mac" ] && [ "$mac" != "000000000000" ]; then
+                echo "feeldscope-${mac: -6}"
+                return 0
+            fi
+        fi
+    done
+    echo "feeldscope-$(date +%s | sha256sum | cut -c1-6)"
+}
+
 if [ "$MODE" = "auto" ]; then
-    # auto モード: hostname を渡して保留中のトークンを VPS側で照合
+    # Step 1: 現在の hostname で /claim を試す (admin が事前にトークン発行している場合に一致)
+    log "  Step 1/2: trying /claim with current hostname '$SELF_HOSTNAME'..."
     python3 -c "
 import json
 print(json.dumps({
@@ -112,15 +129,33 @@ print(json.dumps({
         -H "Content-Type: application/json" \
         --data-binary "@$BODY_FILE")
 
-    if [ "$HTTP_CODE" = "404" ]; then
-        log "  No pending enrollment for hostname '$SELF_HOSTNAME'. Skipping (this is normal)."
-        exit 0
-    fi
-    if [ "$HTTP_CODE" != "200" ]; then
-        err "claim API returned HTTP $HTTP_CODE"
-        cat "$RESP_FILE" >&2
-        echo >&2
-        exit 1
+    if [ "$HTTP_CODE" = "200" ]; then
+        log "  /claim succeeded with current hostname"
+    else
+        # Step 2: 自動生成 hostname で /self-enroll に fallback
+        CATVPN_HOSTNAME=$(derive_catvpn_hostname)
+        log "  /claim returned $HTTP_CODE. Falling back to /self-enroll as '$CATVPN_HOSTNAME'..."
+        python3 -c "
+import json
+print(json.dumps({
+    'fleet': 'feeldscope',
+    'hostname': '$CATVPN_HOSTNAME',
+    'wg_pubkey': '$WG_PUB',
+    'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
+}))
+" > "$BODY_FILE"
+
+        HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/self-enroll" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$BODY_FILE")
+
+        if [ "$HTTP_CODE" != "200" ]; then
+            log "  /self-enroll also failed (HTTP $HTTP_CODE). Skipping auto-enrollment."
+            cat "$RESP_FILE" >&2
+            echo >&2
+            exit 0
+        fi
+        log "  /self-enroll succeeded"
     fi
 else
     # token モード: 既存の /enroll を使用
@@ -231,6 +266,17 @@ chown root:root /etc/ssh/user_ca.pub /etc/ssh/ssh_host_ed25519_key-cert.pub
 install -d -m 755 /etc/ssh/auth_principals
 echo "$CATVPN_PRINCIPAL_NAME" > "/etc/ssh/auth_principals/$CATVPN_SSH_USER"
 chmod 644 "/etc/ssh/auth_principals/$CATVPN_SSH_USER"
+
+# CATVPN identity を記録 (GUIで表示するため)
+install -d -m 755 /etc/catvpn
+cat > /etc/catvpn/identity <<EOF
+hostname=$CATVPN_HOSTNAME
+fleet=$CATVPN_FLEET
+assigned_ip=$CATVPN_ASSIGNED_IP
+ssh_user=$CATVPN_SSH_USER
+enrolled_at=$(date -Iseconds)
+EOF
+chmod 644 /etc/catvpn/identity
 
 # sshd_config 冪等追記
 if grep -qE "^[[:space:]]*(TrustedUserCAKeys|HostCertificate|AuthorizedPrincipalsFile)[[:space:]]" /etc/ssh/sshd_config; then

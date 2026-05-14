@@ -411,6 +411,25 @@ systemctl start feeldscope-webapp.service
 log_info "Services started"
 
 # =============================================================================
+# Step 10: CATVPN auto-enroll (zero-touch remote support)
+# =============================================================================
+
+log_info "[10/10] CATVPN auto-enrollment..."
+
+if [ -f "$SCRIPT_DIR/installer/catvpn-enroll.sh" ]; then
+    install -m 755 "$SCRIPT_DIR/installer/catvpn-enroll.sh" /usr/local/bin/catvpn-enroll
+    log_info "  Deployed /usr/local/bin/catvpn-enroll"
+
+    if [ ! -f /etc/wireguard/wg0.conf ]; then
+        log_info "  Attempting auto-enrollment (try /claim then /self-enroll)..."
+        /usr/local/bin/catvpn-enroll --auto 2>&1 | sed 's/^/    /' || \
+            log_warn "  auto-enrollment skipped (continuing; can be retried via GUI)"
+    else
+        log_info "  Already enrolled (wg0.conf exists)"
+    fi
+fi
+
+# =============================================================================
 # Installation complete
 # =============================================================================
 
