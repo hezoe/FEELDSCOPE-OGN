@@ -115,20 +115,94 @@ systemctl daemon-reload
 log_info "Files updated"
 
 # =============================================================================
-# Step 4: Rebuild webapp
+# Step 4: Network/clock fixup (idempotent - safe on every update)
+#   - Strip DNS=10.66.0.1 from wg0.conf so .wg names use /etc/hosts only
+#   - Add static /etc/hosts entries for CATVPN names (vps.wg + self)
+#   - Switch ntp -> chrony with NICT IP-only servers (no DNS dependency)
+#   - Enable fake-hwclock so clock survives power-off (RTC-less RPi)
 # =============================================================================
 
-log_info "[4/5] Rebuilding webapp..."
+log_info "[4/6] Applying network/clock fixups (idempotent)..."
+
+NEED_WG_RESTART=false
+
+# 4a. Strip DNS= from wg0.conf (avoids cascade DNS failure when WG drops)
+if [ -f /etc/wireguard/wg0.conf ] && grep -q '^DNS\s*=' /etc/wireguard/wg0.conf; then
+    log_info "  Removing DNS= line from /etc/wireguard/wg0.conf"
+    sed -i.bak-$(date +%Y%m%d-%H%M%S) '/^DNS\s*=/d' /etc/wireguard/wg0.conf
+    NEED_WG_RESTART=true
+fi
+
+# 4b. Add static /etc/hosts entries for *.wg names
+if [ -f /etc/wireguard/wg0.conf ] && ! grep -q 'CATVPN static names' /etc/hosts; then
+    log_info "  Adding *.wg static entries to /etc/hosts"
+    SELF_IP=$(grep '^Address' /etc/wireguard/wg0.conf | head -1 | awk -F'[ =/]+' '{print $3}')
+    SELF_NAME=$(hostname)
+    {
+        echo ""
+        echo "# CATVPN static names (no DNS dependency)"
+        echo "10.66.0.1   vps.wg vps"
+        [ -n "$SELF_IP" ] && [ -n "$SELF_NAME" ] && echo "${SELF_IP}   ${SELF_NAME}.feeldscope.wg ${SELF_NAME}"
+    } >> /etc/hosts
+fi
+
+# 4c. Install chrony + fake-hwclock (idempotent)
+if ! command -v chronyc &>/dev/null; then
+    log_info "  Installing chrony + fake-hwclock"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq chrony fake-hwclock || \
+        log_warn "  package install failed (will retry on next update)"
+fi
+
+# 4d. Replace chrony.conf with NICT IP-only (only if not already our config)
+if [ -f /etc/chrony/chrony.conf ] && ! grep -q '133.243.238.163' /etc/chrony/chrony.conf; then
+    log_info "  Writing NICT IP-only chrony config"
+    cp /etc/chrony/chrony.conf /etc/chrony/chrony.conf.bak-$(date +%Y%m%d-%H%M%S)
+    cat > /etc/chrony/chrony.conf <<'CHRONY_EOF'
+# FEELDSCOPE-OGN: IP-only NTP (no DNS dependency)
+# NICT public NTP servers (Japan)
+server 133.243.238.163 iburst
+server 133.243.238.243 iburst
+server 133.243.238.244 iburst
+server 61.205.120.130 iburst
+
+driftfile /var/lib/chrony/chrony.drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony
+CHRONY_EOF
+    mkdir -p /var/log/chrony
+    systemctl restart chrony 2>/dev/null || true
+fi
+
+# 4e. Disable legacy ntp, enable chrony + fake-hwclock
+systemctl disable --now ntp 2>/dev/null || true
+systemctl enable --now chrony 2>/dev/null || true
+systemctl enable fake-hwclock 2>/dev/null || true
+[ -x /sbin/fake-hwclock ] && /sbin/fake-hwclock save 2>/dev/null || true
+
+# 4f. Restart wg-quick@wg0 if conf was modified
+if [ "$NEED_WG_RESTART" = "true" ] && systemctl is-active wg-quick@wg0 >/dev/null 2>&1; then
+    log_info "  Restarting wg-quick@wg0 to apply DNS removal"
+    systemctl restart wg-quick@wg0 2>/dev/null || log_warn "  wg-quick restart failed"
+fi
+
+log_info "Network/clock fixups complete"
+
+# =============================================================================
+# Step 5: Rebuild webapp
+# =============================================================================
+
+log_info "[5/6] Rebuilding webapp..."
 cd "$FEELDSCOPE_DIR/webapp"
 sudo -u pi npm install --production=false 2>&1 | tail -5
 sudo -u pi npm run build 2>&1 | tail -5
 log_info "Webapp rebuilt"
 
 # =============================================================================
-# Step 5: Restart services
+# Step 6: Restart services
 # =============================================================================
 
-log_info "[5/5] Restarting services..."
+log_info "[6/6] Restarting services..."
 systemctl restart mosquitto
 systemctl start ogn-mqtt.service
 systemctl restart feeldscope-webapp.service
