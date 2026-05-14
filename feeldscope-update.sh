@@ -187,6 +187,27 @@ if [ -f "$SCRIPT_DIR/installer/catvpn-enroll.sh" ]; then
     log_info "  Deployed /usr/local/bin/catvpn-enroll"
 fi
 
+# 4g2. Backfill /etc/catvpn/identity for existing CATVPN-enrolled devices
+#      (v1.1.31以前に加入したデバイスは identity ファイルが無く GUIに hostname が表示されない)
+if [ -f /etc/wireguard/wg0.conf ] && [ ! -f /etc/catvpn/identity ] \
+   && [ -f /etc/ssh/ssh_host_ed25519_key-cert.pub ]; then
+    FQDN=$(ssh-keygen -L -f /etc/ssh/ssh_host_ed25519_key-cert.pub 2>/dev/null \
+            | grep -oE '[a-z0-9-]+\.feeldscope\.wg' | head -1)
+    SELF_IP=$(grep '^Address' /etc/wireguard/wg0.conf | head -1 | awk -F'[ =/]+' '{print $2}')
+    if [ -n "$FQDN" ] && [ -n "$SELF_IP" ]; then
+        log_info "  Backfilling /etc/catvpn/identity for existing enrollment ($FQDN)"
+        install -d -m 755 /etc/catvpn
+        cat > /etc/catvpn/identity <<EOF
+hostname=$FQDN
+fleet=feeldscope
+assigned_ip=$SELF_IP
+ssh_user=pi
+enrolled_at=(backfilled $(date -Iseconds))
+EOF
+        chmod 644 /etc/catvpn/identity
+    fi
+fi
+
 # 4h. Zero-touch auto-claim: VPS側にこの hostname 用の保留トークンがあれば自動加入
 #     - 既に登録済 (wg0.conf 存在) なら catvpn-enroll 内部で即exit
 #     - 保留トークンが無ければ 404 で正常終了
