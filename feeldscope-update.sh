@@ -50,16 +50,27 @@ echo ""
 # Step 1: Pull latest code
 # =============================================================================
 
-log_info "[1/5] Pulling latest code..."
+log_info "[1/6] Pulling latest code..."
 cd "$SCRIPT_DIR"
+SELF_HASH_BEFORE=$(sha256sum "$0" | awk '{print $1}')
 sudo -u pi git pull --ff-only
+SELF_HASH_AFTER=$(sha256sum "$0" | awk '{print $1}')
+# 自己更新検知: スクリプト本体が git pull で書き換わった場合は新版で再exec する。
+# bash は実行中ファイルを位置オフセットで読み続けるため、書き換わった後の新ステップ
+# (例: v1.1.30で追加された Step 4g CATVPN-enroll deploy) が古い実行プロセスからは
+# 走らない。env で再exec を1回に制限し無限ループを防止。
+if [ "$SELF_HASH_BEFORE" != "$SELF_HASH_AFTER" ] && [ -z "${FEELDSCOPE_UPDATE_RELOADED:-}" ]; then
+    log_info "Updater script itself changed; re-executing new version..."
+    export FEELDSCOPE_UPDATE_RELOADED=1
+    exec bash "$0" "$@"
+fi
 log_info "Code updated"
 
 # =============================================================================
 # Step 2: Stop services
 # =============================================================================
 
-log_info "[2/5] Stopping FEELDSCOPE services..."
+log_info "[2/6] Stopping FEELDSCOPE services..."
 systemctl stop ogn-mqtt.service 2>/dev/null || true
 # feeldscope-webapp is intentionally kept running so the browser progress bar
 # remains visible throughout the build. It is restarted in step 5.
@@ -70,7 +81,7 @@ systemctl stop igc-simulator.service 2>/dev/null || true
 # Step 3: Update files (preserve site-specific config)
 # =============================================================================
 
-log_info "[3/5] Updating FEELDSCOPE files..."
+log_info "[3/6] Updating FEELDSCOPE files..."
 
 # Backup site-specific config
 if [ -f "$FEELDSCOPE_DIR/adsb-config.json" ]; then
