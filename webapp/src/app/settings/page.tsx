@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
+import { isPointerTrackingEnabled, setPointerTrackingEnabled } from "@/lib/PointerTracker";
 
 interface IGCFile {
   name: string;
@@ -49,6 +50,8 @@ export default function SettingsPage() {
   const [switching, setSwitching] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [powerAction, setPowerAction] = useState(false);
+  // Pointer activity recording (UX analysis). Default OFF, persisted in localStorage.
+  const [pointerTracking, setPointerTracking] = useState(false);
   const [overlayAction, setOverlayAction] = useState(false);
   // Auto reboot
   const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
@@ -88,6 +91,9 @@ export default function SettingsPage() {
       const stored = localStorage.getItem("ogn-replay-speed");
       if (stored) setReplaySpeed(Math.max(1, Math.min(20, parseInt(stored, 10) || 10)));
     } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    setPointerTracking(isPointerTrackingEnabled());
   }, []);
   const [error, setError] = useState<string | null>(null);
   const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
@@ -684,6 +690,28 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                 滑空場までの距離÷高度が設定値を超えた場合、パス不足として赤点滅で警告します（デフォルト: 15）
+              </p>
+            </div>
+          </Card>
+
+          {/* UX Analysis - Pointer Activity Recording */}
+          <Card title="利用状況の記録（UX分析）">
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pointerTracking}
+                  onChange={(e) => {
+                    setPointerTracking(e.target.checked);
+                    setPointerTrackingEnabled(e.target.checked);
+                  }}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">ポインター操作を記録する</span>
+              </label>
+              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                操作位置（移動・クリック・スクロール）を本機ローカルに記録します。UI改善のための分析にのみ使用し、外部送信はしません。
+                記録データは本機内に日付ごとに保存されます（既定 30 日で自動削除）。
               </p>
             </div>
           </Card>
