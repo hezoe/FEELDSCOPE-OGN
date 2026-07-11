@@ -1,0 +1,7 @@
+[Unit]
+Description=FEELDSCOPE remote support time-limit enforcement (start within window / auto-off after 3h)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feeldscope-remote-support-check.sh

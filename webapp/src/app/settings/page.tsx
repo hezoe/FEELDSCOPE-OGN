@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
 import { isPointerTrackingEnabled, setPointerTrackingEnabled } from "@/lib/PointerTracker";
+import AuthPanel from "@/components/AuthPanel";
 
 interface IGCFile {
   name: string;
@@ -41,7 +42,7 @@ interface SystemStatus {
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
-  remote_support: { configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string } | null;
+  remote_support: { configured: boolean; enabled: boolean; active: boolean; expires_at?: number; remaining_seconds?: number; catvpn_hostname?: string; assigned_ip?: string } | null;
 }
 
 export default function SettingsPage() {
@@ -60,7 +61,7 @@ export default function SettingsPage() {
   const [autoRebootSaving, setAutoRebootSaving] = useState(false);
   const autoRebootSynced = useRef(false);
   // Remote support (CATVPN)
-  const [remoteSupportEnabled, setRemoteSupportEnabled] = useState(true); // default ON
+  const [remoteSupportEnabled, setRemoteSupportEnabled] = useState(false); // 既定OFF
   const [remoteSupportSaving, setRemoteSupportSaving] = useState(false);
   const remoteSupportSynced = useRef(false);
   // CATVPN enrollment
@@ -148,7 +149,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (remoteSupportSynced.current || !status?.remote_support) return;
     remoteSupportSynced.current = true;
-    setRemoteSupportEnabled(status.remote_support.enabled);
+    // 現在ONか（起動中）でトグルを初期化。時限式なので active を採用。
+    setRemoteSupportEnabled(status.remote_support.active);
   }, [status]);
 
   // Sync network settings from server
@@ -256,6 +258,9 @@ export default function SettingsPage() {
           className="w-full max-w-3xl space-y-5 p-6 rounded"
           style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)" }}
         >
+
+          {/* 認証: 未ログインは閲覧のみ / ログインで変更可 / リモートサポート中はオペレーター扱い */}
+          <AuthPanel />
 
           {error && (
             <div
@@ -1469,7 +1474,7 @@ export default function SettingsPage() {
                       onChange={(e) => setRemoteSupportEnabled(e.target.checked)}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm font-medium">リモートサポートを許可する</span>
+                    <span className="text-sm font-medium">リモートサポートを許可する（有効化から3時間で自動OFF）</span>
                   </label>
 
                   {status?.remote_support?.catvpn_hostname && (
@@ -1490,7 +1495,12 @@ export default function SettingsPage() {
                   <div className="text-xs flex items-center gap-2" style={{ color: "var(--color-text-secondary)" }}>
                     <span>現在の状態:</span>
                     {status?.remote_support?.active ? (
-                      <span style={{ color: "var(--color-success, #16a34a)" }}>🟢 接続中</span>
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>
+                        🟢 接続中
+                        {status.remote_support.remaining_seconds != null && (
+                          <> — あと{Math.floor(status.remote_support.remaining_seconds / 3600)}時間{Math.floor((status.remote_support.remaining_seconds % 3600) / 60)}分で自動OFF</>
+                        )}
+                      </span>
                     ) : (
                       <span>⚫ 停止中</span>
                     )}

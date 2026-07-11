@@ -99,6 +99,7 @@ cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
 # Update webapp source
 rm -rf "$FEELDSCOPE_DIR/webapp/.next"
 cp -r "$SCRIPT_DIR/webapp/src"         "$FEELDSCOPE_DIR/webapp/"
+cp "$SCRIPT_DIR/webapp/server.js"      "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/package.json"   "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/package-lock.json" "$FEELDSCOPE_DIR/webapp/" 2>/dev/null || true
 cp "$SCRIPT_DIR/webapp/next.config.ts" "$FEELDSCOPE_DIR/webapp/"
@@ -120,9 +121,18 @@ cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf"  /etc/mosquitto/conf.d/feeldscope.conf
 
+# リモートサポート時限管理（3時間で自動OFF・再起動で窓内復帰）
+cp "$SCRIPT_DIR/config/feeldscope-remote-support.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
+install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
+install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/feeldscope-reset-password
+
 chown -R pi:pi "$FEELDSCOPE_DIR"
 
 systemctl daemon-reload
+# 旧来 enable された恒久ONを解除し、時限タイマーを起動
+systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
+systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
 log_info "Files updated"
 
 # =============================================================================

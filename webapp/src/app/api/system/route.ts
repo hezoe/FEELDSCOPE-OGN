@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
+import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 
 const execAsync = promisify(exec);
 
@@ -142,12 +143,31 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
 
 // ── Remote support (CATVPN / wg-quick@wg0) helpers ──
 
+// リモートサポートは「既定OFF・有効化から3時間で自動OFF・時間内は再起動しても維持」。
+// 状態は expiresAt(epoch秒) を state ファイルに記録し、systemd timer/boot サービス
+// (feeldscope-remote-support-check.sh) が wg-quick@wg0 を start/stop して強制する。
+const REMOTE_SUPPORT_STATE = process.env.FEELDSCOPE_REMOTE_SUPPORT_STATE
+  || `${FEELDSCOPE_DIR}/remote-support.json`;
+const REMOTE_SUPPORT_DURATION_SEC = 3 * 60 * 60; // 3h
+
 interface RemoteSupportStatus {
   configured: boolean;       // /etc/wireguard/wg0.conf exists
   enabled: boolean;          // systemctl is-enabled wg-quick@wg0
   active: boolean;           // systemctl is-active wg-quick@wg0
+  expires_at?: number;       // epoch秒（自動OFF時刻）。ON中のみ
+  remaining_seconds?: number;// 自動OFFまでの残り秒（ON中のみ、>0）
   catvpn_hostname?: string;  // FQDN like takikawa-01.feeldscope.wg (admin can ssh to this)
   assigned_ip?: string;      // CATVPN-assigned IP (e.g., 10.66.20.12)
+}
+
+async function readRemoteSupportExpiry(): Promise<number> {
+  try {
+    const p = JSON.parse(await readFile(REMOTE_SUPPORT_STATE, "utf-8"));
+    return typeof p.expiresAt === "number" ? p.expiresAt : 0;
+  } catch { return 0; }
+}
+async function writeRemoteSupportExpiry(expiresAt: number): Promise<void> {
+  await writeFile(REMOTE_SUPPORT_STATE, JSON.stringify({ expiresAt, durationSec: REMOTE_SUPPORT_DURATION_SEC }, null, 2), { mode: 0o644 });
 }
 
 async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
@@ -184,7 +204,17 @@ async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
     }
   } catch { /* not enrolled yet */ }
 
-  return { configured, enabled, active, catvpn_hostname, assigned_ip };
+  // 時限状態
+  const expiresAt = await readRemoteSupportExpiry();
+  const now = Math.floor(Date.now() / 1000);
+  const remaining = expiresAt > now ? expiresAt - now : 0;
+
+  return {
+    configured, enabled, active,
+    expires_at: remaining > 0 ? expiresAt : undefined,
+    remaining_seconds: remaining > 0 ? remaining : undefined,
+    catvpn_hostname, assigned_ip,
+  };
 }
 
 async function setRemoteSupport(enable: boolean): Promise<void> {
@@ -193,9 +223,16 @@ async function setRemoteSupport(enable: boolean): Promise<void> {
     throw new Error("CATVPN未登録: /etc/wireguard/wg0.conf がありません。管理者にお問い合わせください。");
   }
   if (enable) {
-    await execAsync("sudo -n systemctl enable --now wg-quick@wg0");
+    // 3時間の窓を記録して起動（enableはしない＝boot復帰はcheckスクリプトがexpiresAtで判断）
+    const expiresAt = Math.floor(Date.now() / 1000) + REMOTE_SUPPORT_DURATION_SEC;
+    await writeRemoteSupportExpiry(expiresAt);
+    await execAsync("sudo -n systemctl start wg-quick@wg0");
+    // 保険: systemd enable による恒久ONを解除しておく（時限管理は自前で行う）
+    await execAsync("sudo -n systemctl disable wg-quick@wg0").catch(() => {});
   } else {
-    await execAsync("sudo -n systemctl disable --now wg-quick@wg0");
+    await writeRemoteSupportExpiry(0);
+    await execAsync("sudo -n systemctl stop wg-quick@wg0").catch(() => {});
+    await execAsync("sudo -n systemctl disable wg-quick@wg0").catch(() => {});
   }
 }
 
@@ -444,6 +481,20 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = await request.json();
   const { action, speed } = body;
+
+  // 認証ゲート: リモートサポートON/OFF(remote-support-save)以外の変更操作は
+  // 「管理者ログイン or オペレーター(リモートサポート中の管理者)」が必須。
+  // 閲覧(GET)は無認証。リモートサポートのトグルは失念時の解除導線として無認証で許可。
+  const OPEN_ACTIONS = new Set(["remote-support-save"]);
+  if (!OPEN_ACTIONS.has(action)) {
+    const ctx = await getAuthContext(request);
+    if (!isAuthorizedToMutate(ctx)) {
+      return NextResponse.json(
+        { error: "設定変更には管理者ログインが必要です。", needsAuth: true },
+        { status: 401 }
+      );
+    }
+  }
 
   try {
     switch (action) {
