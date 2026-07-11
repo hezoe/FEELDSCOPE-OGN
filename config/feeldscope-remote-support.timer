@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically enforce FEELDSCOPE remote support time limit
+
+[Timer]
+# 起動15秒後に一度(=再起動後の窓内ON復帰)、以後毎分。Persistent で取りこぼしも補正。
+OnBootSec=15
+OnUnitActiveSec=60
+AccuracySec=15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

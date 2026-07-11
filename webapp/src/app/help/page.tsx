@@ -415,6 +415,23 @@ function ManualContent() {
             <li><strong>シャットダウン</strong>ボタン — システム停止（再起動には電源抜き差しが必要）</li>
           </ul>
         </Section>
+
+        <Section id="settings-auth" heading="3-11. 管理者認証（ログイン）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>設定の<strong>閲覧は誰でも可能</strong>ですが、<strong>変更には管理者ログインが必要</strong>です。</li>
+            <li><strong>初期パスワードは <code>admin</code></strong>。設定画面上部で変更できます（4文字以上）。初期パスワードのままだと注意が表示されます。</li>
+            <li>パスワードを<strong>失念した場合</strong>は、リモートサポートを有効化して管理者(サポート担当)にリセットを依頼できます（下記）。リモートサポートのON/OFFは<strong>ログイン不要</strong>です。</li>
+          </ul>
+        </Section>
+
+        <Section id="settings-remote-support" heading="3-12. リモートサポート（CATVPN）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
+            <li><strong>有効化から3時間で自動的にOFF</strong>になります。時間内であれば再起動してもONのままです。自分でOFFにすれば即座に切れます。残り時間は画面に表示されます。</li>
+            <li>ONにしても、その端末に入れるのは<strong>サポート担当のみ</strong>で、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
+            <li>サポート担当はリモートサポート中、パスワードなしで設定変更・パスワードリセットが可能です（VPN上の本人性で認可）。</li>
+          </ul>
+        </Section>
       </Card>
 
       {/* ===== 4. OGN設定画面 ===== */}

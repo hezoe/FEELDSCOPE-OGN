@@ -393,7 +393,17 @@ cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 
+# リモートサポート時限管理（3時間で自動OFF・再起動で窓内復帰）
+cp "$SCRIPT_DIR/config/feeldscope-remote-support.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
+install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
+install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/feeldscope-reset-password
+
+# 既定はリモートサポートOFF: 旧来 enable されていたら解除（時限管理に移行）
+systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
+
 systemctl daemon-reload
+systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
 
 # =============================================================================
 # Step 9: Enable and start services
