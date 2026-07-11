@@ -440,6 +440,17 @@ if [ -f "$SCRIPT_DIR/installer/catvpn-enroll.sh" ]; then
 fi
 
 # =============================================================================
+# Step 11: Security hardening (ufw + sshd) — idempotent
+# =============================================================================
+
+log_info "[11/11] Applying security hardening (ufw + sshd)..."
+if [ -f "$SCRIPT_DIR/feeldscope-harden.sh" ]; then
+    bash "$SCRIPT_DIR/feeldscope-harden.sh" || log_warn "  Hardening reported warnings (continuing)"
+else
+    log_warn "  feeldscope-harden.sh not found; skipping hardening"
+fi
+
+# =============================================================================
 # Installation complete
 # =============================================================================
 
