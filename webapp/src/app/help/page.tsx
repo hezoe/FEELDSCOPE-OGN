@@ -630,11 +630,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.36 */}
+      {/* v1.1.37 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.37</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-12</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="端末セキュリティのハードニングを自動適用">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>新規インストール（<code>feeldscope-install.sh</code>）と<strong>アップデート（<code>feeldscope-update.sh</code>）の両方で、端末のセキュリティ設定を自動適用</strong>するようにしました（冪等な <code>feeldscope-harden.sh</code>）。</li>
+          <li><strong>ローカルファイアウォール(ufw)</strong>: SSH(22)・Web(80)・地図用MQTT WebSocket(9001)のみ受信許可。MQTTネイティブ(1883)やOGN内部ポートをLANから遮断。</li>
+          <li><strong>SSH</strong>: root ログイン禁止・X11転送無効。パスワード認証は<strong>pi に公開鍵が登録済みの場合のみ無効化</strong>（鍵未設定の端末はロックアウト防止のため据え置き）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.36 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.36</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="設定APIのセキュリティ強化（コマンド注入の排除）">
