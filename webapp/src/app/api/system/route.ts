@@ -14,6 +14,27 @@ const AIRFIELD_CONFIG_PATH = process.env.FEELDSCOPE_AIRFIELD_CONFIG || `${FEELDS
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
 
+// 設定ファイルを root で安全に書き込む。シェルを介さず内容を「データ」としてtmpへ書き、
+// 固定パスの cp で反映する（cp の引数は当方管理の定数/生成名のみ＝ユーザー入力なし）。
+// これにより SSID/パスワード/IP 等の入力値によるコマンド注入(root昇格)を構造的に排除する。
+async function writeRootFile(target: string, content: string): Promise<void> {
+  const tmp = `/tmp/feeldscope-cfg-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  await writeFile(tmp, content, { mode: 0o600 });
+  try {
+    await execAsync(`sudo -n cp ${tmp} ${target}`);
+  } finally {
+    await execAsync(`sudo -n rm -f ${tmp}`).catch(() => {});
+  }
+}
+
+function isIpv4(s: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s.trim());
+  return !!m && m.slice(1).every((o) => Number(o) >= 0 && Number(o) <= 255);
+}
+function assertIpv4(v: string | undefined, label: string): void {
+  if (v && !isIpv4(v)) throw new Error(`${label}が不正なIPv4形式です`);
+}
+
 interface AirfieldConfig {
   name: string;
   latitude: number;
@@ -395,19 +416,20 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
 }
 
 async function applyWifiConfig(ssid: string, password: string): Promise<void> {
-  // Write a clean wpa_supplicant.conf
+  if (!ssid || ssid.length > 63) throw new Error("SSIDが不正です（1〜63文字）");
+  if (password.length < 8 || password.length > 63) throw new Error("Wi-Fiパスワードは8〜63文字にしてください");
+  // ssid/psk は JSON 文字列化でクォート・エスケープ（設定破壊/注入を防止）。
+  // 書き込みは writeRootFile 経由でシェルを介さない（コマンド注入不可）。
   const content = `ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 
 country=JP
 network={
-    ssid="${ssid}"
-    psk="${password}"
+    ssid=${JSON.stringify(ssid)}
+    psk=${JSON.stringify(password)}
 }
 `;
-  await execAsync(`sudo -n bash -c 'cat > ${WPA_SUPPLICANT_CONF} << WPAEOF
-${content}
-WPAEOF'`);
+  await writeRootFile(WPA_SUPPLICANT_CONF, content);
   await execAsync("sudo -n wpa_cli -i wlan0 reconfigure").catch(() => {});
 }
 
@@ -423,15 +445,19 @@ async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: s
   content = content.trimEnd();
 
   if (method === "static" && ip && subnet) {
+    // IPv4 厳格バリデーション（数字とドットのみ許容＝設定破壊/注入を排除）
+    assertIpv4(ip, "IPアドレス");
+    assertIpv4(subnet, "サブネットマスク");
+    assertIpv4(gateway, "デフォルトゲートウェイ");
+    if (dns) { for (const d of dns.trim().split(/\s+/)) assertIpv4(d, "DNSサーバ"); }
     const cidr = subnetToCidr(subnet);
     content += `\n\n# FEELDSCOPE eth0 static config\ninterface eth0\nstatic ip_address=${ip}/${cidr}\n`;
     if (gateway) content += `static routers=${gateway}\n`;
-    if (dns) content += `static domain_name_servers=${dns}\n`;
+    if (dns) content += `static domain_name_servers=${dns.trim()}\n`;
   }
 
-  await execAsync(`sudo -n bash -c 'cat > ${DHCPCD_CONF} << DHCPEOF
-${content}
-DHCPEOF'`);
+  // 書き込みは writeRootFile 経由でシェルを介さない（コマンド注入不可）
+  await writeRootFile(DHCPCD_CONF, content + "\n");
   // Restart dhcpcd to apply
   await execAsync("sudo -n systemctl restart dhcpcd").catch(() => {});
 }

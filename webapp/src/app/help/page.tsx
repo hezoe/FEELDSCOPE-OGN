@@ -630,11 +630,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.35 */}
+      {/* v1.1.36 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.35</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.36</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-11</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="設定APIのセキュリティ強化（コマンド注入の排除）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Wi-Fi設定・有線LAN設定の保存処理を見直し、入力値（SSID/パスワード/IP/ゲートウェイ/DNS）を<strong>シェルを介さずに</strong>設定ファイルへ書き込むよう変更。</li>
+          <li>IPアドレス類は<strong>IPv4形式を厳格に検証</strong>、SSID/パスワードは長さ検証＋エスケープ。これにより管理者権限でのコマンド注入（root昇格）の余地を構造的に排除。</li>
+          <li>（対象: <code>wifi-save</code> / <code>eth-save</code>。登録トークン・ホスト名は従来から検証済み）</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.35 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.35</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-11</span>
       </div>
 
       <Card title="管理者認証＋リモートサポートの時限化">
