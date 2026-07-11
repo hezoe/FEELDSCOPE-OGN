@@ -419,7 +419,9 @@ function ManualContent() {
         <Section id="settings-auth" heading="3-11. 管理者認証（ログイン）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li>設定の<strong>閲覧は誰でも可能</strong>ですが、<strong>変更には管理者ログインが必要</strong>です。</li>
+            <li><strong>未ログイン時は、設定画面のすべての入力欄・ボタンが無効（グレーアウト）</strong>になり、一切の設定変更・電源操作ができません。管理者パスワードでログインすると、通常どおり操作できるようになります。</li>
             <li><strong>初期パスワードは <code>admin</code></strong>。設定画面上部で変更できます（4文字以上）。初期パスワードのままだと注意が表示されます。</li>
+            <li><strong>唯一の例外が「リモートサポート」</strong>です。ログインしていなくても操作できます（パスワード失念時の復旧導線を兼ねるため）。</li>
             <li>パスワードを<strong>失念した場合</strong>は、リモートサポートを有効化して管理者(サポート担当)にリセットを依頼できます（下記）。リモートサポートのON/OFFは<strong>ログイン不要</strong>です。</li>
           </ul>
         </Section>
@@ -628,11 +630,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.23 */}
+      {/* v1.1.35 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.35</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="管理者認証＋リモートサポートの時限化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>管理者ログインを追加</strong>。設定の<strong>閲覧は誰でも可能</strong>だが、<strong>変更には管理者ログインが必須</strong>に。初期パスワードは <code>admin</code>（設定画面上部でいつでも変更可・4文字以上）。</li>
+          <li><strong>未ログイン時は設定画面のすべての入力欄・ボタンを無効化（グレーアウト）</strong>し、誤操作・不正変更を防止。ログイン後は従来どおり操作可能。</li>
+          <li><strong>リモートサポートだけは無認証で操作可能</strong>。パスワードを失念しても、リモートサポートを有効化すればサポート担当がパスワードをリセットできる（復旧導線）。</li>
+          <li><strong>リモートサポートを時限化</strong>。既定OFF・有効化から<strong>3時間で自動OFF</strong>。時間内は再起動してもON維持、経過または手動OFFで即遮断。残り時間を画面表示。</li>
+          <li>認可方式: 送信元IPを見るカスタムサーバを導入し、CATVPNオペレーターサブネットからのアクセスのみ「サポート担当」として無パスワード変更を許可（VPN上の相互隔離により本人性を担保）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.23 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.23</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-05-04</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="OGN受信機 AGC設定をWeb UIから調整可能に">

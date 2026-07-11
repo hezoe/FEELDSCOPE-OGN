@@ -482,10 +482,11 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { action, speed } = body;
 
-  // 認証ゲート: リモートサポートON/OFF(remote-support-save)以外の変更操作は
+  // 認証ゲート: リモートサポート関連(ON/OFF・初回登録)以外の変更操作は
   // 「管理者ログイン or オペレーター(リモートサポート中の管理者)」が必須。
-  // 閲覧(GET)は無認証。リモートサポートのトグルは失念時の解除導線として無認証で許可。
-  const OPEN_ACTIONS = new Set(["remote-support-save"]);
+  // 閲覧(GET)は無認証。リモートサポートは失念時の唯一の解除導線なので、
+  //   トグル(remote-support-save)も初回登録(catvpn-enroll)も無認証で許可する。
+  const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll"]);
   if (!OPEN_ACTIONS.has(action)) {
     const ctx = await getAuthContext(request);
     if (!isAuthorizedToMutate(ctx)) {

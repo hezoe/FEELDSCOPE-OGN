@@ -47,6 +47,9 @@ interface SystemStatus {
 
 export default function SettingsPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  // 変更権限: 管理者ログイン済み or オペレーター(リモートサポート中)のみ true。
+  // false の間は設定変更UI(入力欄・ボタン)を一括で無効化する。
+  const [canMutate, setCanMutate] = useState(false);
   const [igcFiles, setIgcFiles] = useState<IGCFile[]>([]);
   const [switching, setSwitching] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -95,6 +98,13 @@ export default function SettingsPage() {
   }, []);
   useEffect(() => {
     setPointerTracking(isPointerTrackingEnabled());
+  }, []);
+  // 認証状態を取得し、変更権限を判定（ログイン/ログアウト時は AuthPanel がページ全体をリロードする）
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCanMutate(!!d.canMutate))
+      .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
   const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
@@ -274,6 +284,13 @@ export default function SettingsPage() {
               {error}
             </div>
           )}
+
+          {/* 未ログイン時は以下すべての入力欄・ボタンを無効化（fieldset[disabled] が配下の
+              フォーム部品を一括で操作不可にする）。リモートサポートのみ枠外で常時操作可能。 */}
+          <fieldset
+            disabled={!canMutate}
+            className="space-y-5 border-0 p-0 m-0 min-w-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
 
           {/* Airfield Settings */}
           <Card title="滑空場設定" helpId="settings-airfield">
@@ -1398,6 +1415,9 @@ export default function SettingsPage() {
             </div>
           </Card>
 
+          </fieldset>
+          {/* ↑ ここまで管理者ログイン必須（リモートサポートは枠外＝失念時の復旧導線として常時操作可） */}
+
           {/* Remote Support (CATVPN) */}
           <Card title="リモートサポート" helpId="settings-remote-support">
             <div className="space-y-3">
@@ -1545,7 +1565,11 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* System Power */}
+          {/* System Power — 電源操作も管理者ログイン必須 */}
+          <fieldset
+            disabled={!canMutate}
+            className="border-0 p-0 m-0 min-w-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
           <Card title="システム電源" helpId="settings-power">
             <div className="flex gap-4">
               <button
@@ -1613,6 +1637,7 @@ export default function SettingsPage() {
               シャットダウン後に再度起動するには電源の抜き差しが必要です
             </p>
           </Card>
+          </fieldset>
 
         </div>
       </main>
