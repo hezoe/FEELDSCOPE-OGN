@@ -191,6 +191,74 @@ function nowClockStr(): string {
   return new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+// ── Flight-log persistence (client localStorage mirror) ──
+// The overlay server keeps the flight log only in memory, so a mid-day restart
+// would lose the morning's flights. We mirror the log to localStorage keyed by
+// the "logbook day" and merge it back on load. localStorage is only valid for
+// the current logbook day; yesterday's data is discarded (not needed).
+const FLIGHT_LOG_LS_KEY = "ogn-flight-log";
+
+/** Logbook day (YYYY-MM-DD). Rolls over at 05:00 JST, matching the server-side
+ *  daily reset, so evening flights stay valid through the night until 05:00. */
+function logbookDay(): string {
+  // JST (UTC+9) shifted back 5h so the date label flips at 05:00 JST.
+  return new Date(Date.now() + (9 - 5) * 3600_000).toISOString().slice(0, 10);
+}
+
+function loadLocalFlightLog(): FlightLogEntry[] {
+  try {
+    const raw = localStorage.getItem(FLIGHT_LOG_LS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.day !== logbookDay() || !Array.isArray(parsed.entries)) {
+      localStorage.removeItem(FLIGHT_LOG_LS_KEY); // stale (previous logbook day)
+      return [];
+    }
+    return parsed.entries as FlightLogEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalFlightLog(entries: FlightLogEntry[]): void {
+  try {
+    localStorage.setItem(FLIGHT_LOG_LS_KEY, JSON.stringify({ day: logbookDay(), entries }));
+  } catch { /* ignore quota/availability errors */ }
+}
+
+/** A flight is uniquely identified by its aircraft + takeoff time. */
+function flightKey(e: FlightLogEntry): string {
+  return `${e.deviceId}|${e.takeoffTime}`;
+}
+
+function preferReg(a: string, b: string, deviceId: string): string {
+  if (a && a !== deviceId) return a; // a real registration beats the deviceId fallback
+  if (b && b !== deviceId) return b;
+  return a || b || deviceId;
+}
+
+/** Merge two flight logs de-duplicated by (deviceId, takeoffTime), keeping the
+ *  more complete fields, sorted chronologically. Ensures no duplicates and no
+ *  gaps when combining server memory with the localStorage mirror. `a` wins
+ *  ties on already-recorded fields, so pass the more authoritative log first. */
+function mergeFlightLogs(a: FlightLogEntry[], b: FlightLogEntry[]): FlightLogEntry[] {
+  const map = new Map<string, FlightLogEntry>();
+  for (const e of [...a, ...b]) {
+    const k = flightKey(e);
+    const prev = map.get(k);
+    if (!prev) { map.set(k, { ...e }); continue; }
+    map.set(k, {
+      registration: preferReg(prev.registration, e.registration, e.deviceId),
+      deviceId: e.deviceId,
+      takeoffTime: e.takeoffTime,
+      landingTime: prev.landingTime ?? e.landingTime,
+      releaseAlt: prev.releaseAlt ?? e.releaseAlt,
+      releaseDist: prev.releaseDist ?? e.releaseDist,
+    });
+  }
+  return Array.from(map.values()).sort((x, y) => x.takeoffTime.localeCompare(y.takeoffTime));
+}
+
 function calcFlightDuration(takeoff: string, landing: string | null): string | null {
   const end = landing || nowClockStr();
   const [th, tm] = takeoff.split(":").map(Number);
@@ -269,6 +337,9 @@ export default function FlightMap() {
   const [flightLog, setFlightLogRaw] = useState<FlightLogEntry[]>([]);
   const setFlightLog = useCallback((log: FlightLogEntry[]) => {
     setFlightLogRaw(log);
+    // Mirror to client localStorage so the current day's log survives a server
+    // restart (the overlay server holds it only in memory).
+    saveLocalFlightLog(log);
     // Sync to server memory
     fetch("/api/flight-log", {
       method: "POST",
@@ -301,44 +372,61 @@ export default function FlightMap() {
   // Hydration-safe: restore client-only state in useEffect
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
-    // Restore flight log from server
-    fetch("/api/flight-log")
-      .then(res => res.json())
-      .then(data => {
-        const restored: FlightLogEntry[] = data.entries || [];
-        if (restored.length > 0) {
-          setFlightLogRaw(restored);
-          flightLogRef.current = restored;
-          // Rebuild tracking state
-          const map = new Map<string, FlightTrackingState>();
-          for (let i = 0; i < restored.length; i++) {
-            const entry = restored[i];
-            if (!entry.landingTime) {
-              map.set(entry.deviceId, {
-                phase: entry.releaseAlt != null ? "released" : "airborne",
-                takeoffTime: entry.takeoffTime,
-                maxAltSinceTakeoff: entry.releaseAlt ?? 0,
-                releaseAlt: entry.releaseAlt,
-                wasHigh: true,
-                flightIdx: i,
-                prevSpeedMs: 0, prevClimbMs: 0,
-              });
-            } else {
-              map.set(entry.deviceId, {
-                phase: "ground",
-                takeoffTime: null,
-                maxAltSinceTakeoff: 0,
-                releaseAlt: null,
-                wasHigh: false,
-                flightIdx: -1,
-                prevSpeedMs: 0, prevClimbMs: 0,
-              });
-            }
-          }
-          trackingRef.current = map;
+    // Restore flight log: merge server memory with the client localStorage
+    // mirror, so a mid-day server restart doesn't lose the morning's flights.
+    (async () => {
+      const local = loadLocalFlightLog();
+      let server: FlightLogEntry[] = [];
+      try {
+        const res = await fetch("/api/flight-log");
+        const data = await res.json();
+        server = data.entries || [];
+      } catch { /* server unreachable — fall back to localStorage */ }
+      // Server memory is authoritative for already-recorded fields; localStorage
+      // fills in whatever the server lost across a restart.
+      const merged = mergeFlightLogs(server, local);
+      if (merged.length === 0) return;
+
+      setFlightLogRaw(merged);
+      flightLogRef.current = merged;
+      saveLocalFlightLog(merged);
+      // If localStorage carried flights the server had lost, push the merged log
+      // back so server memory is repopulated and other clients stay in sync.
+      if (local.length > 0) {
+        fetch("/api/flight-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set", entries: merged }),
+        }).catch(() => {});
+      }
+      // Rebuild tracking state
+      const map = new Map<string, FlightTrackingState>();
+      for (let i = 0; i < merged.length; i++) {
+        const entry = merged[i];
+        if (!entry.landingTime) {
+          map.set(entry.deviceId, {
+            phase: entry.releaseAlt != null ? "released" : "airborne",
+            takeoffTime: entry.takeoffTime,
+            maxAltSinceTakeoff: entry.releaseAlt ?? 0,
+            releaseAlt: entry.releaseAlt,
+            wasHigh: true,
+            flightIdx: i,
+            prevSpeedMs: 0, prevClimbMs: 0,
+          });
+        } else {
+          map.set(entry.deviceId, {
+            phase: "ground",
+            takeoffTime: null,
+            maxAltSinceTakeoff: 0,
+            releaseAlt: null,
+            wasHigh: false,
+            flightIdx: -1,
+            prevSpeedMs: 0, prevClimbMs: 0,
+          });
         }
-      })
-      .catch(() => {});
+      }
+      trackingRef.current = map;
+    })();
     // Restore panel sizes
     try {
       const sw = localStorage.getItem("ogn-sidebar-width");
