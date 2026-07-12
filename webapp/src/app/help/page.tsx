@@ -204,7 +204,14 @@ function ManualContent() {
             <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-            データはサーバ側メモリに保存され、毎日 <strong>日本時間 AM 5:00</strong> に自動リセット。複数端末で同じログを参照できます。
+            記録は<strong>サーバのメモリ</strong>と<strong>表示端末のブラウザ（ローカルストレージ）</strong>の両方に保存されます。
+            サーバが再起動してメモリ上の記録が消えても、ブラウザに残った当日分から自動的に補完・復元されるため、当日の記録は失われません。
+            毎日 <strong>日本時間 AM 5:00</strong> に当日分を自動リセット。複数端末で同じログを参照できます。
+          </p>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            ※本システムは既存の運航に<strong>オーバーレイ表示</strong>する前提のため、サーバがデータベース等に記録を永続保存し続けることはありません。
+            保持するのは当日分のみで、翌日（AM 5:00以降）には破棄されます。
+            また、当然ながら<strong>サーバ（受信機）が停止している間に発生した離着陸は一切記録されません</strong>。記録対象はサーバ稼働中の時間帯のみです。
           </p>
         </Section>
         <Section id="map-detection-thresholds" heading="自動検知の閾値">
