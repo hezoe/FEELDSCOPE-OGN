@@ -637,11 +637,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.37 */}
+      {/* v1.1.38 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.37</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.38</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-12</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="フライトログをブラウザにも二重保存＋グライダーfavicon">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>フライトログを<strong>サーバのメモリと表示端末のブラウザ（ローカルストレージ）の両方に保存</strong>。サーバが再起動してメモリ上の記録が消えても、開いている端末の当日分から自動的に補完・復元するため、当日の記録が失われません。</li>
+          <li>復元は<strong>重複・漏れなくマージ</strong>し、当日分（日本時間 AM 5:00 境界）のみ保持して翌日は自動破棄します。</li>
+          <li>ブラウザのタブアイコン（favicon）を<strong>システムのグライダーアイコン</strong>に変更しました。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.37 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.37</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-12</span>
       </div>
 
       <Card title="端末セキュリティのハードニングを自動適用">
