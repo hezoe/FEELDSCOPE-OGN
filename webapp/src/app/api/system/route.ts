@@ -499,7 +499,10 @@ async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: s
 }
 
 // GET /api/system - Get current system status
-export async function GET() {
+export async function GET(request: Request) {
+  // 閲覧自体は無認証で許可(ログイン前のステータス表示に必要)だが、
+  // 内部ネットワーク構成・上流データソースURL等の機微情報は管理者/オペレーター時のみ返す。
+  const authed = isAuthorizedToMutate(await getAuthContext(request));
   const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled, receiverId] = await Promise.all([
     isActive("ogn-mqtt"),
     isActive("igc-simulator"),
@@ -531,10 +534,11 @@ export async function GET() {
     mosquitto_active: mosquitto,
     adsb_poller_active: adsbPoller,
     overlay_enabled: overlayEnabled,
-    adsb_config: adsbConfig,
-    network,
+    // 機微(上流URL/内部ネットワーク)は認証時のみ。未認証はUI維持のため形は保ちつつ値を伏せる。
+    adsb_config: authed ? adsbConfig : { ...adsbConfig, url: "" },
+    network: authed ? network : null,
     version,
-    auto_reboot: autoReboot,
+    auto_reboot: authed ? autoReboot : null,
     remote_support: remoteSupport,
   });
 }
