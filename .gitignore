@@ -13,5 +13,13 @@ airfield-config.json
 testdata/*.IGC
 testdata/*.igc
 
+# Local secrets / runtime state (NEVER commit — public repo)
+auth.json
+remote-support.json
+
+# Backup files
+*.bak
+*.bak.*
+
 # Local QEMU test images (too large for GitHub)
 qemu-test/
