@@ -637,11 +637,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.38 */}
+      {/* v1.1.39 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.39</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-08-29</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="Wi-Fi設定ファイルが起動のたびに肥大化する問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN公式イメージの設定マネージャが、OGN受信機の起動のたびに <code>wpa_supplicant.conf</code> へWi-Fi設定を<strong>追記</strong>し続けるため、再起動を繰り返すと同じ設定が無限に積み重なっていました（実機で<strong>166個</strong>まで増殖）。</li>
+          <li>重複を自動で畳む <code>feeldscope-wpa-dedupe</code> を追加し、<strong>起動時（OGN起動後）とOGN設定保存時に自動実行</strong>するようにしました。同じSSIDは最後の1個だけを残します。</li>
+          <li>あわせて、<strong>GUIでWi-Fiを変更した際に <code>/boot/OGN-receiver.conf</code> 側も同期</strong>するよう修正。これまでは古いSSID・パスワードが起動のたびに復活し、意図しないアクセスポイントに接続しうる状態でした。</li>
+          <li>既存の端末はアップデートを実行すると自動的に整理されます（元のファイルは <code>wpa_supplicant.conf.orig</code> として保全）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.38 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.38</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-12</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="フライトログをブラウザにも二重保存＋グライダーfavicon">

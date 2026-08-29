@@ -183,6 +183,10 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
 
   // Restart rtlsdr-ogn (init.d) so changes take effect
   await execAsync("sudo /etc/init.d/rtlsdr-ogn restart").catch(() => {});
+
+  // OGN 設定マネージャは起動のたびに wpa_supplicant.conf へ network ブロックを
+  // 追記するため、restart 直後に重複を畳んでおく（詳細は feeldscope-wpa-dedupe.sh）
+  await execAsync("sudo -n /usr/local/sbin/feeldscope-wpa-dedupe").catch(() => {});
 }
 
 function extractStatusField(html: string, label: string): string | undefined {

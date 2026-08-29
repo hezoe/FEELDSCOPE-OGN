@@ -13,6 +13,7 @@ const ADSB_CONFIG_PATH = process.env.FEELDSCOPE_ADSB_CONFIG || `${FEELDSCOPE_DIR
 const AIRFIELD_CONFIG_PATH = process.env.FEELDSCOPE_AIRFIELD_CONFIG || `${FEELDSCOPE_DIR}/airfield-config.json`;
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
+const OGN_RECEIVER_CONF = "/boot/OGN-receiver.conf";
 
 // 設定ファイルを root で安全に書き込む。シェルを介さず内容を「データ」としてtmpへ書き、
 // 固定パスの cp で反映する（cp の引数は当方管理の定数/生成名のみ＝ユーザー入力なし）。
@@ -415,6 +416,39 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
   };
 }
 
+// OGN 公式イメージの設定マネージャ (/root/OGN-receiver-config-manager) は、
+// /boot/OGN-receiver.conf の wifiPassword が空でない限り、rtlsdr-ogn の起動のたびに
+// wpa_supplicant.conf へ network ブロックを *追記* する。
+// そのため GUI で Wi-Fi を変更しても /boot 側を放置すると、
+//   1) 旧 SSID が毎起動で復活し、意図しない AP に繋がりうる
+//   2) network ブロックが起動ごとに増え続ける（実機で 166 個まで増殖）
+// という不整合が起きる。GUI で変更したら /boot 側も必ず揃える。
+async function syncOgnReceiverWifi(ssid: string, password: string): Promise<void> {
+  try {
+    const recv = await readFile(OGN_RECEIVER_CONF, "utf-8");
+    // ssid/psk はダブルクォートを含みうるので除去してから埋め込む
+    // （/boot/OGN-receiver.conf は shell 変数形式のため JSON エスケープは使えない）
+    const safeSsid = ssid.replace(/["\\$`]/g, "");
+    const safePass = password.replace(/["\\$`]/g, "");
+    let next = recv;
+    const set = (key: string, value: string) => {
+      const re = new RegExp(`^#?\\s*${key}=".*"`, "m");
+      if (re.test(next)) {
+        next = next.replace(re, `${key}="${value}"`);
+      } else {
+        if (!next.endsWith("\n")) next += "\n";
+        next += `${key}="${value}"\n`;
+      }
+    };
+    set("wifiName", safeSsid);
+    set("wifiPassword", safePass);
+    set("wifiCountry", "JP");
+    if (next !== recv) await writeRootFile(OGN_RECEIVER_CONF, next);
+  } catch {
+    // /boot/OGN-receiver.conf が無い環境（VPS 等）では何もしない
+  }
+}
+
 async function applyWifiConfig(ssid: string, password: string): Promise<void> {
   if (!ssid || ssid.length > 63) throw new Error("SSIDが不正です（1〜63文字）");
   if (password.length < 8 || password.length > 63) throw new Error("Wi-Fiパスワードは8〜63文字にしてください");
@@ -430,6 +464,8 @@ network={
 }
 `;
   await writeRootFile(WPA_SUPPLICANT_CONF, content);
+  // OGN 設定マネージャが古い認証情報を復活させないよう /boot 側も揃える
+  await syncOgnReceiverWifi(ssid, password);
   await execAsync("sudo -n wpa_cli -i wlan0 reconfigure").catch(() => {});
 }
 

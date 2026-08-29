@@ -399,6 +399,12 @@ cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
 install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/feeldscope-reset-password
 
+# wpa_supplicant.conf の重複除去（OGN 設定マネージャが毎起動で追記するため）
+cp "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" /etc/systemd/system/
+install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope-wpa-dedupe
+systemctl enable feeldscope-wpa-dedupe.service >/dev/null 2>&1 || true
+bash /usr/local/sbin/feeldscope-wpa-dedupe || log_warn "  wpa dedupe reported warnings (continuing)"
+
 # 既定はリモートサポートOFF: 旧来 enable されていたら解除（時限管理に移行）
 systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
 
