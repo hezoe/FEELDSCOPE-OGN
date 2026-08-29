@@ -255,6 +255,22 @@ else
     log_warn "  feeldscope-harden.sh not found; skipping hardening"
 fi
 
+# ---- wpa_supplicant.conf の重複 network ブロック除去 — idempotent ----
+# OGN 公式イメージの設定マネージャが rtlsdr-ogn 起動のたびに追記するため、
+# 既存機は放置すると再起動回数ぶん増殖する。デプロイ＋即時実行で自己修復させる。
+log_info "  Deduplicating wpa_supplicant.conf..."
+if [ -f "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" ]; then
+    install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope-wpa-dedupe
+    if [ -f "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" ]; then
+        cp "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable feeldscope-wpa-dedupe.service >/dev/null 2>&1 || true
+    fi
+    bash /usr/local/sbin/feeldscope-wpa-dedupe || log_warn "  wpa dedupe reported warnings (continuing)"
+else
+    log_warn "  feeldscope-wpa-dedupe.sh not found; skipping"
+fi
+
 # =============================================================================
 # Step 5: Rebuild webapp
 # =============================================================================

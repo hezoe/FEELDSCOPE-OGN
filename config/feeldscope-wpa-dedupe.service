@@ -1,0 +1,17 @@
+[Unit]
+Description=FEELDSCOPE: collapse duplicate wpa_supplicant network blocks
+Documentation=https://github.com/hezoe/FEELDSCOPE-OGN
+# OGN 公式イメージの設定マネージャが rtlsdr-ogn 起動のたびに
+# wpa_supplicant.conf へ network ブロックを追記するため、その後に畳む。
+After=rtlsdr-ogn.service
+ConditionPathExists=/etc/wpa_supplicant/wpa_supplicant.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/sbin/feeldscope-wpa-dedupe
+# 追記元より確実に後に走らせるための猶予
+ExecStartPre=/bin/sleep 20
+
+[Install]
+WantedBy=multi-user.target
