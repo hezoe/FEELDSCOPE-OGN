@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -50,7 +51,15 @@ async function fetchSystemInfo(): Promise<string> {
   return lines.join("\n\n");
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // システムログ全文は機微。閲覧は管理者/オペレーター(リモートサポート中)のみ許可。
+  const ctx = await getAuthContext(request);
+  if (!isAuthorizedToMutate(ctx)) {
+    return NextResponse.json(
+      { error: "ログ閲覧には管理者ログインが必要です。", needsAuth: true },
+      { status: 401 }
+    );
+  }
   const [serviceResults, systemErrors, systemInfo] = await Promise.all([
     Promise.all(SERVICES.map(async (svc) => [svc, await fetchServiceLog(svc)] as [string, string])),
     fetchSystemErrors(),

@@ -637,11 +637,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.39 */}
+      {/* v1.1.40 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.39</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.40</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-08-29</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="セキュリティ修正: 状態・ログAPIの認証強化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>システムログを返す <code>/api/support/logs</code> が<strong>未ログインでも全文取得できた</strong>問題を修正し、管理者/オペレーターのログインを必須にしました。</li>
+          <li><code>/api/system</code> の状態取得で、内部ネットワーク構成や上流データソースURL等の<strong>機微情報を未ログイン時は伏せる</strong>よう変更しました（画面のステータス表示は従来どおり動作します）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.39 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.39</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-08-29</span>
       </div>
 
       <Card title="Wi-Fi設定ファイルが起動のたびに肥大化する問題を修正">
