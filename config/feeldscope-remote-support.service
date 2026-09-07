@@ -1,5 +1,5 @@
 [Unit]
-Description=FEELDSCOPE remote support watchdog (restart wg0 if enabled but inactive)
+Description=FEELDSCOPE remote support watchdog (restart wg0 if stopped or stalled)
 After=network.target
 
 [Service]

@@ -437,6 +437,7 @@ function ManualContent() {
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
             <li><strong>ONにすると、自分でOFFにするまで有効なまま</strong>です。再起動してもONのままです。OFFにすれば即座に切れます。用が済んだらOFFに戻してください。</li>
+            <li>ON の間は<strong>接続が切れても自動で復旧</strong>を試みます。通信が5分以上途切れるとトンネルを繋ぎ直します（再試行は10分間隔）。</li>
             <li>ONにしても、その端末に入れるのは<strong>サポート担当のみ</strong>で、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
             <li>サポート担当はリモートサポート中、パスワードなしで設定変更・パスワードリセットが可能です（VPN上の本人性で認可）。</li>
           </ul>
@@ -637,11 +638,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.41 */}
+      {/* v1.1.42 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.42</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-08</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="リモートサポートが切れたまま戻らない問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>サポート用サーバ側が数分以上停止すると、端末の VPN が再接続をあきらめ、<strong>リモートサポートONのまま到達不能</strong>になることがありました。実際に発生し、現地での再起動が必要になりました。</li>
+          <li>監視タイマーが<strong>通信の途絶を検知</strong>するようになりました。5分以上ハンドシェイクが無ければトンネルを繋ぎ直します。再試行は10分間隔で、サーバ側が長時間落ちている間の繰り返しを抑えます。</li>
+          <li>これまでは「サービスが停止している」場合しか復旧できませんでした。今回から「起動しているのに通信が無い」場合も拾います。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.41 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.41</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-07</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="リモートサポートの3時間自動OFFを廃止">

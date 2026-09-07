@@ -1,5 +1,5 @@
 [Unit]
-Description=Periodically check FEELDSCOPE remote support tunnel
+Description=Periodically check FEELDSCOPE remote support tunnel (stall detection)
 
 [Timer]
 # 起動15秒後に一度(=再起動後のON復帰)、以後毎分。Persistent で取りこぼしも補正。
