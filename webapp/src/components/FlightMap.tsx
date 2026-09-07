@@ -585,7 +585,11 @@ export default function FlightMap() {
         const icon = L.divIcon({ html, className: "ogn-receiver-icon", iconSize: [22, 22], iconAnchor: [11, 11] });
 
         const latlng = L.latLng(cfg.latitude, cfg.longitude);
-        const tooltipText = `OGN受信機: ${cfg.receiverName || "—"}<br>${online ? "稼働中" : "停止"}${status?.ognGain ? `<br>Gain: ${status.ognGain}` : ""}${status?.noise ? `<br>Noise: ${status.noise}` : ""}`;
+        const receiverLabel = status?.source === "skylens" ? "SkyLens受信機" : "OGN受信機";
+        const stationName = status?.source === "skylens"
+          ? (data.skylens_station?.id || cfg.receiverName || "—")
+          : (cfg.receiverName || "—");
+        const tooltipText = `${receiverLabel}: ${stationName}<br>${online ? "稼働中" : "停止"}${status?.ognGain ? `<br>Gain: ${status.ognGain}` : ""}${status?.noise ? `<br>Noise: ${status.noise}` : ""}`;
 
         if (!ognReceiverMarkerRef.current) {
           const m = L.marker(latlng, { icon, zIndexOffset: -100 })
@@ -1519,9 +1523,13 @@ export default function FlightMap() {
         {receiverStatus && !receiverStatus.simulated && receiverStatus.online && (
           <span
             className="px-2 py-0.5 rounded font-semibold"
-            style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}
+            style={
+              receiverStatus.source === "skylens"
+                ? { background: "var(--color-accent-dim)", color: "var(--color-accent)" }
+                : { background: "var(--color-success-dim)", color: "var(--color-success)" }
+            }
           >
-            リアルタイム再生
+            {receiverStatus.source === "skylens" ? "SkyLens 受信" : "OGN 受信"}
           </span>
         )}
       </div>

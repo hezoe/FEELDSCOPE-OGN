@@ -280,7 +280,10 @@ function ManualContent() {
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="mosquitto" desc="MQTTブローカー（FEELDSCOPE全体の通信ハブ）" />
             <ManualRow label="ogn-mqtt" desc="OGN受信機からのデータをMQTTに変換して配信" />
-            <ManualRow label="igc-simulator" desc="IGCファイル履歴再生サービス（リアルタイム再生時は停止）" />
+            <ManualRow label="igc-simulator" desc="IGCファイル履歴再生サービス（受信モード時は停止）" />
+            <ManualRow label="skylens" desc="FLARM純正の受信ソフト SkyLens 本体（SkyLens受信モード時のみ稼働）" />
+            <ManualRow label="skylens-mqtt" desc="SkyLensのUDP出力をOGNと同じ形式に変換してMQTTへ配信するブリッジ" />
+            <ManualRow label="skylens-aprs" desc="SkyLens受信データをOGN（APRS-IS）へアップロードする送信機" />
             <ManualRow label="adsb-poller" desc="tar1090からADS-Bデータを定期取得してMQTTに配信" />
             <ManualRow label="feeldscope-webapp" desc="本Webアプリケーション" />
             <ManualRow label="avahi-daemon" desc="mDNS（&lt;hostname&gt;.local 名前解決）デーモン" />
@@ -321,17 +324,33 @@ function ManualContent() {
 
         <Section id="settings-source" heading="3-2. データソース切替">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>リアルタイム再生</strong>ボタン — OGN FLARMデータ受信モードに切替（ogn-mqtt起動）</li>
-            <li><strong>履歴再生</strong>ボタン — IGCファイル再生モード（igc-simulator起動、ogn-mqtt停止）</li>
+            <li><strong>OGN 受信</strong>ボタン — OGN デコーダ（rtlsdr-ogn + ogn-mqtt）で FLARM を受信</li>
+            <li><strong>SkyLens 受信</strong>ボタン — FLARM 純正の SkyLens で受信（skylens + skylens-mqtt + skylens-aprs）。実行ファイルとライセンスがある端末でのみ表示されます</li>
+            <li><strong>履歴再生</strong>ボタン — IGCファイル再生モード（igc-simulator起動、受信は停止）</li>
             <li><strong>再生倍速スライダー</strong>（ブラウザ） — 1〜20倍速。履歴再生中はスライダー操作で即時反映</li>
             <li><strong>停止する</strong>リンク — 現在のモードを停止</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-            履歴再生中も OGN受信機（rtlsdr-ogn）は独立稼働しており、FLARMデータのOGNサーバへのアップロードは継続されます。
+            RTL-SDR ドングルは 1 プロセスしか掴めないため、OGN 受信と SkyLens 受信は排他です。履歴再生に切り替えると受信を停止してドングルを解放し、OGN サーバへのアップロードも止まります。
+          </p>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            切替の実体は端末上の <code>rx-mode</code> コマンドです。SSH から <code>sudo rx-mode {"{ogn|skylens|history|stop|status}"}</code> でも同じ操作ができ、状態は <code>/etc/rx-mode.state</code> で共有されるため画面表示と食い違いません。
           </p>
         </Section>
 
-        <Section id="settings-igc" heading="3-3. IGC ファイル管理（履歴再生用）">
+        <Section id="settings-upload" heading="3-3. OGN へのアップロード">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>アップロードを始める / 止める</strong>ボタン — 受信した FLARM データを OGN へ送るかどうかの切替</li>
+            <li>OGN 受信モードでは ogn-decode 自身が APRS で送信します。切替時は設定反映のため受信機が再起動します（最大2分）</li>
+            <li>SkyLens 受信モードでは skylens-aprs が送信します。こちらは再起動不要で 5 秒以内に反映されます</li>
+            <li>ステルス設定・ノートラック設定の機体は、アップロードが有効でも送信しません</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+            ★ 設定ファイルから APRS の呼出符号の行を削除しても送信は止まりません。ogn-decode が呼出符号を自動生成して送信を続けます。停止は必ずこのスイッチ（呼出符号を空文字にする方式）で行ってください。
+          </p>
+        </Section>
+
+        <Section id="settings-igc" heading="3-4. IGC ファイル管理（履歴再生用）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>IGC ファイルをアップロード</strong>ボタン — 拡張子 .igc のファイルをサーバに保存</li>
             <li><strong>削除</strong>ボタン — 各ファイルを削除(確認ダイアログ)</li>
@@ -342,7 +361,7 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section id="settings-adsb" heading="3-4. ADS-B 受信設定">
+        <Section id="settings-adsb" heading="3-5. ADS-B 受信設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ADS-B 受信を有効にする</strong>チェックボックス（ブラウザ + サーバ） — adsb-pollerサービスのON/OFF</li>
             <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code></li>
@@ -350,7 +369,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section id="settings-display" heading="3-5. 表示設定">
+        <Section id="settings-display" heading="3-6. 表示設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>機体ラベル表示名</strong>（ブラウザ） — コンテスト番号 / 登録番号 / パイロット名 切替</li>
             <li><strong>高度</strong>（ブラウザ） — m / ft</li>
@@ -361,7 +380,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section id="settings-network" heading="3-6. ネットワーク設定">
+        <Section id="settings-network" heading="3-7. ネットワーク設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ホスト名（mDNS）</strong> — 英数字とハイフンのみ、63文字以内。設定後 <code>&lt;name&gt;.local</code> でアクセス可能</li>
             <li><strong>Wi-Fi SSID</strong> — 接続先Wi-Fiネットワーク名</li>
@@ -376,7 +395,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section id="settings-update" heading="3-7. システムアップデート">
+        <Section id="settings-update" heading="3-8. システムアップデート">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>現在のバージョン</strong>表示 — 稼働中のwebappバージョン</li>
             <li><strong>「v X.Y.Z が利用可能」</strong>バッジ — GitHubリモートに新バージョンがある時に表示</li>
@@ -390,7 +409,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section id="settings-overlay" heading="3-8. システム固定化（OverlayFS）">
+        <Section id="settings-overlay" heading="3-9. システム固定化（OverlayFS）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>現在の状態</strong>表示 — ON（固定化中） / OFF（通常モード）</li>
             <li><strong>「固定化を有効にして再起動」</strong>ボタン — OverlayFSを有効化して再起動を1アクションで実行</li>
@@ -405,7 +424,7 @@ function ManualContent() {
           </div>
         </Section>
 
-        <Section id="settings-autoreboot" heading="3-9. 自動再起動">
+        <Section id="settings-autoreboot" heading="3-10. 自動再起動">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>毎日決まった時刻に自動再起動する</strong>チェックボックス（サーバ） — 有効化するとcrontabに <code>MM HH * * * /sbin/reboot</code> を追加</li>
             <li><strong>時刻入力</strong>（HH:MM、システムローカルタイムゾーン基準）</li>
@@ -416,14 +435,14 @@ function ManualContent() {
           </p>
         </Section>
 
-        <Section id="settings-power" heading="3-10. システム電源">
+        <Section id="settings-power" heading="3-11. システム電源">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>再起動</strong>ボタン — システム再起動（確認ダイアログあり）</li>
             <li><strong>シャットダウン</strong>ボタン — システム停止（再起動には電源抜き差しが必要）</li>
           </ul>
         </Section>
 
-        <Section id="settings-auth" heading="3-11. 管理者認証（ログイン）">
+        <Section id="settings-auth" heading="3-12. 管理者認証（ログイン）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li>設定の<strong>閲覧は誰でも可能</strong>ですが、<strong>変更には管理者ログインが必要</strong>です。</li>
             <li><strong>未ログイン時は、設定画面のすべての入力欄・ボタンが無効（グレーアウト）</strong>になり、一切の設定変更・電源操作ができません。管理者パスワードでログインすると、通常どおり操作できるようになります。</li>
@@ -433,7 +452,7 @@ function ManualContent() {
           </ul>
         </Section>
 
-        <Section id="settings-remote-support" heading="3-12. リモートサポート（CATVPN）">
+        <Section id="settings-remote-support" heading="3-13. リモートサポート（CATVPN）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
             <li><strong>有効化から3時間で自動的にOFF</strong>になります。時間内であれば再起動してもONのままです。自分でOFFにすれば即座に切れます。残り時間は画面に表示されます。</li>

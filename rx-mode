@@ -1,0 +1,429 @@
+#!/bin/bash
+#
+# rx-mode : 受信モードを排他切替する（OGN受信 / SkyLens受信 / 履歴再生）
+#
+#   rx-mode ogn        … OGN (ogn-rf + ogn-decode + ogn-mqtt) ← 緊急復旧はこれ1発
+#   rx-mode skylens    … SkyLens (skylens + skylens-mqtt + skylens-aprs)
+#   rx-mode history    … 履歴再生 (igc-simulator)。受信機は止めてドングルを解放する
+#   rx-mode stop       … 全部止める
+#   rx-mode upload on  … OGN へのアップロードを有効化
+#   rx-mode upload off … OGN へのアップロードを無効化
+#   rx-mode status     … 現在の状態を表示
+#   rx-mode check      … SkyLens の config.yml を検証（OGN 稼働中でも安全）
+#
+# RTL-SDR ドングルは1プロセスしか掴めないため、OGN と SkyLens は同時に動かせない。
+# 状態の正本は $STATE_FILE。webapp も CLI もこのスクリプトを呼ぶので表示が食い違わない。
+#
+# 配置先: /usr/local/bin/rx-mode
+#
+set -u
+
+STATE_FILE=/etc/rx-mode.state
+SKYLENS_DIR=/home/pi/skylens
+FEELDSCOPE_DIR=/home/pi/FEELDSCOPE
+UPLOAD_CONFIG=$FEELDSCOPE_DIR/upload-config.json
+OGN_CONF=/boot/rtlsdr-ogn.conf
+
+# root 権限が無ければ sudo で自分を呼び直す
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo "$0" "$@"
+fi
+
+c_ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
+c_warn() { printf '\033[33m%s\033[0m\n' "$*"; }
+c_err()  { printf '\033[31m%s\033[0m\n' "$*"; }
+
+dongle_holder() {
+    local p
+    for p in ogn-rf skylens; do
+        pgrep -x "$p" >/dev/null 2>&1 && { echo "$p"; return; }
+    done
+    echo ""
+}
+
+wait_gone() {
+    local name=$1 limit=${2:-15} i=0
+    while pgrep -x "$name" >/dev/null 2>&1; do
+        i=$((i + 1))
+        [ "$i" -ge "$limit" ] && return 1
+        sleep 1
+    done
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# OGN アップロード（APRS）
+# ---------------------------------------------------------------------------
+
+upload_enabled() {
+    # upload-config.json の enabled。ファイルが無ければ無効扱い
+    grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$UPLOAD_CONFIG" 2>/dev/null
+}
+
+read_receiver_name() {
+    # OGN へ名乗る呼出符号。/boot/OGN-receiver.conf が正本
+    local name=""
+    if [ -f /boot/OGN-receiver.conf ]; then
+        name=$(sed -n 's/^ReceiverName="\{0,1\}\([^"#]*\)"\{0,1\}.*/\1/p' /boot/OGN-receiver.conf | head -1)
+    fi
+    if [ -z "$name" ] && [ -f "$UPLOAD_CONFIG" ]; then
+        name=$(sed -n 's/.*"callsign"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$UPLOAD_CONFIG" | head -1)
+    fi
+    echo "$name" | tr -d ' '
+}
+
+write_upload_config() {
+    # $1 = true|false
+    local enabled=$1 call
+    call=$(read_receiver_name)
+    mkdir -p "$FEELDSCOPE_DIR"
+    cat > "$UPLOAD_CONFIG" <<EOF
+{
+  "enabled": $enabled,
+  "callsign": "$call",
+  "updated_at": "$(date -Is)"
+}
+EOF
+    chown pi:pi "$UPLOAD_CONFIG" 2>/dev/null
+}
+
+apply_ogn_aprs_call() {
+    # OGN 側の送信可否は /boot/rtlsdr-ogn.conf の APRS.Call で決まる。
+    # ★ APRS ブロックを消すのは NG。ogn-decode が呼出符号を自動生成して送ってしまう。
+    #    空文字にすると APRS_Sender が "no config" となり一切接続しない（2026-09-07 実測）。
+    local want=$1 call current
+    call=$(read_receiver_name)
+    [ -f "$OGN_CONF" ] || return 0
+
+    if [ "$want" = "on" ]; then
+        [ -n "$call" ] || { c_warn "  呼出符号が未設定のためアップロードを有効化できません"; return 1; }
+        new="$call"
+    else
+        new=""
+    fi
+
+    # 実ファイルは "{ Call = \"XXX\";" のように行頭が波括弧なので、行頭に縛らずに拾う
+    current=$(sed -n 's/.*Call[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$OGN_CONF" | head -1)
+    if [ "$current" = "$new" ]; then
+        return 0
+    fi
+
+    if grep -q 'Call[[:space:]]*=[[:space:]]*"' "$OGN_CONF"; then
+        sed -i "s|\(Call[[:space:]]*=[[:space:]]*\"\)[^\"]*\(\"\)|\1$new\2|" "$OGN_CONF"
+    elif grep -q '^APRS:' "$OGN_CONF"; then
+        sed -i "/^APRS:/a\\{ Call = \"$new\";" "$OGN_CONF"
+    else
+        printf '\nAPRS:\n{ Call = "%s";\n};\n' "$new" >> "$OGN_CONF"
+    fi
+    echo "  OGN の APRS.Call を \"$new\" にしました"
+    return 10   # 変更あり = OGN 再起動が必要
+}
+
+mode_upload() {
+    local want=${1:-status}
+    case "$want" in
+        on|off) ;;
+        status)
+            if upload_enabled; then c_ok "アップロード: 有効"; else echo "アップロード: 無効"; fi
+            return 0 ;;
+        *) c_err "使い方: rx-mode upload {on|off}"; return 1 ;;
+    esac
+
+    [ "$want" = "on" ] && write_upload_config true || write_upload_config false
+
+    apply_ogn_aprs_call "$want"
+    local changed=$?
+
+    # OGN が稼働中で設定が変わったなら反映のため再起動する
+    if [ "$changed" -eq 10 ] && pgrep -x ogn-rf >/dev/null 2>&1; then
+        echo "  OGN を再起動して設定を反映します..."
+        stop_ogn
+        start_ogn || c_err "  OGN の再起動に失敗しました"
+    fi
+
+    # SkyLens 側のアップローダは upload-config.json を 5 秒ごとに読み直すので
+    # 再起動は不要。稼働中でなければ何もしない。
+    if [ "$want" = "on" ]; then
+        c_ok "OK: OGN へのアップロードを有効にしました"
+    else
+        c_ok "OK: OGN へのアップロードを無効にしました"
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# 各受信系の起動 / 停止
+# ---------------------------------------------------------------------------
+
+stop_ogn() {
+    echo "  OGN を停止中..."
+    systemctl stop ogn-mqtt 2>/dev/null
+    /etc/init.d/rtlsdr-ogn stop >/dev/null 2>&1
+    if ! wait_gone ogn-rf 15; then
+        c_warn "  ogn-rf が残存 → SIGTERM 送出"
+        pkill -x ogn-rf 2>/dev/null
+        pkill -x ogn-decode 2>/dev/null
+        wait_gone ogn-rf 10 || { c_err "  ogn-rf を停止できません"; return 1; }
+    fi
+    wait_gone ogn-decode 10
+    return 0
+}
+
+start_ogn() {
+    # 注意: /etc/init.d/rtlsdr-ogn は起動のたびに設定マネージャの自己更新と
+    # バイナリの再ダウンロードを行うため、ogn-rf が上がるまで 30〜90 秒かかる。
+    echo "  OGN を起動中...（init スクリプトが自己更新＋バイナリDLを行うため最大2分かかります）"
+    /etc/init.d/rtlsdr-ogn start >/dev/null 2>&1 &
+    local i
+    for i in $(seq 1 120); do
+        if pgrep -x ogn-rf >/dev/null 2>&1; then
+            printf '\n'
+            sleep 2
+            systemctl start ogn-mqtt 2>/dev/null
+            return 0
+        fi
+        printf '.'
+        sleep 1
+    done
+    printf '\n'
+    return 1
+}
+
+stop_skylens() {
+    echo "  SkyLens を停止中..."
+    systemctl stop skylens-aprs 2>/dev/null
+    systemctl stop skylens-mqtt 2>/dev/null
+    systemctl stop skylens 2>/dev/null
+    wait_gone skylens 15 || { pkill -x skylens 2>/dev/null; wait_gone skylens 10; }
+    return 0
+}
+
+stop_history() {
+    systemctl stop igc-simulator 2>/dev/null
+}
+
+persist_ogn() {
+    update-rc.d rtlsdr-ogn enable >/dev/null 2>&1
+    systemctl enable ogn-mqtt >/dev/null 2>&1
+    systemctl disable skylens skylens-mqtt skylens-aprs >/dev/null 2>&1
+    systemctl disable igc-simulator >/dev/null 2>&1
+}
+
+persist_skylens() {
+    update-rc.d rtlsdr-ogn disable >/dev/null 2>&1
+    systemctl disable ogn-mqtt >/dev/null 2>&1
+    systemctl enable skylens skylens-mqtt skylens-aprs >/dev/null 2>&1
+    systemctl disable igc-simulator >/dev/null 2>&1
+}
+
+persist_history() {
+    # 履歴再生は「今だけ」の状態。再起動後は受信に戻すのが安全なので
+    # 自動起動は触らない（直前のモードの設定がそのまま残る）
+    :
+}
+
+# ---------------------------------------------------------------------------
+# モード
+# ---------------------------------------------------------------------------
+
+mode_ogn() {
+    echo "== OGN 受信モードへ切替 =="
+    stop_history
+    stop_skylens
+    stop_ogn                       # 二重起動防止のため一度落としてから上げ直す
+    if upload_enabled; then apply_ogn_aprs_call on; else apply_ogn_aprs_call off; fi
+    if start_ogn; then
+        persist_ogn
+        echo ogn > "$STATE_FILE"
+        c_ok "OK: OGN 受信で稼働中（再起動後も OGN で上がります）"
+        upload_enabled && echo "  OGN へのアップロード: 有効" || echo "  OGN へのアップロード: 無効"
+        return 0
+    fi
+    c_err "NG: OGN の起動に失敗しました"
+    echo "  手動確認: sudo /etc/init.d/rtlsdr-ogn start ; sudo journalctl -u ogn-mqtt -n 30"
+    return 1
+}
+
+mode_skylens() {
+    echo "== SkyLens 受信モードへ切替 =="
+    if [ ! -x "$SKYLENS_DIR/skylens" ]; then
+        c_err "NG: $SKYLENS_DIR/skylens がありません"; return 1
+    fi
+    if [ ! -f "$SKYLENS_DIR/node.lic" ]; then
+        c_err "NG: ライセンスファイル $SKYLENS_DIR/node.lic がありません"
+        echo "  Instance ID を FLARM に送って node.lic を受領し、上記パスに置いてください:"
+        echo "    $SKYLENS_DIR/skylens --version"
+        return 1
+    fi
+
+    stop_history
+    stop_ogn || { c_err "NG: OGN を停止できないため中止します（OGN は稼働継続）"; return 1; }
+
+    echo "  SkyLens を起動中..."
+    systemctl start skylens
+    sleep 8
+
+    if systemctl is-active --quiet skylens && pgrep -x skylens >/dev/null 2>&1; then
+        systemctl start skylens-mqtt 2>/dev/null
+        systemctl start skylens-aprs 2>/dev/null
+        persist_skylens
+        echo skylens > "$STATE_FILE"
+        c_ok "OK: SkyLens 受信で稼働中（再起動後も SkyLens で上がります）"
+        upload_enabled && echo "  OGN へのアップロード: 有効" || echo "  OGN へのアップロード: 無効"
+        echo
+        echo "-- 選択された復調プラン（JAPAN であることを確認）--"
+        journalctl -u skylens -n 200 --no-pager 2>/dev/null | grep -i "Demodulation Plan" | tail -1
+        echo "-- ブリッジ --"
+        printf '  skylens-mqtt %s\n' "$(systemctl is-active skylens-mqtt 2>/dev/null)"
+        printf '  skylens-aprs %s\n' "$(systemctl is-active skylens-aprs 2>/dev/null)"
+        return 0
+    fi
+
+    # ---- 失敗 → 自動ロールバック ----
+    c_err "NG: SkyLens の起動に失敗しました。OGN に自動復旧します。"
+    echo "-- SkyLens のログ（末尾20行）--"
+    journalctl -u skylens -n 20 --no-pager 2>/dev/null
+    echo "--------------------------------"
+    systemctl stop skylens 2>/dev/null
+    mode_ogn
+    return 1
+}
+
+mode_history() {
+    local speed=${1:-10}
+    echo "== 履歴再生モードへ切替 =="
+    echo "  受信機を停止してドングルを解放します"
+    stop_skylens
+    stop_ogn || c_warn "  OGN の停止に失敗しましたが続行します"
+
+    # 再生速度を systemd override に書いてから起動する
+    local rid overrides
+    rid=$(read_receiver_name | tr -d "'")
+    [ -n "$rid" ] || rid=RJTTTK001
+    overrides=/etc/systemd/system/igc-simulator.service.d
+    mkdir -p "$overrides"
+    cat > "$overrides/speed.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/python3 $FEELDSCOPE_DIR/igc-simulator.py --speed $speed --loop --receiver-id $rid --dir $FEELDSCOPE_DIR/testdata
+EOF
+    systemctl daemon-reload
+    systemctl start igc-simulator || { c_err "NG: igc-simulator を起動できません"; return 1; }
+    persist_history
+    echo history > "$STATE_FILE"
+    c_ok "OK: 履歴再生で稼働中（${speed}倍速ループ）"
+    c_warn "  受信は停止中です。OGN へのアップロードも行いません"
+    return 0
+}
+
+mode_stop() {
+    echo "== 全停止 =="
+    stop_history
+    stop_skylens
+    stop_ogn
+    echo stopped > "$STATE_FILE"
+    c_ok "OK: すべて停止しました"
+}
+
+# ---------------------------------------------------------------------------
+# 状態表示
+# ---------------------------------------------------------------------------
+
+show_status() {
+    local holder saved
+    holder=$(dongle_holder)
+    saved=$(cat "$STATE_FILE" 2>/dev/null || echo "(未設定)")
+
+    echo "=========== rx-mode status ==========="
+    echo "保存モード      : $saved"
+    if [ -n "$holder" ]; then
+        c_ok "ドングル使用中  : $holder"
+    else
+        c_warn "ドングル使用中  : なし（受信していません）"
+    fi
+    if upload_enabled; then
+        c_ok "OGNアップロード : 有効"
+    else
+        echo "OGNアップロード : 無効"
+    fi
+    echo
+    echo "-- プロセス --"
+    for p in ogn-rf ogn-decode skylens; do
+        if pgrep -x "$p" >/dev/null 2>&1; then
+            printf '  %-12s \033[32mrunning\033[0m (pid %s)\n' "$p" "$(pgrep -x "$p" | tr '\n' ' ')"
+        else
+            printf '  %-12s stopped\n' "$p"
+        fi
+    done
+    echo
+    echo "-- サービス --"
+    for s in ogn-mqtt skylens-mqtt skylens-aprs igc-simulator adsb-poller; do
+        printf '  %-14s %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null)"
+    done
+    echo
+    echo "-- 自動起動 --"
+    printf '  rtlsdr-ogn   %s\n' "$(ls /etc/rc2.d/ 2>/dev/null | grep -q 'S..rtlsdr-ogn' && echo enabled || echo disabled)"
+    for s in ogn-mqtt skylens skylens-mqtt skylens-aprs; do
+        printf '  %-12s %s\n' "$s" "$(systemctl is-enabled "$s" 2>/dev/null)"
+    done
+    echo
+    echo "-- SkyLens 設定 --"
+    if [ -f "$SKYLENS_DIR/config.yml" ]; then
+        local lat lon alt
+        lat=$(grep -E '^\s*latitude:'  "$SKYLENS_DIR/config.yml" | awk '{print $2}')
+        lon=$(grep -E '^\s*longitude:' "$SKYLENS_DIR/config.yml" | awk '{print $2}')
+        alt=$(grep -E '^\s*altitude:'  "$SKYLENS_DIR/config.yml" | awk '{print $2}')
+        echo "  局位置        : lat=$lat lon=$lon alt=$alt"
+        if grep -q 'TODO' "$SKYLENS_DIR/config.yml"; then
+            c_warn "  ★ config.yml に TODO が残っています（局位置が暫定値の可能性）"
+        fi
+    else
+        c_warn "  config.yml なし"
+    fi
+    if [ -f "$SKYLENS_DIR/node.lic" ]; then
+        echo "  ライセンス    : あり"
+    else
+        c_warn "  ライセンス    : なし（SkyLens は起動できません）"
+    fi
+    echo "  呼出符号      : $(read_receiver_name)"
+    echo "======================================"
+}
+
+check_config() {
+    # --license_verify_only は SDR を掴まないので、OGN 稼働中でも安全に設定検証できる
+    echo "== SkyLens 設定の検証（OGN を止めずに実行可能）=="
+    local out
+    out=$("$SKYLENS_DIR/skylens" --config_file "$SKYLENS_DIR/config.yml" --license_verify_only 2>&1)
+    echo "$out" | grep -E "warning|error|info - Station|Setting up|license_type" || true
+    echo
+    if echo "$out" | grep -q "Failed to parse config file"; then
+        c_err "NG: config.yml のパースに失敗しています"
+        c_err "    → 該当セクションが黙って既定値に巻き戻ります（例: UDP 宛先が 0.0.0.0 になる）"
+        echo  "    よくある原因: mqtt を使わないのに 'mqtt:' ブロックを書いている"
+        return 1
+    fi
+    c_ok "OK: config.yml は正常にパースされました"
+    echo "   ※ 上の 'Setting up UDP output to ...' が意図した宛先になっているか確認すること"
+    return 0
+}
+
+case "${1:-status}" in
+    ogn)      mode_ogn ;;
+    skylens)  mode_skylens ;;
+    history)  mode_history "${2:-10}" ;;
+    stop)     mode_stop ;;
+    upload)   mode_upload "${2:-status}" ;;
+    status)   show_status ;;
+    check)    check_config ;;
+    *)
+        echo "使い方: rx-mode {ogn|skylens|history [倍速]|stop|upload on|off|status|check}"
+        echo "  ogn      … OGN 受信（緊急復旧はこれ）"
+        echo "  skylens  … SkyLens 受信"
+        echo "  history  … 履歴再生（受信は停止しドングルを解放）"
+        echo "  stop     … 全停止"
+        echo "  upload   … OGN へのアップロード ON/OFF"
+        echo "  status   … 現在の状態表示"
+        echo "  check    … SkyLens の config.yml を検証（OGN 稼働中でも安全）"
+        exit 1
+        ;;
+esac

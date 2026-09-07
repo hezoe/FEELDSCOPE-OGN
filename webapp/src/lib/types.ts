@@ -33,6 +33,15 @@ export interface AircraftPosition {
   glider_type?: string;
   glider_id?: string;
   competition_id?: string;
+  // SkyLens 固有
+  /** 受信元。"skylens" のときは SkyLens 由来 */
+  source?: string;
+  /** FLARM の Flight ID（登録記号やコンテストナンバーの生の文字列） */
+  flight_id?: string;
+  /** 楕円体高[m]。altitude_m は標高に換算済みの値 */
+  altitude_hae_m?: number | null;
+  /** 送信側が地上にいると申告しているか */
+  on_ground?: boolean;
   // ADS-B specific
   adsb?: boolean;
   adsb_mode?: "adsb" | "modes";  // adsb=ADS-B, modes=Mode-S/C
@@ -65,6 +74,8 @@ export interface ReceiverStatus {
   receiver_id: string;
   timestamp_utc: string;
   online: boolean;
+  /** 受信系の種別。SkyLens ブリッジは "skylens" を入れる */
+  source?: string;
   simulated?: boolean;
   simulator?: {
     progress_pct: number;
@@ -74,11 +85,21 @@ export interface ReceiverStatus {
   };
 }
 
+export type RxMode = "ogn" | "skylens" | "history" | "stopped";
+
 export interface SystemStatus {
-  mode: "realtime" | "history";
+  mode: RxMode;
+  /** 再起動後に復帰するモード（/etc/rx-mode.state） */
+  saved_mode?: RxMode | null;
   ogn_mqtt_active: boolean;
   igc_simulator_active: boolean;
   mosquitto_active: boolean;
+  skylens_active?: boolean;
+  skylens_mqtt_active?: boolean;
+  skylens_aprs_active?: boolean;
+  /** SkyLens の実行ファイルとライセンスが揃っている端末か */
+  skylens_available?: boolean;
+  ogn_upload?: { enabled: boolean; callsign: string };
 }
 
 // ── Aircraft Database ──

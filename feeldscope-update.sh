@@ -71,11 +71,17 @@ log_info "Code updated"
 # =============================================================================
 
 log_info "[2/6] Stopping FEELDSCOPE services..."
+# 更新後に元のモードへ戻すため、現在の受信モードを控えておく
+RX_MODE_BEFORE=$(cat /etc/rx-mode.state 2>/dev/null || echo ogn)
+log_info "  現在の受信モード: $RX_MODE_BEFORE"
+
 systemctl stop ogn-mqtt.service 2>/dev/null || true
 # feeldscope-webapp is intentionally kept running so the browser progress bar
 # remains visible throughout the build. It is restarted in step 5.
 systemctl stop adsb-poller.service 2>/dev/null || true
 systemctl stop igc-simulator.service 2>/dev/null || true
+systemctl stop skylens-aprs.service 2>/dev/null || true
+systemctl stop skylens-mqtt.service 2>/dev/null || true
 
 # =============================================================================
 # Step 3: Update files (preserve site-specific config)
@@ -92,6 +98,11 @@ fi
 cp "$SCRIPT_DIR/ogn-mqtt.py"       "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/adsb-poller.py"    "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
+cp "$SCRIPT_DIR/skylens-mqtt.py"   "$FEELDSCOPE_DIR/"
+cp "$SCRIPT_DIR/skylens-aprs.py"   "$FEELDSCOPE_DIR/"
+
+# 受信モードの切替スクリプト（webapp も CLI もこれを呼ぶ）
+install -m 755 "$SCRIPT_DIR/rx-mode" /usr/local/bin/rx-mode
 
 # Site-specific data (aircraft-db.json, testdata/*.IGC) are NOT overwritten
 # — they live only on each device and are excluded from git
@@ -118,6 +129,12 @@ fi
 cp "$SCRIPT_DIR/config/ogn-mqtt.service"          /etc/systemd/system/
 cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
+cp "$SCRIPT_DIR/config/skylens-mqtt.service"       /etc/systemd/system/
+cp "$SCRIPT_DIR/config/skylens-aprs.service"       /etc/systemd/system/
+# skylens.service は SkyLens 本体がある端末にだけ入れる（配布物には本体を含めない）
+if [ -x /home/pi/skylens/skylens ]; then
+    cp "$SCRIPT_DIR/config/skylens.service"        /etc/systemd/system/
+fi
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf"  /etc/mosquitto/conf.d/feeldscope.conf
 
@@ -287,7 +304,25 @@ log_info "Webapp rebuilt"
 
 log_info "[6/6] Restarting services..."
 systemctl restart mosquitto
-systemctl start ogn-mqtt.service
+
+# 更新前のモードへ戻す。ドングルの排他制御は rx-mode に任せる
+case "$RX_MODE_BEFORE" in
+    skylens)
+        log_info "  SkyLens 受信モードへ復帰します"
+        /usr/local/bin/rx-mode skylens || log_info "  SkyLens への復帰に失敗しました（OGN で稼働中）"
+        ;;
+    history)
+        log_info "  履歴再生モードへ復帰します"
+        /usr/local/bin/rx-mode history || true
+        ;;
+    stopped)
+        log_info "  受信は停止したままにします"
+        ;;
+    *)
+        systemctl start ogn-mqtt.service
+        ;;
+esac
+
 systemctl restart feeldscope-webapp.service
 
 # Restart optional services if they were enabled

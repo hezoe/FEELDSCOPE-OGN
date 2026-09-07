@@ -32,10 +32,16 @@ interface NetworkStatus {
 }
 
 interface SystemStatus {
-  mode: "realtime" | "history" | "stopped";
+  mode: "ogn" | "skylens" | "history" | "stopped";
+  saved_mode?: "ogn" | "skylens" | "history" | "stopped" | null;
   ogn_mqtt_active: boolean;
   igc_simulator_active: boolean;
   mosquitto_active: boolean;
+  skylens_active?: boolean;
+  skylens_mqtt_active?: boolean;
+  skylens_aprs_active?: boolean;
+  skylens_available?: boolean;
+  ogn_upload?: { enabled: boolean; callsign: string };
   adsb_poller_active: boolean;
   overlay_enabled: boolean;
   adsb_config: AdsbSavedConfig;
@@ -381,15 +387,27 @@ export default function SettingsPage() {
 
           {/* Mode Selection */}
           <Card title="データソース切替" helpId="settings-source">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <ModeButton
-                label="リアルタイム再生"
-                description="OGN レシーバーからの実際の FLARM データをリアルタイムで受信・表示します。"
-                active={status?.mode === "realtime"}
+                label="OGN 受信"
+                description="OGN デコーダ（rtlsdr-ogn）で FLARM を受信します。従来のリアルタイム再生と同じ動作です。"
+                active={status?.mode === "ogn"}
                 switching={switching}
-                onClick={() => switchMode("realtime")}
+                onClick={() => switchMode("ogn")}
                 activeColor="var(--color-success)"
               />
+              {status?.skylens_available && (
+                <ModeButton
+                  label="SkyLens 受信"
+                  description="FLARM 純正の受信ソフト SkyLens で受信します。受信機は 1 台なので OGN 受信とは同時に使えません。"
+                  active={status?.mode === "skylens"}
+                  switching={switching}
+                  onClick={() => switchMode("skylens")}
+                  activeColor="var(--color-accent)"
+                  subtext={status?.mode === "skylens" && status?.skylens_aprs_active === false
+                    ? "アップローダ停止中" : undefined}
+                />
+              )}
               <div>
                 <ModeButton
                   label="履歴再生"
@@ -426,7 +444,47 @@ export default function SettingsPage() {
               </button>
             )}
             <p className="text-xs mt-3" style={{ color: "var(--color-text-secondary)" }}>
-              履歴再生中もOGN受信機は独立して動作しており、FLARMデータのOGNサーバへのアップロードは継続されます。
+              受信機は1台しかないため、OGN 受信と SkyLens 受信は同時に動かせません。履歴再生に切り替えると受信を停止し、
+              OGN サーバへのアップロードも止まります。
+            </p>
+          </Card>
+
+          {/* OGN Upload */}
+          <Card title="OGN へのアップロード" helpId="settings-upload">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-semibold">
+                  {status?.ogn_upload?.enabled ? "有効" : "無効"}
+                  {status?.ogn_upload?.callsign && (
+                    <span className="ml-2 text-sm font-mono" style={{ color: "var(--color-text-secondary)" }}>
+                      {status.ogn_upload.callsign}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  受信した FLARM データを OGN（Open Glider Network）へ送信します。
+                  OGN 受信モードではデコーダが直接送信し、SkyLens 受信モードでは skylens-aprs が送信します。
+                </p>
+              </div>
+              <button
+                onClick={() => switchMode(status?.ogn_upload?.enabled ? "upload-off" : "upload-on")}
+                disabled={switching || !canMutate}
+                className="px-4 py-2 rounded font-semibold whitespace-nowrap"
+                style={{
+                  background: status?.ogn_upload?.enabled ? "var(--color-danger)" : "var(--color-success)",
+                  color: "#fff",
+                  opacity: switching || !canMutate ? 0.5 : 1,
+                }}
+              >
+                {status?.ogn_upload?.enabled ? "アップロードを止める" : "アップロードを始める"}
+              </button>
+            </div>
+            <p className="text-xs mt-3" style={{ color: "var(--color-warning)" }}>
+              ★ OGN 受信モードでアップロードを切り替えると、設定を反映するため受信機が再起動します（最大2分）。
+            </p>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+              APRS の呼出符号を設定ファイルから消しても送信は止まりません。デコーダが自動生成した名前で送信を続けるため、
+              停止は必ずこのスイッチ（呼出符号を空にする方式）で行ってください。
             </p>
           </Card>
 

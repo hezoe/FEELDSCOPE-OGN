@@ -306,12 +306,24 @@ FLARMから受信した離着陸情報が自動的に記録されます。</p>
 </table>
 
 <h3>2. データソース切替</h3>
-<p>表示データのソースを切り替えます。履歴再生中もOGN受信機は独立動作し、FLARMデータのOGNサーバへのアップロードは継続されます。</p>
+<p>表示データのソースを切り替えます。RTL-SDRドングルは1プロセスしか掴めないため、OGN受信とSkyLens受信は同時に動かせません。
+履歴再生に切り替えると受信を停止してドングルを解放し、OGNサーバへのアップロードも止まります。</p>
 <table>
   <tr><th>モード</th><th>説明</th></tr>
-  <tr><td>リアルタイム再生</td><td>OGNレシーバーからのFLARMデータをリアルタイムで表示</td></tr>
+  <tr><td>OGN 受信</td><td>OGNデコーダ（rtlsdr-ogn）でFLARMを受信して表示</td></tr>
+  <tr><td>SkyLens 受信</td><td>FLARM純正の受信ソフトSkyLensで受信して表示。実行ファイルとライセンスがある端末でのみ表示されます</td></tr>
   <tr><td>履歴再生</td><td>IGCファイルの飛行データを現在時刻にずらして再生（1〜20倍速）</td></tr>
 </table>
+<p>切替の実体は端末上の <code>rx-mode</code> コマンドです。SSHから <code>sudo rx-mode ogn</code> /
+<code>sudo rx-mode skylens</code> / <code>sudo rx-mode history</code> でも同じ操作ができます。</p>
+
+<h3>2-2. OGN へのアップロード</h3>
+<p>受信したFLARMデータをOGN（Open Glider Network）へ送るかどうかを切り替えます。
+OGN受信モードではデコーダ自身が送信するため、切替時に受信機が再起動します（最大2分）。
+SkyLens受信モードでは skylens-aprs が送信し、再起動なしで反映されます。
+ステルス設定・ノートラック設定の機体は、有効時でも送信しません。</p>
+<p><strong>注意:</strong> 設定ファイルからAPRSの呼出符号の行を削除しても送信は止まりません。
+ogn-decodeが呼出符号を自動生成して送信を続けます。停止は必ずこの画面のスイッチで行ってください。</p>
 
 <h3>3. IGC ファイル管理（履歴再生用）</h3>
 <p>履歴再生に使用するIGCフライトログファイルの管理。
@@ -441,7 +453,7 @@ mosquitto_sub -t "ogn/#" -v -C 5</code></pre>
 
 <!-- ============================================================ -->
 <footer>
-  FEELDSCOPE-OGN v1.1.39 &mdash;
+  FEELDSCOPE-OGN v1.1.40 &mdash;
   <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
 </footer>
 

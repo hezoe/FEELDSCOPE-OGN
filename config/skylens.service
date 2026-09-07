@@ -1,0 +1,28 @@
+[Unit]
+Description=SkyLens FLARM Receiver Node
+Documentation=https://flarm.com/
+After=network-online.target chrony.service
+Wants=network-online.target
+# OGN と RTL-SDR ドングルを排他利用するため、同時起動を禁止する
+Conflicts=rtlsdr-ogn.service
+# 設定ミス・ライセンス切れ等で無限再起動ループにならないよう上限を設ける
+# （systemd 229 以降、StartLimit* は [Service] ではなく [Unit] に置く）
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/skylens
+ExecStartPre=/bin/sleep 2
+ExecStart=/home/pi/skylens/skylens --config_file /home/pi/skylens/config.yml
+# SkyLens は SIGTERM を無視する（systemd の停止タイムアウト 90 秒を待たされ、
+# 最終的に SIGKILL される）。SIGINT なら即座に終了するため停止シグナルを変更する。
+KillSignal=SIGINT
+TimeoutStopSec=15
+# SkyLens は異常時に自ら終了する設計のため、再起動は必須
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

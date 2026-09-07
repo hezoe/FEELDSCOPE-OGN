@@ -7,6 +7,37 @@ const execAsync = promisify(exec);
 
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
 const OGN_RECEIVER_CONF_PATH = "/boot/OGN-receiver.conf";
+const SKYLENS_CONFIG_PATH = "/home/pi/skylens/config.yml";
+const UPLOAD_CONFIG_PATH = process.env.FEELDSCOPE_UPLOAD_CONFIG || "/home/pi/FEELDSCOPE/upload-config.json";
+
+/** OGN へのアップロードが有効か。無効時は APRS.Call を空にして送信を止める。 */
+async function isUploadEnabled(): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(await readFile(UPLOAD_CONFIG_PATH, "utf-8"));
+    return parsed.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/** SkyLens 受信中はこちらが実際の局位置になる（config.yml の altitude は楕円体高）。 */
+async function readSkylensStation(): Promise<{ latitude: number; longitude: number; altitude: number; id: string } | null> {
+  try {
+    const text = await readFile(SKYLENS_CONFIG_PATH, "utf-8");
+    const num = (re: RegExp): number | null => {
+      const m = text.match(re);
+      return m ? parseFloat(m[1]) : null;
+    };
+    const latitude = num(/^\s*latitude:\s*([+\-\d.]+)/m);
+    const longitude = num(/^\s*longitude:\s*([+\-\d.]+)/m);
+    const altitude = num(/^\s*altitude:\s*([+\-\d.]+)/m);
+    const idMatch = text.match(/^\s*id:\s*([^\s#]+)/m);
+    if (latitude === null || longitude === null) return null;
+    return { latitude, longitude, altitude: altitude ?? 0, id: idMatch ? idMatch[1] : "" };
+  } catch {
+    return null;
+  }
+}
 
 interface OgnConfig {
   // From rtlsdr-ogn.conf (runtime)
@@ -80,8 +111,13 @@ async function getOgnConfig(): Promise<OgnConfig> {
   const rtl = await readRtlsdrConf();
   const recv = await readReceiverConf();
 
+  // アップロード無効時は APRS.Call が空になっている。呼出符号そのものは
+  // /boot/OGN-receiver.conf の ReceiverName が正本なので、そちらを優先する。
+  const callInConf = extractField(rtl, /Call\s*=\s*"([^"]*)"/);
+  const receiverName = extractField(recv, /ReceiverName="([^"#]*)"/) || callInConf;
+
   return {
-    receiverName: extractField(rtl, /Call\s*=\s*"([^"]*)"/),
+    receiverName,
     latitude: parseFloat(extractField(rtl, /Latitude\s*=\s*([0-9.\-]+)/, "0")),
     longitude: parseFloat(extractField(rtl, /Longitude\s*=\s*([0-9.\-]+)/, "0")),
     altitude: parseFloat(extractField(rtl, /Altitude\s*=\s*([0-9.\-]+)/, "0")),
@@ -98,7 +134,10 @@ async function getOgnConfig(): Promise<OgnConfig> {
 }
 
 /** Build a fresh rtlsdr-ogn.conf from config (Japan FLARM optimized, no GSM) */
-function buildRtlsdrConf(c: OgnConfig): string {
+function buildRtlsdrConf(c: OgnConfig, uploadEnabled: boolean): string {
+  // ★ APRS ブロックを消してはいけない。ogn-decode が呼出符号を自動生成して
+  //    送信を続けてしまう。空文字にすると送信部が "no config" となり接続しない。
+  const aprsCall = uploadEnabled ? c.receiverName : "";
   return `RF:
 { FreqPlan   = 7;        # 7 = Japan (922.4 MHz FLARM band, 50 kHz x 3 ch)
   FreqCorr   = ${c.freqCorr};
@@ -124,7 +163,7 @@ Position:
 };
 
 APRS:
-{ Call = "${c.receiverName}";
+{ Call = "${aprsCall}";
 };
 
 HTTP:
@@ -145,7 +184,7 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
   if (c.maxNoise <= c.minNoise || c.maxNoise > 40) throw new Error("MaxNoise は MinNoise より大きく 40 以下である必要があります");
   if (c.detectSNR < 1 || c.detectSNR > 20) throw new Error("DetectSNR は 1〜20 dB の範囲です");
 
-  const conf = buildRtlsdrConf(c);
+  const conf = buildRtlsdrConf(c, await isUploadEnabled());
 
   // Write rtlsdr-ogn.conf (write via sudo since /boot/ requires root)
   const tmpPath = "/tmp/rtlsdr-ogn.conf.new";
@@ -249,7 +288,29 @@ async function getOgnStatus(httpPort: number): Promise<OgnStatus> {
 export async function GET() {
   const config = await getOgnConfig();
   const status = await getOgnStatus(config.httpPort || 8082);
-  return NextResponse.json({ config, status });
+
+  // SkyLens 受信中は局位置が SkyLens 側の config.yml にある。地図の受信機マーカーが
+  // 実際の設置場所からずれないよう、稼働中はそちらで上書きする。
+  let skylens: Awaited<ReturnType<typeof readSkylensStation>> = null;
+  let skylensActive = false;
+  try {
+    const { stdout } = await execAsync("systemctl is-active skylens");
+    skylensActive = stdout.trim() === "active";
+  } catch { /* 停止中 */ }
+  if (skylensActive) {
+    skylens = await readSkylensStation();
+    if (skylens) {
+      config.latitude = skylens.latitude;
+      config.longitude = skylens.longitude;
+      config.altitude = skylens.altitude;
+    }
+  }
+
+  return NextResponse.json({
+    config,
+    status: skylensActive ? { ...status, online: true, source: "skylens" } : status,
+    skylens_station: skylens,
+  });
 }
 
 // POST /api/ogn — save config or restart receiver

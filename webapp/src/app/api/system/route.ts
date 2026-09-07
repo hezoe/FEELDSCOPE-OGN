@@ -14,6 +14,50 @@ const AIRFIELD_CONFIG_PATH = process.env.FEELDSCOPE_AIRFIELD_CONFIG || `${FEELDS
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
 const OGN_RECEIVER_CONF = "/boot/OGN-receiver.conf";
+// 受信モードとアップロード設定の正本。rx-mode（CLI）と webapp の双方がここを見る
+const RX_MODE_STATE = "/etc/rx-mode.state";
+const UPLOAD_CONFIG_PATH = process.env.FEELDSCOPE_UPLOAD_CONFIG || `${FEELDSCOPE_DIR}/upload-config.json`;
+
+export type RxMode = "ogn" | "skylens" | "history" | "stopped";
+
+/** 実際に動いているサービスから現在のモードを決める（保存値ではなく実態を優先） */
+async function detectRxMode(): Promise<RxMode> {
+  const [skylensMqtt, ognMqtt, igcSim] = await Promise.all([
+    isActive("skylens-mqtt"),
+    isActive("ogn-mqtt"),
+    isActive("igc-simulator"),
+  ]);
+  if (igcSim) return "history";
+  if (skylensMqtt) return "skylens";
+  if (ognMqtt) return "ogn";
+  return "stopped";
+}
+
+/** 再起動後に復帰するモード（rx-mode が書く保存値） */
+async function readSavedRxMode(): Promise<RxMode | null> {
+  try {
+    const v = (await readFile(RX_MODE_STATE, "utf-8")).trim();
+    if (v === "ogn" || v === "skylens" || v === "history" || v === "stopped") return v;
+  } catch { /* 未設定 */ }
+  return null;
+}
+
+async function getUploadConfig(): Promise<{ enabled: boolean; callsign: string }> {
+  try {
+    const parsed = JSON.parse(await readFile(UPLOAD_CONFIG_PATH, "utf-8"));
+    return {
+      enabled: parsed.enabled === true,
+      callsign: typeof parsed.callsign === "string" ? parsed.callsign : "",
+    };
+  } catch {
+    return { enabled: false, callsign: "" };
+  }
+}
+
+/** SkyLens が使える端末かどうか（バイナリとライセンスの両方が要る） */
+function isSkylensAvailable(): boolean {
+  return existsSync("/home/pi/skylens/skylens") && existsSync("/home/pi/skylens/node.lic");
+}
 
 // 設定ファイルを root で安全に書き込む。シェルを介さず内容を「データ」としてtmpへ書き、
 // 固定パスの cp で反映する（cp の引数は当方管理の定数/生成名のみ＝ユーザー入力なし）。
@@ -500,18 +544,22 @@ async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: s
 
 // GET /api/system - Get current system status
 export async function GET() {
-  const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled, receiverId] = await Promise.all([
+  const [ognMqtt, igcSim, mosquitto, adsbPoller, overlayEnabled, receiverId,
+         skylens, skylensMqtt, skylensAprs, savedMode, upload] = await Promise.all([
     isActive("ogn-mqtt"),
     isActive("igc-simulator"),
     isActive("mosquitto"),
     isActive("adsb-poller"),
     isOverlayEnabled(),
     detectReceiverId(),
+    isActive("skylens"),
+    isActive("skylens-mqtt"),
+    isActive("skylens-aprs"),
+    readSavedRxMode(),
+    getUploadConfig(),
   ]);
 
-  let mode: "realtime" | "history" | "stopped" = "stopped";
-  if (ognMqtt) mode = "realtime";
-  else if (igcSim) mode = "history";
+  const mode = await detectRxMode();
 
   const [adsbConfig, airfieldConfig, network, version, autoReboot, remoteSupport] = await Promise.all([
     loadAdsbConfig(),
@@ -524,12 +572,18 @@ export async function GET() {
 
   return NextResponse.json({
     mode,
+    saved_mode: savedMode,
     receiver_id: receiverId,
     airfield_config: airfieldConfig,
     ogn_mqtt_active: ognMqtt,
     igc_simulator_active: igcSim,
     mosquitto_active: mosquitto,
     adsb_poller_active: adsbPoller,
+    skylens_active: skylens,
+    skylens_mqtt_active: skylensMqtt,
+    skylens_aprs_active: skylensAprs,
+    skylens_available: isSkylensAvailable(),
+    ogn_upload: upload,
     overlay_enabled: overlayEnabled,
     adsb_config: adsbConfig,
     network,
@@ -561,43 +615,49 @@ export async function POST(request: Request) {
 
   try {
     switch (action) {
-      case "realtime":
-        // Start ogn-mqtt (Conflicts= will stop igc-simulator)
-        await execAsync("sudo -n systemctl start ogn-mqtt");
-        return NextResponse.json({ ok: true, mode: "realtime" });
+      // 受信モードの切替はすべて rx-mode に委ねる。CLI と webapp で
+      // ドングルの排他制御と保存状態を必ず一致させるため。
+      case "ogn":
+      case "realtime":            // 旧 UI との互換のため realtime も受ける
+        await execAsync("sudo -n /usr/local/bin/rx-mode ogn", { timeout: 180_000 });
+        return NextResponse.json({ ok: true, mode: "ogn" });
+
+      case "skylens": {
+        if (!isSkylensAvailable()) {
+          return NextResponse.json(
+            { error: "SkyLens の実行ファイルまたはライセンスがこの端末にありません。" },
+            { status: 400 }
+          );
+        }
+        await execAsync("sudo -n /usr/local/bin/rx-mode skylens", { timeout: 180_000 });
+        return NextResponse.json({ ok: true, mode: "skylens" });
+      }
 
       case "history": {
         const replaySpeed = Math.max(1, Math.min(20, parseInt(speed, 10) || 10));
 
-        // Check if igc-simulator is already running
-        const alreadyRunning = await isActive("igc-simulator");
-
-        if (alreadyRunning) {
-          // Send speed change command via MQTT (no restart)
+        // 既に再生中なら速度だけ MQTT で変える（受信機を触らない）
+        if (await isActive("igc-simulator")) {
           const rid = await detectReceiverId();
           await mqttPublish(`ogn/${rid}/command`, { speed: replaySpeed });
           return NextResponse.json({ ok: true, mode: "history", speed: replaySpeed });
         }
 
-        // Not running: update systemd override and start
-        const ridForSim = (await detectReceiverId()).replace(/'/g, "");
-        const overrideDir = "/etc/systemd/system/igc-simulator.service.d";
-        await execAsync(`sudo -n mkdir -p ${overrideDir}`);
-        await execAsync(`sudo -n bash -c 'cat > ${overrideDir}/speed.conf << EOF
-[Service]
-ExecStart=
-ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --receiver-id ${ridForSim} --dir ${FEELDSCOPE_DIR}/testdata
-EOF'`);
-        await execAsync("sudo -n systemctl daemon-reload");
-        await execAsync("sudo -n systemctl start igc-simulator");
+        // 履歴再生では受信機を止めてドングルを解放する（rx-mode が面倒を見る）
+        await execAsync(`sudo -n /usr/local/bin/rx-mode history ${replaySpeed}`, { timeout: 180_000 });
         return NextResponse.json({ ok: true, mode: "history", speed: replaySpeed });
       }
 
       case "stop":
-        await execAsync(
-          "sudo -n systemctl stop ogn-mqtt; sudo -n systemctl stop igc-simulator"
-        );
+        await execAsync("sudo -n /usr/local/bin/rx-mode stop", { timeout: 180_000 });
         return NextResponse.json({ ok: true, mode: "stopped" });
+
+      case "upload-on":
+      case "upload-off": {
+        const want = action === "upload-on" ? "on" : "off";
+        await execAsync(`sudo -n /usr/local/bin/rx-mode upload ${want}`, { timeout: 180_000 });
+        return NextResponse.json({ ok: true, ogn_upload: await getUploadConfig() });
+      }
 
       case "adsb-start": {
         const adsbUrl = body.url || "";
