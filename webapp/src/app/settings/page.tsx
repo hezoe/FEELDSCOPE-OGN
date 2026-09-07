@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
-import { isPointerTrackingEnabled, setPointerTrackingEnabled } from "@/lib/PointerTracker";
 import AuthPanel from "@/components/AuthPanel";
 
 interface IGCFile {
@@ -60,8 +59,6 @@ export default function SettingsPage() {
   const [switching, setSwitching] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [powerAction, setPowerAction] = useState(false);
-  // Pointer activity recording (UX analysis). Default OFF, persisted in localStorage.
-  const [pointerTracking, setPointerTracking] = useState(false);
   const [overlayAction, setOverlayAction] = useState(false);
   // Auto reboot
   const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
@@ -103,7 +100,6 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
   useEffect(() => {
-    setPointerTracking(isPointerTrackingEnabled());
   }, []);
   // 認証状態を取得し、変更権限を判定（ログイン/ログアウト時は AuthPanel がページ全体をリロードする）
   useEffect(() => {
@@ -482,6 +478,12 @@ export default function SettingsPage() {
             <p className="text-xs mt-3" style={{ color: "var(--color-warning)" }}>
               ★ OGN 受信モードでアップロードを切り替えると、設定を反映するため受信機が再起動します（最大2分）。
             </p>
+            {status?.mode === "skylens" && !status?.ogn_upload?.enabled && (
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                SkyLens 受信ではアップロードは停止状態で始まります。送信する場合は上のボタンで開始してください。
+                OGN 受信での設定は別に覚えているため、OGN に戻すと元の設定に復帰します。
+              </p>
+            )}
             <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
               APRS の呼出符号を設定ファイルから消しても送信は止まりません。デコーダが自動生成した名前で送信を続けるため、
               停止は必ずこのスイッチ（呼出符号を空にする方式）で行ってください。
@@ -770,28 +772,6 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                 滑空場までの距離÷高度が設定値を超えた場合、パス不足として赤点滅で警告します（デフォルト: 15）
-              </p>
-            </div>
-          </Card>
-
-          {/* UX Analysis - Pointer Activity Recording */}
-          <Card title="利用状況の記録（UX分析）">
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={pointerTracking}
-                  onChange={(e) => {
-                    setPointerTracking(e.target.checked);
-                    setPointerTrackingEnabled(e.target.checked);
-                  }}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm font-medium">ポインター操作を記録する</span>
-              </label>
-              <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                操作位置（移動・クリック・スクロール）を本機ローカルに記録します。UI改善のための分析にのみ使用し、外部送信はしません。
-                記録データは本機内に日付ごとに保存されます（既定 30 日で自動削除）。
               </p>
             </div>
           </Card>

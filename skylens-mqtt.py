@@ -29,6 +29,7 @@ import socket
 import sys
 import time
 from datetime import datetime, timezone
+from urllib.request import urlopen
 
 import paho.mqtt.client as mqtt
 
@@ -609,11 +610,14 @@ class SkyLensBridge:
                       retain=True, qos=1)
 
     def publish_status(self):
+        metrics = read_skylens_metrics(self.args.monitoring_port)
+        info = metrics.get("info", {})
+        packets = metrics.get("packets", {})
         status = {
             "receiver_id": self.receiver_id,
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "source": "skylens",
-            "software": "SkyLens (station %s)" % self.station_id,
+            "software": "SkyLens %s" % (info.get("version") or "(版数不明)"),
             "hostname": socket.gethostname(),
             "position": {
                 "latitude": self.station_lat,
@@ -622,16 +626,36 @@ class SkyLensBridge:
                 "geoid_separation_m": self.geoid,
             },
             "system": read_system_stats(),
-            "rf": {"freq_plan": "JAPAN (922.4 MHz)", "input_noise_db": None},
+            "rf": {
+                "freq_plan": info.get("sdr_demodulation_plan") or "(不明)",
+                "gain": info.get("sdr_gain_db"),
+                "sample_rate": info.get("sdr_sampling_rate_per_second"),
+                "ppm_correction": info.get("sdr_frequency_correction_ppm"),
+                "bias_t": info.get("sdr_bias_t"),
+                "serial": info.get("sdr_serial"),
+                "input_noise_db": None,
+            },
+            "license": {
+                "type": info.get("license_type"),
+                "expiration": info.get("license_expiration"),
+                # ★バイナリの復号期限。ライセンス期限とは別物で、こちらが切れると起動しない
+                "binary_expiration": info.get("skylens_expiration"),
+            },
             "skylens": {
                 "protocol_version": self.protocol_version,
                 "station_id": self.station_id,
+                "instance_id": info.get("instance_id"),
+                "version": info.get("version"),
+                "build_date": info.get("build_date"),
                 "uptime_ms": self.stats.get("uptimeMs"),
-                "preambles_found": self.stats.get("preamblesFound"),
-                "packets_decoded": self.stats.get("packetsDecoded"),
-                "invalid_packets": self.stats.get("invalidPackets"),
+                "preambles_found": self.stats.get("preamblesFound") or packets.get("preamble"),
+                "packets_decoded": self.stats.get("packetsDecoded") or packets.get("decoded"),
+                "packets_demodulated": packets.get("demodulated"),
+                "invalid_packets": self.stats.get("invalidPackets") or packets.get("invalid"),
                 "traffic_received": self.traffic_count,
                 "traffic_rejected": self.corrupt_count,
+                "bridge_started_utc": datetime.fromtimestamp(self.started_at, tz=timezone.utc).isoformat(),
+                "aircraft_tracked": len(self.aircraft),
             },
             "traffic": {
                 "last_1m": {"visible": len(self.aircraft), "total": len(self.aircraft)},
@@ -691,6 +715,36 @@ class SkyLensBridge:
         self._running = False
 
 
+def read_skylens_metrics(port=8003, timeout=2.0):
+    """SkyLens の Prometheus エンドポイントから受信段の内訳と設定を拾う。
+
+    復調プラン・ゲイン・サンプルレートは設定ファイルではなく実際に採用された値が
+    ここに出る。ステータス画面で「本当に JAPAN で動いているか」を見せたい。
+    """
+    out = {"info": {}, "packets": {}}
+    try:
+        with urlopen("http://127.0.0.1:%d/metrics" % port, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8", "replace")
+    except Exception:                                          # noqa: BLE001
+        return out
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = re.match(r"skylens_received_packets_total\{stage=\"([^\"]+)\"\}\s+([0-9.]+)", line)
+        if m:
+            try:
+                out["packets"][m.group(1)] = int(float(m.group(2)))
+            except ValueError:
+                pass
+            continue
+        m = re.match(r"skylens_station_total_info\{([^=]+)=\"([^\"]*)\"\}", line)
+        if m:
+            out["info"][m.group(1)] = m.group(2)
+    return out
+
+
 def read_system_stats():
     stats = {}
     try:
@@ -731,6 +785,8 @@ def main():
                     help="局の楕円体高 [m]")
     ap.add_argument("--geoid-separation", type=float, default=37.0,
                     help="ジオイド高 [m]。楕円体高から引いて標高にする (関東=37)")
+    ap.add_argument("--monitoring-port", type=int, default=8003,
+                    help="SkyLens の Prometheus エンドポイントのポート")
     ap.add_argument("--max-jump-speed", type=float, default=200.0,
                     help="位置飛びとみなす見かけ速度 [m/s]")
     ap.add_argument("--verbose", action="store_true")

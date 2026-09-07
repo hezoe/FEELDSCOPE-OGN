@@ -60,6 +60,20 @@ upload_enabled() {
     grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$UPLOAD_CONFIG" 2>/dev/null
 }
 
+read_ogn_pref() {
+    # OGN 受信モードでのアップロード希望値。SkyLens モードで false に強制されても
+    # OGN に戻したときに元の設定へ復帰できるよう、別に覚えておく
+    if grep -q '"ogn_enabled"[[:space:]]*:[[:space:]]*true' "$UPLOAD_CONFIG" 2>/dev/null; then
+        echo true
+    else
+        echo false
+    fi
+}
+
+current_mode() {
+    cat "$STATE_FILE" 2>/dev/null || echo ""
+}
+
 read_receiver_name() {
     # OGN へ名乗る呼出符号。/boot/OGN-receiver.conf が正本
     local name=""
@@ -73,13 +87,16 @@ read_receiver_name() {
 }
 
 write_upload_config() {
-    # $1 = true|false
-    local enabled=$1 call
+    # $1 = 現在有効にするか (true|false)
+    # $2 = OGN 受信モードでの希望値 (省略時は現状維持)
+    local enabled=$1 ognpref=${2:-} call
+    [ -n "$ognpref" ] || ognpref=$(read_ogn_pref)
     call=$(read_receiver_name)
     mkdir -p "$FEELDSCOPE_DIR"
     cat > "$UPLOAD_CONFIG" <<EOF
 {
   "enabled": $enabled,
+  "ogn_enabled": $ognpref,
   "callsign": "$call",
   "updated_at": "$(date -Is)"
 }
@@ -129,7 +146,13 @@ mode_upload() {
         *) c_err "使い方: rx-mode upload {on|off}"; return 1 ;;
     esac
 
-    [ "$want" = "on" ] && write_upload_config true || write_upload_config false
+    # OGN 受信モードでの操作は「OGN でのアップロード希望値」としても記憶する。
+    # SkyLens モードでの操作はその場限り（次に SkyLens を選ぶと既定の停止に戻る）。
+    if [ "$(current_mode)" = "ogn" ]; then
+        [ "$want" = "on" ] && write_upload_config true true || write_upload_config false false
+    else
+        [ "$want" = "on" ] && write_upload_config true || write_upload_config false
+    fi
 
     apply_ogn_aprs_call "$want"
     local changed=$?
@@ -231,7 +254,14 @@ mode_ogn() {
     stop_history
     stop_skylens
     stop_ogn                       # 二重起動防止のため一度落としてから上げ直す
-    if upload_enabled; then apply_ogn_aprs_call on; else apply_ogn_aprs_call off; fi
+    # OGN 受信での希望値に戻す（SkyLens モードで停止に倒れていても復帰する）
+    if [ "$(read_ogn_pref)" = "true" ]; then
+        write_upload_config true true
+        apply_ogn_aprs_call on
+    else
+        write_upload_config false false
+        apply_ogn_aprs_call off
+    fi
     if start_ogn; then
         persist_ogn
         echo ogn > "$STATE_FILE"
@@ -258,6 +288,11 @@ mode_skylens() {
 
     stop_history
     stop_ogn || { c_err "NG: OGN を停止できないため中止します（OGN は稼働継続）"; return 1; }
+
+    # ★SkyLens 受信では OGN へのアップロードを既定で停止する。
+    #   利用者が設定画面（または rx-mode upload on）で明示的に開始するまで送信しない。
+    write_upload_config false
+    echo "  OGN へのアップロードは停止状態で開始します（開始するには明示操作が必要）"
 
     echo "  SkyLens を起動中..."
     systemctl start skylens

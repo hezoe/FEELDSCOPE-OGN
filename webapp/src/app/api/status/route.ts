@@ -6,6 +6,46 @@ import { readFile } from "fs/promises";
 const execAsync = promisify(exec);
 
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
+const RX_MODE_STATE = "/etc/rx-mode.state";
+const UPLOAD_CONFIG_PATH = process.env.FEELDSCOPE_UPLOAD_CONFIG || "/home/pi/FEELDSCOPE/upload-config.json";
+
+type RxMode = "ogn" | "skylens" | "history" | "stopped";
+
+async function readSavedRxMode(): Promise<RxMode | null> {
+  try {
+    const v = (await readFile(RX_MODE_STATE, "utf-8")).trim();
+    if (v === "ogn" || v === "skylens" || v === "history" || v === "stopped") return v;
+  } catch { /* 未設定 */ }
+  return null;
+}
+
+async function getUploadConfig() {
+  try {
+    const parsed = JSON.parse(await readFile(UPLOAD_CONFIG_PATH, "utf-8"));
+    return {
+      enabled: parsed.enabled === true,
+      ogn_enabled: parsed.ogn_enabled === true,
+      callsign: typeof parsed.callsign === "string" ? parsed.callsign : "",
+      updated_at: typeof parsed.updated_at === "string" ? parsed.updated_at : null,
+    };
+  } catch {
+    return { enabled: false, ogn_enabled: false, callsign: "", updated_at: null };
+  }
+}
+
+/** SkyLens 本体の稼働情報。復調プラン等はブリッジが MQTT に載せている */
+async function getSkylensProcess() {
+  const [serviceActive, processAlive] = await Promise.all([
+    isActive("skylens"),
+    execAsync("pgrep -x skylens").then(() => true).catch(() => false),
+  ]);
+  let licenseUntil: string | null = null;
+  try {
+    const { stdout } = await execAsync("grep -a -o -m1 '20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]' /home/pi/skylens/node.lic");
+    licenseUntil = stdout.trim() || null;
+  } catch { /* ライセンス未配置 */ }
+  return { service_active: serviceActive, process_alive: processAlive, license_until: licenseUntil };
+}
 
 async function isActive(service: string): Promise<boolean> {
   try {
@@ -17,6 +57,11 @@ async function isActive(service: string): Promise<boolean> {
 }
 
 async function isInitdActive(name: string): Promise<boolean> {
+  // rtlsdr-ogn の init スクリプトの status はプロセス一覧を並べるだけで
+  // "running" とは書かない。実プロセスの有無で判定する。
+  if (name === "rtlsdr-ogn") {
+    return execAsync("pgrep -x ogn-rf").then(() => true).catch(() => false);
+  }
   try {
     const { stdout } = await execAsync(`/etc/init.d/${name} status 2>&1 | grep -i running || true`);
     return stdout.trim().length > 0;
@@ -195,16 +240,24 @@ export async function GET() {
     ognReceiver,
     adsbStatus,
     ognMqttStatus,
+    aprsStatus,
     services,
     flightLogStats,
+    savedMode,
+    upload,
+    skylensProcess,
   ] = await Promise.all([
     getSystemSummary(),
     getOgnReceiverStatus(),
     mqttGetRetained(`ogn/${receiverId}/adsb_status`) as Promise<AdsbStatusMqtt | null>,
     mqttGetRetained(`ogn/${receiverId}/status`) as Promise<OgnReceiverStatusMqtt | null>,
+    mqttGetRetained(`ogn/${receiverId}/aprs_status`) as Promise<Record<string, unknown> | null>,
     Promise.all([
       isActive("mosquitto").then(active => ({ name: "mosquitto", active, uptime: null as string | null })),
       isActive("ogn-mqtt").then(async active => ({ name: "ogn-mqtt", active, uptime: active ? await getServiceUptime("ogn-mqtt") : null })),
+      isActive("skylens").then(async active => ({ name: "skylens", active, uptime: active ? await getServiceUptime("skylens") : null })),
+      isActive("skylens-mqtt").then(async active => ({ name: "skylens-mqtt", active, uptime: active ? await getServiceUptime("skylens-mqtt") : null })),
+      isActive("skylens-aprs").then(async active => ({ name: "skylens-aprs", active, uptime: active ? await getServiceUptime("skylens-aprs") : null })),
       isActive("igc-simulator").then(async active => ({ name: "igc-simulator", active, uptime: active ? await getServiceUptime("igc-simulator") : null })),
       isActive("adsb-poller").then(async active => ({ name: "adsb-poller", active, uptime: active ? await getServiceUptime("adsb-poller") : null })),
       isActive("feeldscope-webapp").then(async active => ({ name: "feeldscope-webapp", active, uptime: active ? await getServiceUptime("feeldscope-webapp") : null })),
@@ -212,6 +265,9 @@ export async function GET() {
       isInitdActive("rtlsdr-ogn").then(active => ({ name: "rtlsdr-ogn (init.d)", active, uptime: null as string | null })),
     ]),
     getFlightLogStats(),
+    readSavedRxMode(),
+    getUploadConfig(),
+    getSkylensProcess(),
   ]);
 
   // サービス状態と retained を整合させる:
@@ -233,8 +289,53 @@ export async function GET() {
       ? { ...ognMqttStatus, service_active: true }
       : { service_active: true };
 
+  // 実際に動いているサービスから現在のモードを決める（保存値より実態を優先）
+  const skylensMqttActive = services.some(s => s.name === "skylens-mqtt" && s.active);
+  const igcActive = services.some(s => s.name === "igc-simulator" && s.active);
+  const rxMode: RxMode = igcActive ? "history"
+    : skylensMqttActive ? "skylens"
+    : ognMqttActive ? "ogn"
+    : "stopped";
+
+  // MQTT の受信機ステータスは、稼働中のブリッジ（OGN か SkyLens）が書いている
+  const receiverStatus = (skylensMqttActive || ognMqttActive) ? ognMqttStatus : null;
+  const receiverSource = (receiverStatus?.source as string | undefined)
+    ?? (skylensMqttActive ? "skylens" : "ogn");
+
+  // アップロードの実状態: OGN 受信中はデコーダの APRS 欄、
+  // SkyLens 受信中は skylens-aprs が publish した aprs_status を見る
+  const ognAprs = (receiverStatus?.aprs ?? null) as Record<string, unknown> | null;
+  const uploadLive = rxMode === "skylens"
+    ? {
+        transport: "skylens-aprs",
+        service_active: services.some(s => s.name === "skylens-aprs" && s.active),
+        ...(aprsStatus ?? {}),
+      }
+    : rxMode === "ogn"
+      ? {
+          transport: "ogn-decode",
+          service_active: ognMqttActive,
+          connected: !!(ognAprs?.connected_to),
+          connected_to: (ognAprs?.connected_to as string) || null,
+          server: (ognAprs?.server as string) || null,
+          callsign: (ognAprs?.call as string) || "",
+          kb_sent: ognAprs?.kb_sent ?? null,
+          beacon_interval_sec: ognAprs?.beacon_interval_sec ?? null,
+          position_interval_sec: ognAprs?.position_interval_sec ?? null,
+        }
+      : { transport: null, service_active: false, connected: false };
+
   return NextResponse.json({
     receiver_id: receiverId,
+    rx_mode: rxMode,
+    saved_rx_mode: savedMode,
+    receiver_source: receiverSource,
+    upload: { config: upload, live: uploadLive },
+    skylens: {
+      ...skylensProcess,
+      bridge_active: skylensMqttActive,
+      status: skylensMqttActive ? receiverStatus : null,
+    },
     system,
     ogn_receiver: ognReceiver,
     ogn_mqtt_status: ognMqttStatusOut,

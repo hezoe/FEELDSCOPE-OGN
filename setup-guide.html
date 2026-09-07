@@ -322,6 +322,8 @@ FLARMから受信した離着陸情報が自動的に記録されます。</p>
 OGN受信モードではデコーダ自身が送信するため、切替時に受信機が再起動します（最大2分）。
 SkyLens受信モードでは skylens-aprs が送信し、再起動なしで反映されます。
 ステルス設定・ノートラック設定の機体は、有効時でも送信しません。</p>
+<p><strong>SkyLens受信では既定で停止です。</strong>SkyLens受信を選ぶたびにアップロードは停止状態に戻り、
+この画面で明示的に開始するまで送信しません。OGN受信での設定は別に記憶しているため、OGN受信に戻すと元の設定に復帰します。</p>
 <p><strong>注意:</strong> 設定ファイルからAPRSの呼出符号の行を削除しても送信は止まりません。
 ogn-decodeが呼出符号を自動生成して送信を続けます。停止は必ずこの画面のスイッチで行ってください。</p>
 
@@ -453,7 +455,7 @@ mosquitto_sub -t "ogn/#" -v -C 5</code></pre>
 
 <!-- ============================================================ -->
 <footer>
-  FEELDSCOPE-OGN v1.1.40 &mdash;
+  FEELDSCOPE-OGN v1.1.41 &mdash;
   <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
 </footer>
 

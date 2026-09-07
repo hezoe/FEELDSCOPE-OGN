@@ -241,6 +241,55 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
+        <Section id="status-rx-mode" heading="受信モード">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="現在のモード" desc="実際に動いているサービスから判定した受信モード（OGN受信 / SkyLens受信 / 履歴再生 / 停止中）" />
+            <ManualRow label="再起動後に復帰するモード" desc="/etc/rx-mode.state に保存された値。次回起動時はこのモードで立ち上がる" />
+            <ManualRow label="データ供給元" desc="地図に流れているデータの出どころ。OGNデコーダかSkyLensか" />
+          </tbody></table>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            受信機は1台のため OGN 受信と SkyLens 受信は排他です。履歴再生中は受信を停止してドングルを解放します。
+          </p>
+        </Section>
+
+        <Section id="status-upload" heading="OGN へのアップロード">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="設定" desc="送信する設定になっているか。設定画面のスイッチと連動" />
+            <ManualRow label="実際の接続" desc="OGNサーバへ実際に接続できているか。設定が有効なのに未接続なら赤で表示" />
+            <ManualRow label="送信経路" desc="OGN受信中は ogn-decode、SkyLens受信中は skylens-aprs" />
+            <ManualRow label="呼出符号" desc="OGNへ名乗っている受信局名" />
+            <ManualRow label="接続先" desc="接続しているOGNサーバのアドレス" />
+            <ManualRow label="送信済み（累計）／（直近1分）" desc="SkyLens受信中の送信パケット数" />
+            <ManualRow label="送信中の機体数" desc="直近に送信対象となった機体の数" />
+            <ManualRow label="非公開設定で除外" desc="ステルス設定・ノートラック設定のため送信しなかった件数" />
+            <ManualRow label="最終エラー" desc="接続や送信で最後に起きたエラー（正常時は表示なし）" />
+          </tbody></table>
+          <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+            ★ SkyLens 受信を選ぶと、アップロードは必ず停止状態から始まります。送信するには設定画面で明示的に開始してください。
+          </p>
+        </Section>
+
+        <Section id="status-skylens" heading="SkyLens 受信機">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="状態" desc="SkyLens 本体のプロセスが動いているか" />
+            <ManualRow label="ブリッジ (skylens-mqtt)" desc="SkyLensの出力を地図へ流す変換サービスの稼働状態" />
+            <ManualRow label="ライセンス期限" desc="node.lic に記載された期限" />
+            <ManualRow label="局 ID" desc="SkyLens の設定ファイルで指定した受信局の識別子" />
+            <ManualRow label="復調プラン" desc="実際に採用された復調プラン。日本では JAPAN であること（緑表示）を確認する" />
+            <ManualRow label="ゲイン" desc="0 は AGC（自動）。固定値のときは dB 表示" />
+            <ManualRow label="局位置 / 局の標高" desc="復号に使われる受信局の座標。SkyLensは局位置を復号そのものに使うため、ずれていると受信できない" />
+            <ManualRow label="プリアンブル検出" desc="電波の先頭パターンを見つけた回数。ノイズでも増える" />
+            <ManualRow label="復号成功 / 復号失敗" desc="パケットの復号結果の内訳" />
+            <ManualRow label="受信した traffic" desc="ブリッジが受け取った機体メッセージ数" />
+            <ManualRow label="破損として破棄" desc="ブリッジが破損と判定して捨てた件数（後述）" />
+            <ManualRow label="追跡中の機体" desc="現在ブリッジが保持している機体の数" />
+          </tbody></table>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            SkyLens はビット化けしたメッセージを正常なものとして出力してくることがあり、品質フラグもありません。
+            そのままでは地図に幽霊機体が出るため、ブリッジ側で物理的にあり得ない値と位置の飛びを検出して除去しています。
+          </p>
+        </Section>
+
         <Section id="status-ogn-receiver" heading="OGN受信機">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
@@ -344,6 +393,8 @@ function ManualContent() {
             <li>OGN 受信モードでは ogn-decode 自身が APRS で送信します。切替時は設定反映のため受信機が再起動します（最大2分）</li>
             <li>SkyLens 受信モードでは skylens-aprs が送信します。こちらは再起動不要で 5 秒以内に反映されます</li>
             <li>ステルス設定・ノートラック設定の機体は、アップロードが有効でも送信しません</li>
+            <li><strong>SkyLens 受信を選ぶと、アップロードは必ず停止状態になります。</strong>送信するにはこの画面で明示的に開始してください</li>
+            <li>OGN 受信での設定は別に記憶されるため、SkyLens から OGN に戻すと元の設定に復帰します</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
             ★ 設定ファイルから APRS の呼出符号の行を削除しても送信は止まりません。ogn-decode が呼出符号を自動生成して送信を続けます。停止は必ずこのスイッチ（呼出符号を空文字にする方式）で行ってください。

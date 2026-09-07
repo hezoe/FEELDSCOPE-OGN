@@ -64,13 +64,91 @@ interface FlightLogStats {
   landed: number;
 }
 
+type RxMode = "ogn" | "skylens" | "history" | "stopped";
+
+interface UploadConfig {
+  enabled: boolean;
+  ogn_enabled: boolean;
+  callsign: string;
+  updated_at: string | null;
+}
+
+interface UploadLive {
+  transport: string | null;
+  service_active?: boolean;
+  enabled?: boolean;
+  connected?: boolean;
+  server?: string | null;
+  connected_to?: string | null;
+  callsign?: string;
+  login_response?: string | null;
+  sent_total?: number;
+  sent_last_min?: number;
+  dropped_private?: number;
+  aircraft_sent?: number;
+  last_sent_utc?: string | null;
+  last_error?: string | null;
+  started_at_utc?: string | null;
+  kb_sent?: number | null;
+  beacon_interval_sec?: number | null;
+  position_interval_sec?: number | null;
+}
+
+interface SkylensStatus {
+  service_active: boolean;
+  process_alive: boolean;
+  license_until: string | null;
+  bridge_active: boolean;
+  status: {
+    timestamp_utc?: string;
+    position?: { latitude?: number; longitude?: number; altitude_m?: number; geoid_separation_m?: number };
+    software?: string;
+    rf?: { freq_plan?: string; gain?: string; sample_rate?: string; ppm_correction?: string; serial?: string };
+    license?: { type?: string; expiration?: string; binary_expiration?: string };
+    skylens?: {
+      station_id?: string;
+      instance_id?: string;
+      version?: string;
+      build_date?: string;
+      protocol_version?: number;
+      preambles_found?: number | string;
+      packets_decoded?: number | string;
+      packets_demodulated?: number | string;
+      invalid_packets?: number | string;
+      traffic_received?: number;
+      traffic_rejected?: number;
+      aircraft_tracked?: number;
+      bridge_started_utc?: string;
+    };
+  } | null;
+}
+
 interface StatusPayload {
   receiver_id: string;
+  rx_mode: RxMode;
+  saved_rx_mode: RxMode | null;
+  receiver_source: string;
+  upload: { config: UploadConfig; live: UploadLive };
+  skylens: SkylensStatus;
   system: SystemSummary | null;
   ogn_receiver: OgnReceiver;
   adsb_status: AdsbStatus | null;
   services: ServiceState[];
   flight_log: FlightLogStats;
+}
+
+const RX_MODE_LABEL: Record<RxMode, string> = {
+  ogn: "OGN 受信",
+  skylens: "SkyLens 受信",
+  history: "履歴再生",
+  stopped: "停止中",
+};
+
+function num(v: number | string | undefined | null): string {
+  if (v === undefined || v === null || v === "") return "—";
+  const n = typeof v === "string" ? Number(v) : v;
+  if (!isFinite(n)) return String(v);
+  return n.toLocaleString("ja-JP");
 }
 
 function timeSince(iso: string | undefined): string {
@@ -132,14 +210,188 @@ export default function StatusPage() {
           </div>
         </Card>
 
+        {/* Receive mode */}
+        <Card title="受信モード" helpId="status-rx-mode">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Stat
+              label="現在のモード"
+              value={data ? RX_MODE_LABEL[data.rx_mode] : "—"}
+              accent={data?.rx_mode === "stopped" ? "danger" : data?.rx_mode === "history" ? "warning" : "success"}
+            />
+            <Stat label="再起動後に復帰するモード" value={data?.saved_rx_mode ? RX_MODE_LABEL[data.saved_rx_mode] : "—"} />
+            <Stat label="データ供給元" value={data?.receiver_source === "skylens" ? "SkyLens" : "OGN デコーダ"} />
+          </div>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            受信機は1台のため OGN 受信と SkyLens 受信は排他です。履歴再生中は受信を停止しドングルを解放します。
+          </p>
+        </Card>
+
+        {/* OGN upload */}
+        <Card title="OGN へのアップロード" helpId="status-upload">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Stat
+              label="設定"
+              value={data?.upload.config.enabled ? "送信する" : "送信しない"}
+              accent={data?.upload.config.enabled ? "success" : undefined}
+            />
+            <Stat
+              label="実際の接続"
+              value={data?.upload.live.connected ? "接続中" : "未接続"}
+              accent={data?.upload.live.connected ? "success" : data?.upload.config.enabled ? "danger" : undefined}
+            />
+            <Stat label="送信経路" value={data?.upload.live.transport || "—"} mono />
+            <Stat label="呼出符号" value={data?.upload.live.callsign || data?.upload.config.callsign || "—"} mono />
+            <Stat label="接続先" value={data?.upload.live.connected_to || data?.upload.live.server || "—"} mono small />
+            <Stat label="設定の最終変更" value={timeSince(data?.upload.config.updated_at || undefined)} />
+          </div>
+
+          {data?.rx_mode === "skylens" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+              <Stat label="送信済み（累計）" value={num(data.upload.live.sent_total)} mono />
+              <Stat label="送信（直近1分）" value={num(data.upload.live.sent_last_min)} mono />
+              <Stat label="送信中の機体数" value={num(data.upload.live.aircraft_sent)} mono />
+              <Stat label="非公開設定で除外" value={num(data.upload.live.dropped_private)} mono />
+              <Stat label="最終送信" value={timeSince(data.upload.live.last_sent_utc || undefined)} />
+              <Stat label="ログイン応答" value={data.upload.live.login_response || "—"} mono small />
+            </div>
+          )}
+
+          {data?.rx_mode === "ogn" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+              <Stat label="送信量" value={data.upload.live.kb_sent != null ? `${data.upload.live.kb_sent} kB` : "—"} mono />
+              <Stat label="ビーコン間隔" value={data.upload.live.beacon_interval_sec != null ? `${data.upload.live.beacon_interval_sec} 秒` : "—"} mono />
+              <Stat label="位置送信間隔" value={data.upload.live.position_interval_sec != null ? `${data.upload.live.position_interval_sec} 秒` : "—"} mono />
+            </div>
+          )}
+
+          {data?.upload.live.last_error && (
+            <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-danger-dim)", color: "var(--color-danger)" }}>
+              最終エラー: {data.upload.live.last_error}
+            </div>
+          )}
+
+          {data?.rx_mode === "skylens" && !data.upload.config.enabled && (
+            <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+              SkyLens 受信ではアップロードは既定で停止です。送信するには設定画面で明示的に開始してください。
+            </p>
+          )}
+          {data?.rx_mode === "history" && (
+            <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+              履歴再生中は受信していないため、アップロードも行いません。
+            </p>
+          )}
+        </Card>
+
+        {/* SkyLens receiver */}
+        {(data?.skylens.service_active || data?.skylens.bridge_active || data?.skylens.license_until) && (
+          <Card title="SkyLens 受信機" helpId="status-skylens">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <Stat
+                label="状態"
+                value={data?.skylens.process_alive ? "稼働中" : "停止"}
+                accent={data?.skylens.process_alive ? "success" : undefined}
+              />
+              <Stat
+                label="ブリッジ (skylens-mqtt)"
+                value={data?.skylens.bridge_active ? "稼働中" : "停止"}
+                accent={data?.skylens.bridge_active ? "success" : undefined}
+              />
+              <Stat
+                label="ライセンス期限"
+                value={data?.skylens.status?.license?.expiration || data?.skylens.license_until || "—"}
+                mono
+              />
+              <Stat label="ソフトウェア版数" value={data?.skylens.status?.skylens?.version || "—"} mono />
+              <Stat label="ライセンス種別" value={data?.skylens.status?.license?.type || "—"} mono />
+              <Stat
+                label="バイナリ復号期限"
+                value={data?.skylens.status?.license?.binary_expiration || "—"}
+                mono
+                accent={(() => {
+                  const e = data?.skylens.status?.license?.binary_expiration;
+                  if (!e) return undefined;
+                  const days = (new Date(e).getTime() - Date.now()) / 86400000;
+                  return days < 14 ? "danger" : days < 45 ? "warning" : undefined;
+                })()}
+              />
+            </div>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+              バイナリ復号期限はライセンス期限とは別物です。これを過ぎると SkyLens 本体が起動しなくなるため、
+              期限前に新しいビルドへの入れ替えが必要です。
+            </p>
+
+            {data?.skylens.status && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  <Stat label="局 ID" value={data.skylens.status.skylens?.station_id || "—"} mono />
+                  <Stat label="インスタンス ID" value={data.skylens.status.skylens?.instance_id || "—"} mono small />
+                  <Stat
+                    label="復調プラン"
+                    value={data.skylens.status.rf?.freq_plan || "—"}
+                    mono
+                    accent={data.skylens.status.rf?.freq_plan === "JAPAN" ? "success" : "warning"}
+                  />
+                  <Stat
+                    label="ゲイン"
+                    value={data.skylens.status.rf?.gain != null
+                      ? (Number(data.skylens.status.rf.gain) === 0
+                          ? "0 (AGC 自動)"
+                          : `${Number(data.skylens.status.rf.gain).toFixed(1)} dB`)
+                      : "—"}
+                    mono
+                  />
+                  <Stat label="周波数補正" value={data.skylens.status.rf?.ppm_correction != null ? `${data.skylens.status.rf.ppm_correction} ppm` : "—"} mono />
+                  <Stat label="サンプルレート" value={data.skylens.status.rf?.sample_rate ? `${num(data.skylens.status.rf.sample_rate)} S/s` : "—"} mono />
+                  <Stat
+                    label="局位置"
+                    value={data.skylens.status.position?.latitude != null
+                      ? `${data.skylens.status.position.latitude}, ${data.skylens.status.position.longitude}`
+                      : "—"}
+                    mono small
+                  />
+                  <Stat label="局の標高" value={data.skylens.status.position?.altitude_m != null ? `${data.skylens.status.position.altitude_m} m` : "—"} mono />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  <Stat label="プリアンブル検出" value={num(data.skylens.status.skylens?.preambles_found)} mono />
+                  <Stat label="復号成功" value={num(data.skylens.status.skylens?.packets_decoded)} mono accent="success" />
+                  <Stat label="復号失敗" value={num(data.skylens.status.skylens?.invalid_packets)} mono />
+                  <Stat label="受信した traffic" value={num(data.skylens.status.skylens?.traffic_received)} mono />
+                  <Stat
+                    label="破損として破棄"
+                    value={num(data.skylens.status.skylens?.traffic_rejected)}
+                    mono
+                    accent={(data.skylens.status.skylens?.traffic_rejected ?? 0) > 0 ? "warning" : undefined}
+                  />
+                  <Stat label="追跡中の機体" value={num(data.skylens.status.skylens?.aircraft_tracked)} mono />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  <Stat label="ブリッジ起動" value={timeSince(data.skylens.status.skylens?.bridge_started_utc)} />
+                  <Stat label="最終更新" value={timeSince(data.skylens.status.timestamp_utc)} />
+                  <Stat label="プロトコル版" value={data.skylens.status.skylens?.protocol_version != null ? `v${data.skylens.status.skylens.protocol_version}` : "—"} mono />
+                </div>
+
+                <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+                  破損メッセージは SkyLens が正常なものとして出力してくるため、ブリッジ側で除去しています。ここに出る件数は除去した数です。
+                </p>
+              </>
+            )}
+          </Card>
+        )}
+
         {/* System Status */}
         <Card title="システムステータス" helpId="status-services">
           <div className="space-y-2 text-sm">
             {[
               { label: "Mosquitto (MQTT ブローカー)", name: "mosquitto" },
-              { label: "ogn-mqtt (リアルタイム再生)", name: "ogn-mqtt" },
+              { label: "ogn-mqtt (OGN 受信の配信)", name: "ogn-mqtt" },
+              { label: "skylens (SkyLens 本体)", name: "skylens" },
+              { label: "skylens-mqtt (SkyLens の配信)", name: "skylens-mqtt" },
+              { label: "skylens-aprs (OGN へのアップロード)", name: "skylens-aprs" },
               { label: "igc-simulator (履歴再生)", name: "igc-simulator" },
               { label: "adsb-poller (ADS-B 受信)", name: "adsb-poller" },
+              { label: "rtlsdr-ogn (OGN の受信・復号)", name: "rtlsdr-ogn (init.d)" },
             ].map(({ label, name }) => {
               const svc = data?.services.find(s => s.name === name);
               return (

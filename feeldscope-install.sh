@@ -165,6 +165,11 @@ mkdir -p "$FEELDSCOPE_DIR"
 
 # Copy Python scripts
 cp "$SCRIPT_DIR/ogn-mqtt.py"       "$FEELDSCOPE_DIR/"
+cp "$SCRIPT_DIR/skylens-mqtt.py"   "$FEELDSCOPE_DIR/"
+cp "$SCRIPT_DIR/skylens-aprs.py"   "$FEELDSCOPE_DIR/"
+
+# 受信モードの切替スクリプト（webapp も CLI もこれを呼ぶ）
+install -m 755 "$SCRIPT_DIR/rx-mode" /usr/local/bin/rx-mode
 cp "$SCRIPT_DIR/adsb-poller.py"    "$FEELDSCOPE_DIR/"
 cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
 
@@ -391,6 +396,12 @@ log_info "[8/9] Installing systemd services..."
 cp "$SCRIPT_DIR/config/ogn-mqtt.service"          /etc/systemd/system/
 cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
+cp "$SCRIPT_DIR/config/skylens-mqtt.service"       /etc/systemd/system/
+cp "$SCRIPT_DIR/config/skylens-aprs.service"       /etc/systemd/system/
+# skylens.service は SkyLens 本体がある端末にだけ入れる（配布物に本体は含めない）
+if [ -x /home/pi/skylens/skylens ]; then
+    cp "$SCRIPT_DIR/config/skylens.service"        /etc/systemd/system/
+fi
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 
 # リモートサポート時限管理（3時間で自動OFF・再起動で窓内復帰）
@@ -422,6 +433,8 @@ systemctl enable ogn-mqtt.service
 systemctl enable feeldscope-webapp.service
 
 systemctl start ogn-mqtt.service
+# 新規導入時は OGN 受信を既定とする（SkyLens への切替は設定画面か rx-mode から）
+echo ogn > /etc/rx-mode.state
 systemctl start feeldscope-webapp.service
 
 log_info "Services started"

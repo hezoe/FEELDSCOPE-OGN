@@ -109,6 +109,13 @@ class AprsUploader:
         self.station = {"latitude": None, "longitude": None, "altitude_m": 0.0}
         self.sent_count = 0
         self.drop_count = 0
+        self.sent_last_min = 0
+        self.last_error = None
+        self.login_response = None
+        self.connected_to = None
+        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.last_sent_at = None
+        self.client = None
 
     # -- APRS-IS 接続 --------------------------------------------------------
 
@@ -126,13 +133,19 @@ class AprsUploader:
             s.sendall(login.encode("ascii", "replace"))
             resp = s.recv(512).decode("utf-8", "replace").strip()
             log.info("APRS-IS ログイン: %s", resp)
+            self.login_response = resp
             if "unverified" in resp.lower():
                 log.error("ログインが unverified です。送信は受け付けられません")
+                self.last_error = "ログインが unverified です"
             self.sock = s
+            self.connected_to = "%s:%d" % (self.args.host, self.args.port)
+            self.last_error = None if "unverified" not in resp.lower() else self.last_error
             return True
         except OSError as exc:
             log.warning("APRS-IS 接続失敗: %s", exc)
+            self.last_error = "接続失敗: %s" % exc
             self.sock = None
+            self.connected_to = None
             return False
 
     def disconnect_aprs(self, reason=""):
@@ -142,6 +155,7 @@ class AprsUploader:
             except OSError:
                 pass
             self.sock = None
+            self.connected_to = None
             if reason:
                 log.info("APRS-IS 切断: %s", reason)
 
@@ -152,8 +166,10 @@ class AprsUploader:
             try:
                 self.sock.sendall((line + "\r\n").encode("utf-8", "replace"))
                 self.sent_count += 1
+                self.last_sent_at = datetime.now(timezone.utc).isoformat()
                 return True
             except OSError as exc:
+                self.last_error = "送信エラー: %s" % exc
                 self.disconnect_aprs("送信エラー: %s" % exc)
                 return False
 
@@ -263,6 +279,30 @@ class AprsUploader:
             self.last_sent[device_id] = now
             log.debug("APRS 送信: %s", line)
 
+    def publish_status(self):
+        """ステータス画面が読む送信状態。UI から見えないと止まっていても気付けない。"""
+        if self.client is None:
+            return
+        payload = {
+            "source": "skylens",
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "enabled": self.enabled,
+            "connected": self.sock is not None,
+            "server": "%s:%d" % (self.args.host, self.args.port),
+            "connected_to": self.connected_to,
+            "callsign": self.receiver_id,
+            "login_response": self.login_response,
+            "sent_total": self.sent_count,
+            "sent_last_min": self.sent_last_min,
+            "dropped_private": self.drop_count,
+            "aircraft_sent": len(self.last_sent),
+            "last_sent_utc": self.last_sent_at,
+            "last_error": self.last_error,
+            "started_at_utc": self.started_at,
+        }
+        self.client.publish("%s/%s/aprs_status" % (MQTT_BASE_TOPIC, self.receiver_id),
+                            json.dumps(payload, ensure_ascii=False), qos=1, retain=True)
+
     # -- メインループ --------------------------------------------------------
 
     def run(self):
@@ -272,21 +312,33 @@ class AprsUploader:
         )
         client.on_connect = self.on_connect
         client.on_message = self.on_message
+        client.will_set("%s/%s/aprs_status" % (MQTT_BASE_TOPIC, self.receiver_id),
+                        payload=json.dumps({"source": "skylens", "enabled": False,
+                                            "connected": False,
+                                            "last_error": "アップローダが停止しました"}),
+                        qos=1, retain=True)
         client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
         client.loop_start()
+        self.client = client
 
         self._running = True
         log.info("アップロード: %s", "有効" if self.enabled else "無効")
         last_report = time.time()
+        last_status_pub = 0.0
         last_sent_count = 0
         while self._running:
             time.sleep(1.0)
             now = time.time()
 
+            if now - last_status_pub >= 10:
+                self.publish_status()
+                last_status_pub = now
+
             # 1 分ごとに送信状況を残す。無言だと「本当に送れているのか」が判らないため
             if now - last_report >= 60:
+                self.sent_last_min = self.sent_count - last_sent_count
                 log.info("直近1分: %d 件送信 (累計 %d 件, 非公開設定で除外 %d 件, 機体 %d)",
-                         self.sent_count - last_sent_count, self.sent_count,
+                         self.sent_last_min, self.sent_count,
                          self.drop_count, len(self.last_sent))
                 last_sent_count = self.sent_count
                 last_report = now
@@ -310,9 +362,12 @@ class AprsUploader:
                     # 局位置がまだ来ていない。次の周回で再試行する
                     pass
 
+        self.enabled = False
+        self.disconnect_aprs("終了")
+        self.publish_status()
+        time.sleep(0.3)
         client.loop_stop()
         client.disconnect()
-        self.disconnect_aprs("終了")
 
     def shutdown(self):
         self._running = False
