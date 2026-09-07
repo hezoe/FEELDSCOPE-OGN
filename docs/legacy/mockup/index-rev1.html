@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FEELDSCOPE - FLARM FS Monitor</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --bg-card: #1e2a4a;
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0a0b0;
+  --accent: #00b4d8;
+  --accent-dim: #0077b6;
+  --danger: #e63946;
+  --danger-dim: rgba(230, 57, 70, 0.25);
+  --warning: #f4a261;
+  --success: #2a9d8f;
+  --border: #2a3a5e;
+  --tow-color: #f4a261;
+  --glider-color: #00b4d8;
+  --motor-glider-color: #8ac926;
+}
+
+body {
+  font-family: 'Segoe UI', 'Meiryo', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  min-height: 48px;
+  flex-shrink: 0;
+}
+
+.header-logo {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+
+.header-airfield {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.header-controls label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.header-controls select, .header-controls button {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.header-controls button:hover {
+  background: var(--accent-dim);
+}
+
+.btn-settings {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.clock {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  min-width: 70px;
+  text-align: right;
+}
+
+/* Main area */
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Map */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  background: #0a0a1a;
+}
+
+.map-overlay-btn {
+  position: absolute;
+  z-index: 1000;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.map-overlay-btn:hover {
+  background: var(--accent-dim);
+}
+
+.btn-home {
+  top: 10px;
+  right: 10px;
+}
+
+.btn-save-home {
+  top: 44px;
+  right: 10px;
+  font-size: 11px;
+}
+
+/* Status view */
+.status-view {
+  width: 280px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.status-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.status-section-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+.status-section-header.danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(42, 58, 94, 0.5);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.status-item:hover {
+  background: rgba(0, 180, 216, 0.08);
+}
+
+.status-item.lost-signal {
+  background: var(--danger-dim);
+  color: rgba(230, 57, 70, 0.8);
+}
+
+.status-item .reg {
+  font-weight: 600;
+  min-width: 65px;
+}
+
+.status-item .type {
+  color: var(--text-secondary);
+  font-size: 11px;
+  flex: 1;
+}
+
+.status-item .alt {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: right;
+  min-width: 55px;
+}
+
+.status-item .alt.danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.status-item .category-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.badge-tow { background: rgba(244, 162, 97, 0.2); color: var(--tow-color); }
+.badge-glider { background: rgba(0, 180, 216, 0.2); color: var(--glider-color); }
+.badge-motor { background: rgba(138, 201, 38, 0.2); color: var(--motor-glider-color); }
+
+/* Flight records */
+.records-panel {
+  height: 260px;
+  min-height: 200px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.records-tabs {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+
+.records-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  transition: all 0.15s;
+}
+
+.records-tab:hover {
+  color: var(--text-primary);
+}
+
+.records-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.records-tab-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.records-tab-actions button {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.records-tab-actions button:hover {
+  background: var(--accent-dim);
+}
+
+.records-body {
+  flex: 1;
+  overflow: auto;
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.records-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.records-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(42, 58, 94, 0.3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.records-table tr:hover td {
+  background: rgba(0, 180, 216, 0.05);
+}
+
+.records-table .editable {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--accent-dim);
+}
+
+.records-table .editable:hover {
+  color: var(--accent);
+}
+
+.records-table .flag-yes {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.records-table .btn-row {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.records-table .btn-row:hover {
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+/* Resize handle */
+.resize-handle {
+  height: 4px;
+  background: var(--border);
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+}
+
+/* Settings modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-overlay.show {
+  display: flex;
+}
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.modal h2 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: var(--accent);
+}
+
+.modal-field {
+  margin-bottom: 12px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.modal-field input, .modal-field select {
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.modal-actions .btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.modal-actions .btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Aircraft icon styles */
+.aircraft-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aircraft-label {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">FEELDSCOPE</div>
+  <div class="header-airfield">滝川スカイパーク</div>
+  <div class="header-controls">
+    <label>R/W:</label>
+    <select id="rwSelect">
+      <option value="36">36</option>
+      <option value="18">18</option>
+    </select>
+    <button class="btn-settings" onclick="openSettings()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      設定
+    </button>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<!-- Main area -->
+<div class="main">
+  <!-- Map -->
+  <div class="map-container">
+    <div id="map"></div>
+    <button class="map-overlay-btn btn-home" onclick="goHome()" title="ホームポジションに戻る">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      </svg>
+      HOME
+    </button>
+    <button class="map-overlay-btn btn-save-home" onclick="saveHome()" title="現在の表示をホームポジションとして保存">
+      保存
+    </button>
+  </div>
+
+  <!-- Status view -->
+  <div class="status-view">
+    <div class="status-section" id="lostSection">
+      <div class="status-section-header danger">通信途絶</div>
+      <div id="lostList"></div>
+    </div>
+    <div class="status-section" id="airborneSection">
+      <div class="status-section-header">▲ 上空</div>
+      <div id="airborneList"></div>
+    </div>
+    <div class="status-section" id="groundSection">
+      <div class="status-section-header">▼ 地上</div>
+      <div id="groundList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Resize handle -->
+<div class="resize-handle" id="resizeHandle"></div>
+
+<!-- Flight records -->
+<div class="records-panel" id="recordsPanel">
+  <div class="records-tabs">
+    <button class="records-tab active" data-tab="tow1" onclick="switchTab('tow1', this)">曳航機1</button>
+    <button class="records-tab" data-tab="tow2" onclick="switchTab('tow2', this)">曳航機2</button>
+    <button class="records-tab" data-tab="glider" onclick="switchTab('glider', this)">滑空機・動力滑空機</button>
+    <div class="records-tab-actions">
+      <button onclick="addRecord()">+ 追加</button>
+      <button onclick="exportCSV()">CSV</button>
+      <button onclick="exportExcel()">Excel</button>
+    </div>
+  </div>
+  <div class="records-body">
+    <!-- Tow 1 -->
+    <table class="records-table" id="tableTow1">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>離陸時刻</th>
+          <th>着陸時刻</th>
+          <th>被曳航機</th>
+          <th>離脱高度</th>
+          <th>教育証明</th>
+          <th>備考</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tow1Body"></tbody>
+    </table>
+    <!-- Tow 2 -->
+    <table class="records-table" id="tableTow2" style="display: none;">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>離陸時刻</th>
+          <th>着陸時刻</th>
+          <th>被曳航機</th>
+          <th>離脱高度</th>
+          <th>教育証明</th>
+          <th>備考</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tow2Body"></tbody>
+    </table>
+    <!-- Glider / Motor glider -->
+    <table class="records-table" id="tableGlider" style="display: none;">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>登録番号</th>
+          <th>機種</th>
+          <th>所属</th>
+          <th>カテゴリ</th>
+          <th>離陸時刻</th>
+          <th>着陸時刻</th>
+          <th>飛行時間</th>
+          <th>離脱高度</th>
+          <th>発航方法</th>
+          <th>着陸回数</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="gliderBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>滑空場設定</h2>
+    <div class="modal-field">
+      <label>滑空場名</label>
+      <input type="text" value="滝川スカイパーク" />
+    </div>
+    <div class="modal-field">
+      <label>滑空場標点 - 緯度</label>
+      <input type="text" value="43.5300" />
+    </div>
+    <div class="modal-field">
+      <label>滑空場標点 - 経度</label>
+      <input type="text" value="141.9070" />
+    </div>
+    <div class="modal-field">
+      <label>滑空場標点 - 標高 (m)</label>
+      <input type="number" value="35" />
+    </div>
+    <div class="modal-field">
+      <label>R/W方向</label>
+      <select>
+        <option>36 / 18</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>安全滑空比</label>
+      <input type="number" value="15" />
+    </div>
+    <div class="modal-field">
+      <label>通信途絶判定 (秒)</label>
+      <input type="number" value="5" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSettings()">キャンセル</button>
+      <button class="btn-primary" onclick="closeSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Configuration
+// ============================================================
+const AIRFIELD = {
+  name: '滝川スカイパーク',
+  lat: 43.5300,
+  lon: 141.9070,
+  elevation: 35,
+  safetyGlideRatio: 15,
+  lostSignalSec: 5
+};
+
+// ============================================================
+// Mock Aircraft Data
+// ============================================================
+const AIRCRAFT_MASTER = [
+  { flarm_id: 'DD1234', registration: 'JA2480', owner: '滝川SC', aircraft_type: 'ASK 21', category: 'glider' },
+  { flarm_id: 'DD5678', registration: 'JA21TC', owner: '滝川SC', aircraft_type: 'Duo Discus', category: 'glider' },
+  { flarm_id: 'DD9012', registration: 'JA03TC', owner: '滝川SC', aircraft_type: 'LS 8/18m', category: 'glider' },
+  { flarm_id: 'DD3456', registration: 'JA22HB', owner: '北大滑空部', aircraft_type: 'ASK 23', category: 'glider' },
+  { flarm_id: 'DD7890', registration: 'JA2590', owner: '個人', aircraft_type: 'Discus 2cT', category: 'motor_glider' },
+  { flarm_id: 'AA0001', registration: 'JA3948', owner: '滝川SC', aircraft_type: 'HK-36', category: 'tow' },
+  { flarm_id: 'AA0002', registration: 'JA3972', owner: '滝川SC', aircraft_type: 'HK-36', category: 'tow' },
+  { flarm_id: 'FF0099', registration: null, owner: null, aircraft_type: null, category: null },
+];
+
+// Simulated live state for each aircraft
+const aircraftState = {};
+const trailHistory = {};
+
+function initAircraftStates() {
+  // Tow 1 - taxiing on ground
+  aircraftState['AA0001'] = {
+    lat: 43.5295, lon: 141.9060, alt: 35, speed: 0,
+    airborne: false, heading: 0, climb: 0, lastSeen: Date.now()
+  };
+  // Tow 2 - towing, airborne
+  aircraftState['AA0002'] = {
+    lat: 43.5420, lon: 141.9200, alt: 380, speed: 130,
+    airborne: true, heading: 45, climb: 3.0, lastSeen: Date.now()
+  };
+  // Glider 1 - soaring high
+  aircraftState['DD1234'] = {
+    lat: 43.5550, lon: 141.8800, alt: 1200, speed: 90,
+    airborne: true, heading: 270, climb: 2.5, lastSeen: Date.now()
+  };
+  // Glider 2 - being towed by AA0002
+  aircraftState['DD5678'] = {
+    lat: 43.5425, lon: 141.9205, alt: 370, speed: 128,
+    airborne: true, heading: 45, climb: 3.0, lastSeen: Date.now()
+  };
+  // Glider 3 - low altitude, returning
+  aircraftState['DD9012'] = {
+    lat: 43.5150, lon: 141.9400, alt: 320, speed: 105,
+    airborne: true, heading: 310, climb: -1.5, lastSeen: Date.now()
+  };
+  // Glider 4 - on ground
+  aircraftState['DD3456'] = {
+    lat: 43.5302, lon: 141.9075, alt: 35, speed: 0,
+    airborne: false, heading: 0, climb: 0, lastSeen: Date.now()
+  };
+  // Motor glider - distant, danger zone
+  aircraftState['DD7890'] = {
+    lat: 43.5900, lon: 141.8200, alt: 450, speed: 120,
+    airborne: true, heading: 200, climb: -0.5, lastSeen: Date.now()
+  };
+  // Unknown aircraft - lost signal
+  aircraftState['FF0099'] = {
+    lat: 43.5400, lon: 141.9500, alt: 600, speed: 80,
+    airborne: true, heading: 180, climb: 0, lastSeen: Date.now() - 8000
+  };
+
+  // Initialize trail history
+  Object.keys(aircraftState).forEach(id => {
+    trailHistory[id] = [];
+  });
+}
+
+// ============================================================
+// Map setup
+// ============================================================
+let map;
+let markers = {};
+let trails = {};
+let homePosition = { lat: 43.5350, lon: 141.9070, zoom: 13 };
+
+function initMap() {
+  map = L.map('map', {
+    center: [homePosition.lat, homePosition.lon],
+    zoom: homePosition.zoom,
+    zoomControl: true
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Airfield marker
+  L.circleMarker([AIRFIELD.lat, AIRFIELD.lon], {
+    radius: 6,
+    color: '#ffffff',
+    fillColor: '#ffffff',
+    fillOpacity: 0.4,
+    weight: 2
+  }).addTo(map).bindTooltip('滝川スカイパーク (35m)', { permanent: false });
+
+  // Runway line (approx RW18/36)
+  const rwLen = 0.008;
+  L.polyline([
+    [AIRFIELD.lat - rwLen, AIRFIELD.lon],
+    [AIRFIELD.lat + rwLen, AIRFIELD.lon]
+  ], { color: '#ffffff', weight: 2, opacity: 0.4, dashArray: '6,4' }).addTo(map);
+}
+
+function goHome() {
+  map.setView([homePosition.lat, homePosition.lon], homePosition.zoom);
+}
+
+function saveHome() {
+  const center = map.getCenter();
+  homePosition = { lat: center.lat, lon: center.lng, zoom: map.getZoom() };
+  alert('ホームポジションを保存しました');
+}
+
+// ============================================================
+// Aircraft rendering
+// ============================================================
+function getAircraftMaster(flarmId) {
+  return AIRCRAFT_MASTER.find(a => a.flarm_id === flarmId) || {
+    flarm_id: flarmId, registration: flarmId, owner: '不明', aircraft_type: '不明', category: null
+  };
+}
+
+function getDisplayName(flarmId) {
+  const master = getAircraftMaster(flarmId);
+  return master.registration || flarmId;
+}
+
+function getCategoryBadge(category) {
+  switch (category) {
+    case 'tow': return '<span class="category-badge badge-tow">曳航</span>';
+    case 'glider': return '<span class="category-badge badge-glider">滑空</span>';
+    case 'motor_glider': return '<span class="category-badge badge-motor">動滑</span>';
+    default: return '<span class="category-badge" style="background:rgba(255,255,255,0.1);color:#888;">不明</span>';
+  }
+}
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isLostSignal(flarmId) {
+  const state = aircraftState[flarmId];
+  return (Date.now() - state.lastSeen) >= AIRFIELD.lostSignalSec * 1000;
+}
+
+function isDanger(flarmId) {
+  const state = aircraftState[flarmId];
+  if (!state.airborne) return false;
+  const dist = haversineDistance(AIRFIELD.lat, AIRFIELD.lon, state.lat, state.lon);
+  const agl = state.alt - AIRFIELD.elevation;
+  return dist > agl * AIRFIELD.safetyGlideRatio;
+}
+
+function isLowAltitude(flarmId) {
+  const state = aircraftState[flarmId];
+  return state.airborne && (state.alt - AIRFIELD.elevation) <= 450;
+}
+
+function createAircraftIcon(flarmId) {
+  const master = getAircraftMaster(flarmId);
+  const state = aircraftState[flarmId];
+  const lost = isLostSignal(flarmId);
+  const danger = isDanger(flarmId);
+  const low = isLowAltitude(flarmId);
+
+  let color = '#00b4d8';
+  let size = 10;
+
+  if (master.category === 'tow') color = '#f4a261';
+  else if (master.category === 'motor_glider') color = '#8ac926';
+  else if (!master.category) color = '#888888';
+
+  if (danger) color = '#e63946';
+  if (lost) color = 'rgba(230, 57, 70, 0.4)';
+  if (low && !danger) size = 13;
+
+  const isTow = master.category === 'tow';
+  const rotation = state.heading || 0;
+
+  // SVG aircraft icon
+  let svg;
+  if (isTow) {
+    svg = `<svg width="${size * 3}" height="${size * 3}" viewBox="-15 -15 30 30" style="transform: rotate(${rotation}deg)">
+      <path d="M0,-12 L2,-4 L10,-1 L10,1 L2,2 L1,10 L4,11 L4,12 L-4,12 L-4,11 L-1,10 L-2,2 L-10,1 L-10,-1 L-2,-4 Z" fill="${color}" stroke="rgba(0,0,0,0.5)" stroke-width="0.5"/>
+    </svg>`;
+  } else {
+    svg = `<svg width="${size * 3}" height="${size * 3}" viewBox="-15 -15 30 30" style="transform: rotate(${rotation}deg)">
+      <path d="M0,-10 L1,-3 L14,0 L14,1 L1,2 L0.5,8 L3,9.5 L3,10.5 L-3,10.5 L-3,9.5 L-0.5,8 L-1,2 L-14,1 L-14,0 L-1,-3 Z" fill="${color}" stroke="rgba(0,0,0,0.5)" stroke-width="0.5"/>
+    </svg>`;
+  }
+
+  return L.divIcon({
+    html: `<div class="aircraft-icon">${svg}</div>`,
+    className: '',
+    iconSize: [size * 3, size * 3],
+    iconAnchor: [size * 1.5, size * 1.5]
+  });
+}
+
+function updateMapMarkers() {
+  Object.keys(aircraftState).forEach(flarmId => {
+    const state = aircraftState[flarmId];
+    const name = getDisplayName(flarmId);
+    const agl = Math.round(state.alt - AIRFIELD.elevation);
+    const lost = isLostSignal(flarmId);
+    const danger = isDanger(flarmId);
+
+    // Label
+    let labelColor = '#e8e8e8';
+    if (danger) labelColor = '#e63946';
+    if (lost) labelColor = 'rgba(230, 57, 70, 0.4)';
+
+    const labelText = state.airborne ? `${name} ${agl}m` : name;
+
+    if (markers[flarmId]) {
+      markers[flarmId].setLatLng([state.lat, state.lon]);
+      markers[flarmId].setIcon(createAircraftIcon(flarmId));
+      markers[flarmId].getTooltip().setContent(
+        `<span class="aircraft-label" style="color:${labelColor}">${labelText}</span>`
+      );
+    } else {
+      markers[flarmId] = L.marker([state.lat, state.lon], {
+        icon: createAircraftIcon(flarmId)
+      }).addTo(map).bindTooltip(
+        `<span class="aircraft-label" style="color:${labelColor}">${labelText}</span>`,
+        { permanent: true, direction: 'right', offset: [12, 0], className: '' }
+      );
+    }
+
+    // Trail
+    if (trailHistory[flarmId] && trailHistory[flarmId].length > 1) {
+      if (trails[flarmId]) map.removeLayer(trails[flarmId]);
+
+      const master = getAircraftMaster(flarmId);
+      let trailColor = '#00b4d8';
+      if (master.category === 'tow') trailColor = '#f4a261';
+      else if (master.category === 'motor_glider') trailColor = '#8ac926';
+      if (danger) trailColor = '#e63946';
+
+      trails[flarmId] = L.polyline(trailHistory[flarmId], {
+        color: trailColor,
+        weight: 2,
+        opacity: 0.6
+      }).addTo(map);
+    }
+  });
+}
+
+// ============================================================
+// Status view
+// ============================================================
+function updateStatusView() {
+  const lostList = document.getElementById('lostList');
+  const airborneList = document.getElementById('airborneList');
+  const groundList = document.getElementById('groundList');
+
+  let lostHTML = '';
+  let airborneItems = [];
+  let groundItems = [];
+
+  Object.keys(aircraftState).forEach(flarmId => {
+    const state = aircraftState[flarmId];
+    const master = getAircraftMaster(flarmId);
+    const name = getDisplayName(flarmId);
+    const agl = Math.round(state.alt - AIRFIELD.elevation);
+    const dist = haversineDistance(AIRFIELD.lat, AIRFIELD.lon, state.lat, state.lon);
+    const lost = isLostSignal(flarmId);
+    const danger = isDanger(flarmId);
+
+    if (lost) {
+      const secAgo = Math.round((Date.now() - state.lastSeen) / 1000);
+      lostHTML += `<div class="status-item lost-signal">
+        ${getCategoryBadge(master.category)}
+        <span class="reg">${name}</span>
+        <span class="type">${master.aircraft_type || '不明'}</span>
+        <span class="alt">${secAgo}秒前</span>
+      </div>`;
+    } else if (state.airborne) {
+      airborneItems.push({ flarmId, name, master, agl, danger, dist });
+    } else {
+      groundItems.push({ flarmId, name, master, dist });
+    }
+  });
+
+  // Sort airborne by altitude descending
+  airborneItems.sort((a, b) => b.agl - a.agl);
+
+  // Sort ground: tow first, then by distance from airfield
+  groundItems.sort((a, b) => {
+    if (a.master.category === 'tow' && b.master.category !== 'tow') return -1;
+    if (a.master.category !== 'tow' && b.master.category === 'tow') return 1;
+    return a.dist - b.dist;
+  });
+
+  let airborneHTML = '';
+  airborneItems.forEach(item => {
+    const altClass = item.danger ? 'alt danger' : 'alt';
+    airborneHTML += `<div class="status-item">
+      ${getCategoryBadge(item.master.category)}
+      <span class="reg">${item.name}</span>
+      <span class="type">${item.master.aircraft_type || '不明'}</span>
+      <span class="${altClass}">${item.agl}m</span>
+    </div>`;
+  });
+
+  let groundHTML = '';
+  groundItems.forEach(item => {
+    groundHTML += `<div class="status-item">
+      ${getCategoryBadge(item.master.category)}
+      <span class="reg">${item.name}</span>
+      <span class="type">${item.master.aircraft_type || '不明'}</span>
+      <span class="alt" style="color:var(--text-secondary)">${item.master.owner || ''}</span>
+    </div>`;
+  });
+
+  lostList.innerHTML = lostHTML || '<div class="empty-state">なし</div>';
+  airborneList.innerHTML = airborneHTML || '<div class="empty-state">上空に機体なし</div>';
+  groundList.innerHTML = groundHTML || '<div class="empty-state">地上に機体なし</div>';
+}
+
+// ============================================================
+// Flight records (mock data)
+// ============================================================
+const mockTow1Records = [
+  { num: 1, takeoff: '09:15:23', landing: '09:28:45', towed: 'JA2480', releaseAlt: 600, eduCert: false, note: '' },
+  { num: 2, takeoff: '09:42:10', landing: '09:55:32', towed: 'JA21TC', releaseAlt: 700, eduCert: true, note: '下降曳航実施' },
+  { num: 3, takeoff: '10:10:05', landing: '10:22:18', towed: 'JA03TC', releaseAlt: 650, eduCert: false, note: '' },
+  { num: 4, takeoff: '10:45:30', landing: '', towed: 'JA21TC', releaseAlt: null, eduCert: false, note: '' },
+];
+
+const mockTow2Records = [
+  { num: 1, takeoff: '09:30:00', landing: '09:43:15', towed: 'JA22HB', releaseAlt: 550, eduCert: false, note: '' },
+  { num: 2, takeoff: '10:00:22', landing: '10:14:50', towed: 'JA2480', releaseAlt: 680, eduCert: false, note: '給油 10:20' },
+];
+
+const mockGliderRecords = [
+  { num: 1, reg: 'JA2480', type: 'ASK 21', owner: '滝川SC', cat: '滑空機', takeoff: '09:15:48', landing: '10:42:30', duration: '1:26:42', releaseAlt: 600, method: '飛行機曳航', landCount: 1 },
+  { num: 2, reg: 'JA21TC', type: 'Duo Discus', owner: '滝川SC', cat: '滑空機', takeoff: '09:42:35', landing: '', duration: '--:--:--', releaseAlt: 700, method: '飛行機曳航', landCount: 0 },
+  { num: 3, reg: 'JA03TC', type: 'LS 8/18m', owner: '滝川SC', cat: '滑空機', takeoff: '10:10:30', landing: '', duration: '--:--:--', releaseAlt: 650, method: '飛行機曳航', landCount: 0 },
+  { num: 4, reg: 'JA22HB', type: 'ASK 23', owner: '北大滑空部', cat: '滑空機', takeoff: '09:30:25', landing: '10:15:40', duration: '0:45:15', releaseAlt: 550, method: '飛行機曳航', landCount: 1 },
+  { num: 5, reg: 'JA2590', type: 'Discus 2cT', owner: '個人', cat: '動力滑空機', takeoff: '10:20:00', landing: '', duration: '--:--:--', releaseAlt: null, method: '自力発航', landCount: 0 },
+  { num: 6, reg: 'FF0099', type: '不明', owner: '不明', cat: '—', takeoff: '10:35:00', landing: '', duration: '--:--:--', releaseAlt: null, method: '—', landCount: 0 },
+];
+
+function renderTowRecords(bodyId, records) {
+  const tbody = document.getElementById(bodyId);
+  tbody.innerHTML = records.map(r => `
+    <tr>
+      <td>${r.num}</td>
+      <td>${r.takeoff}</td>
+      <td>${r.landing || '<span style="color:var(--accent)">飛行中</span>'}</td>
+      <td>${r.towed}</td>
+      <td class="editable">${r.releaseAlt != null ? r.releaseAlt + 'm' : '—'}</td>
+      <td>${r.eduCert ? '<span class="flag-yes">教証</span>' : ''}</td>
+      <td class="editable">${r.note}</td>
+      <td><button class="btn-row">編集</button> <button class="btn-row">削除</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderGliderRecords() {
+  const tbody = document.getElementById('gliderBody');
+  tbody.innerHTML = mockGliderRecords.map(r => `
+    <tr>
+      <td>${r.num}</td>
+      <td>${r.reg}</td>
+      <td>${r.type}</td>
+      <td>${r.owner}</td>
+      <td>${r.cat}</td>
+      <td>${r.takeoff}</td>
+      <td>${r.landing || '<span style="color:var(--accent)">飛行中</span>'}</td>
+      <td>${r.duration}</td>
+      <td class="editable">${r.releaseAlt != null ? r.releaseAlt + 'm' : '—'}</td>
+      <td class="editable">${r.method}</td>
+      <td>${r.landCount}</td>
+      <td><button class="btn-row">編集</button> <button class="btn-row">削除</button></td>
+    </tr>
+  `).join('');
+}
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.records-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tableTow1').style.display = tab === 'tow1' ? '' : 'none';
+  document.getElementById('tableTow2').style.display = tab === 'tow2' ? '' : 'none';
+  document.getElementById('tableGlider').style.display = tab === 'glider' ? '' : 'none';
+}
+
+function addRecord() { alert('新しい発航記録を追加（モックアップ）'); }
+function exportCSV() { alert('CSV出力（モックアップ）'); }
+function exportExcel() { alert('Excel出力（モックアップ）'); }
+
+// ============================================================
+// Settings modal
+// ============================================================
+function openSettings() {
+  document.getElementById('settingsModal').classList.add('show');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+// ============================================================
+// Clock
+// ============================================================
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// ============================================================
+// Simulation loop
+// ============================================================
+let simTick = 0;
+
+function simulate() {
+  simTick++;
+  const now = Date.now();
+
+  // Move airborne aircraft
+  Object.keys(aircraftState).forEach(flarmId => {
+    const s = aircraftState[flarmId];
+    if (!s.airborne) return;
+    if (isLostSignal(flarmId)) return;
+
+    const speedMs = s.speed / 3.6;
+    const headingRad = s.heading * Math.PI / 180;
+    const dlat = (speedMs * Math.cos(headingRad)) / 111320;
+    const dlon = (speedMs * Math.sin(headingRad)) / (111320 * Math.cos(s.lat * Math.PI / 180));
+
+    s.lat += dlat;
+    s.lon += dlon;
+    s.alt += s.climb;
+
+    // Gentle heading change for soaring
+    if (flarmId === 'DD1234') {
+      s.heading = (s.heading + 2.5) % 360; // thermalling
+      s.climb = 1.5 + Math.sin(simTick * 0.1) * 1.0;
+    }
+    if (flarmId === 'DD9012') {
+      // Heading back to airfield
+      const bearing = Math.atan2(AIRFIELD.lon - s.lon, AIRFIELD.lat - s.lat) * 180 / Math.PI;
+      s.heading = (bearing + 360) % 360;
+      s.climb = -1.0 + Math.sin(simTick * 0.05) * 0.5;
+    }
+    if (flarmId === 'DD7890') {
+      s.heading = (s.heading + 1) % 360;
+      s.climb = -0.3 + Math.sin(simTick * 0.08) * 0.5;
+    }
+    // Tow and towed glider move together
+    if (flarmId === 'AA0002') {
+      s.heading = (s.heading + 0.5) % 360;
+    }
+    if (flarmId === 'DD5678') {
+      // Follow tow plane
+      const tow = aircraftState['AA0002'];
+      s.heading = tow.heading;
+      s.lat = tow.lat - 0.0003;
+      s.lon = tow.lon - 0.0003;
+      s.alt = tow.alt - 10;
+    }
+
+    s.lastSeen = now;
+
+    // Trail
+    if (!trailHistory[flarmId]) trailHistory[flarmId] = [];
+    trailHistory[flarmId].push([s.lat, s.lon]);
+    if (trailHistory[flarmId].length > 10) trailHistory[flarmId].shift();
+  });
+}
+
+// ============================================================
+// Resize handle
+// ============================================================
+function initResize() {
+  const handle = document.getElementById('resizeHandle');
+  const panel = document.getElementById('recordsPanel');
+  let startY, startH;
+
+  handle.addEventListener('mousedown', (e) => {
+    startY = e.clientY;
+    startH = panel.offsetHeight;
+    document.addEventListener('mousemove', onResize);
+    document.addEventListener('mouseup', stopResize);
+    e.preventDefault();
+  });
+
+  function onResize(e) {
+    const delta = startY - e.clientY;
+    panel.style.height = Math.max(100, Math.min(600, startH + delta)) + 'px';
+  }
+
+  function stopResize() {
+    document.removeEventListener('mousemove', onResize);
+    document.removeEventListener('mouseup', stopResize);
+  }
+}
+
+// ============================================================
+// Main update loop
+// ============================================================
+function update() {
+  simulate();
+  updateMapMarkers();
+  updateStatusView();
+  updateClock();
+}
+
+// ============================================================
+// Init
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  initAircraftStates();
+  initMap();
+  initResize();
+
+  // Render initial records
+  renderTowRecords('tow1Body', mockTow1Records);
+  renderTowRecords('tow2Body', mockTow2Records);
+  renderGliderRecords();
+
+  // Start update loop
+  update();
+  setInterval(update, 1000);
+});
+</script>
+</body>
+</html>
