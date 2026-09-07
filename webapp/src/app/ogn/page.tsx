@@ -48,6 +48,8 @@ interface OgnStatus {
 export default function OgnPage() {
   const [config, setConfig] = useState<OgnConfig | null>(null);
   const [status, setStatus] = useState<OgnStatus | null>(null);
+  // 変更権限: 管理者ログイン済み or リモートサポート中のオペレーターのみ
+  const [canMutate, setCanMutate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,13 @@ export default function OgnPage() {
     } catch {
       setError("OGN情報の取得に失敗しました");
     }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCanMutate(!!d.canMutate))
+      .catch(() => setCanMutate(false));
   }, []);
 
   useEffect(() => {
@@ -142,6 +151,11 @@ export default function OgnPage() {
             {error}
           </div>
         )}
+        {!canMutate && (
+          <div className="p-3 rounded text-sm" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            設定を変更するには管理者ログインが必要です。設定タブからログインしてください。表示は誰でも見られます。
+          </div>
+        )}
         {message && (
           <div className="p-3 rounded text-sm" style={{ background: "var(--color-success-dim)", color: "var(--color-success)", border: "1px solid var(--color-success)" }}>
             {message}
@@ -190,6 +204,7 @@ export default function OgnPage() {
           <div className="space-y-3">
             <Field label="受信機名（APRS Call、英数字9文字以内）">
               <input
+                disabled={!canMutate}
                 type="text"
                 value={config?.receiverName || ""}
                 onChange={(e) => update("receiverName", e.target.value)}
@@ -210,6 +225,7 @@ export default function OgnPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="緯度（°）">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.0001"
                 value={config?.latitude ?? 0}
@@ -220,6 +236,7 @@ export default function OgnPage() {
             </Field>
             <Field label="経度（°）">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.0001"
                 value={config?.longitude ?? 0}
@@ -230,6 +247,7 @@ export default function OgnPage() {
             </Field>
             <Field label="高度（m）">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="1"
                 value={config?.altitude ?? 0}
@@ -249,6 +267,7 @@ export default function OgnPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="周波数補正 FreqCorr (ppm)">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.1"
                 value={config?.freqCorr ?? 0}
@@ -262,6 +281,7 @@ export default function OgnPage() {
             </Field>
             <Field label="HTTPポート">
               <input
+                disabled={!canMutate}
                 type="number"
                 value={config?.httpPort ?? 8082}
                 onChange={(e) => update("httpPort", parseInt(e.target.value, 10))}
@@ -277,6 +297,7 @@ export default function OgnPage() {
           <div className="mt-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
+                disabled={!canMutate}
                 type="checkbox"
                 checked={config?.enableBias ?? false}
                 onChange={(e) => update("enableBias", e.target.checked)}
@@ -294,6 +315,7 @@ export default function OgnPage() {
           <div className="mt-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
+                disabled={!canMutate}
                 type="checkbox"
                 checked={config?.enableCoreOGNTeamRemoteAdmin ?? false}
                 onChange={(e) => update("enableCoreOGNTeamRemoteAdmin", e.target.checked)}
@@ -325,6 +347,7 @@ export default function OgnPage() {
               <button
                 type="button"
                 onClick={() => applyPreset("default")}
+                disabled={!canMutate}
                 className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
                 style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
               >
@@ -333,6 +356,7 @@ export default function OgnPage() {
               <button
                 type="button"
                 onClick={() => applyPreset("weak-signal")}
+                disabled={!canMutate}
                 className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
                 style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
               >
@@ -341,6 +365,7 @@ export default function OgnPage() {
               <button
                 type="button"
                 onClick={() => applyPreset("noisy-env")}
+                disabled={!canMutate}
                 className="px-3 py-1.5 text-xs rounded font-medium transition-colors"
                 style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
               >
@@ -355,6 +380,7 @@ export default function OgnPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Initial Gain (dB)">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.1"
                 min="0"
@@ -371,6 +397,7 @@ export default function OgnPage() {
 
             <Field label="DetectSNR (dB)">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.5"
                 min="1"
@@ -387,6 +414,7 @@ export default function OgnPage() {
 
             <Field label="MinNoise (dB)">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.5"
                 min="0"
@@ -403,6 +431,7 @@ export default function OgnPage() {
 
             <Field label="MaxNoise (dB)">
               <input
+                disabled={!canMutate}
                 type="number"
                 step="0.5"
                 min="1"
@@ -423,6 +452,7 @@ export default function OgnPage() {
         <Card title="OGNバイナリURL（インストール時）" helpId="ogn-binary-url">
           <Field label="OGNBINARYURL">
             <input
+              disabled={!canMutate}
               type="text"
               value={config?.ognBinaryUrl || ""}
               onChange={(e) => update("ognBinaryUrl", e.target.value)}
@@ -439,17 +469,17 @@ export default function OgnPage() {
         <div className="flex gap-3 items-center">
           <button
             onClick={saveConfig}
-            disabled={saving || !config}
+            disabled={saving || !canMutate || !config}
             className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{ background: "var(--color-accent)", color: "#fff", opacity: saving ? 0.5 : 1, cursor: saving ? "wait" : "pointer" }}
+            style={{ background: "var(--color-accent)", color: "#fff", opacity: saving || !canMutate ? 0.5 : 1, cursor: saving ? "wait" : "pointer" }}
           >
             {saving ? "保存中..." : "設定を保存して受信機を再起動"}
           </button>
           <button
             onClick={restartReceiver}
-            disabled={restarting}
+            disabled={restarting || !canMutate}
             className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)", opacity: restarting ? 0.5 : 1, cursor: restarting ? "wait" : "pointer" }}
+            style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)", opacity: restarting || !canMutate ? 0.5 : 1, cursor: restarting ? "wait" : "pointer" }}
           >
             {restarting ? "再起動中..." : "受信機のみ再起動"}
           </button>

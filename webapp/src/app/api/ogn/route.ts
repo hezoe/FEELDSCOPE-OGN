@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile, writeFile } from "fs/promises";
 import { applySharedPositionToSkylens } from "@/lib/skylens-config";
+import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 
 const execAsync = promisify(exec);
 
@@ -322,6 +323,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = await request.json();
   const { action } = body;
+
+  // 設定変更は管理者ログイン（またはリモートサポート中のオペレーター）が必須。
+  // 閲覧(GET)は無認証のまま。SkyLens 設定タブと同じ扱いに揃えている。
+  const ctx = await getAuthContext(request);
+  if (!isAuthorizedToMutate(ctx)) {
+    return NextResponse.json(
+      { error: "設定変更には管理者ログインが必要です。", needsAuth: true },
+      { status: 401 }
+    );
+  }
 
   try {
     switch (action) {

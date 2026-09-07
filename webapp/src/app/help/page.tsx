@@ -519,6 +519,9 @@ function ManualContent() {
           OGN受信機（rtlsdr-ogn）の全設定をWeb GUIから変更できます。保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と
           <code>/boot/OGN-receiver.conf</code> の両方を更新し、rtlsdr-ognサービスを自動再起動します（受信が数秒中断）。
         </p>
+        <p className="text-sm mb-2" style={{ color: "var(--color-warning)" }}>
+          ★ 設定の変更には管理者ログインが必要です。未ログインでは入力欄とボタンが無効になり、表示のみになります。
+        </p>
 
         <Section id="ogn-status" heading="受信機ステータス（リアルタイム）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
