@@ -42,7 +42,7 @@ interface SystemStatus {
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
-  remote_support: { configured: boolean; enabled: boolean; active: boolean; expires_at?: number; remaining_seconds?: number; catvpn_hostname?: string; assigned_ip?: string } | null;
+  remote_support: { configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string } | null;
 }
 
 export default function SettingsPage() {
@@ -159,8 +159,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (remoteSupportSynced.current || !status?.remote_support) return;
     remoteSupportSynced.current = true;
-    // 現在ONか（起動中）でトグルを初期化。時限式なので active を採用。
-    setRemoteSupportEnabled(status.remote_support.active);
+    // ON/OFF の正本は enable 状態。手動 start だけの端末も拾えるよう active も見る。
+    setRemoteSupportEnabled(status.remote_support.enabled || status.remote_support.active);
   }, [status]);
 
   // Sync network settings from server
@@ -1494,7 +1494,7 @@ export default function SettingsPage() {
                       onChange={(e) => setRemoteSupportEnabled(e.target.checked)}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm font-medium">リモートサポートを許可する（有効化から3時間で自動OFF）</span>
+                    <span className="text-sm font-medium">リモートサポートを許可する（OFFにするまで有効）</span>
                   </label>
 
                   {status?.remote_support?.catvpn_hostname && (
@@ -1516,10 +1516,7 @@ export default function SettingsPage() {
                     <span>現在の状態:</span>
                     {status?.remote_support?.active ? (
                       <span style={{ color: "var(--color-success, #16a34a)" }}>
-                        🟢 接続中
-                        {status.remote_support.remaining_seconds != null && (
-                          <> — あと{Math.floor(status.remote_support.remaining_seconds / 3600)}時間{Math.floor((status.remote_support.remaining_seconds % 3600) / 60)}分で自動OFF</>
-                        )}
+                        🟢 接続中 — OFFにするまで有効
                       </span>
                     ) : (
                       <span>⚫ 停止中</span>

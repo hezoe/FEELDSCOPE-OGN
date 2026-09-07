@@ -436,7 +436,7 @@ function ManualContent() {
         <Section id="settings-remote-support" heading="3-12. リモートサポート（CATVPN）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
-            <li><strong>有効化から3時間で自動的にOFF</strong>になります。時間内であれば再起動してもONのままです。自分でOFFにすれば即座に切れます。残り時間は画面に表示されます。</li>
+            <li><strong>ONにすると、自分でOFFにするまで有効なまま</strong>です。再起動してもONのままです。OFFにすれば即座に切れます。用が済んだらOFFに戻してください。</li>
             <li>ONにしても、その端末に入れるのは<strong>サポート担当のみ</strong>で、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
             <li>サポート担当はリモートサポート中、パスワードなしで設定変更・パスワードリセットが可能です（VPN上の本人性で認可）。</li>
           </ul>
@@ -637,11 +637,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.1.40 */}
+      {/* v1.1.41 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.41</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-07</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="リモートサポートの3時間自動OFFを廃止">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>時限を撤廃</strong>。ONにしたら<strong>自分でOFFにするまで有効</strong>なままになります（再起動しても維持）。残り時間の表示も廃止しました。</li>
+          <li>ON/OFF の正本を <code>wg-quick@wg0</code> の enable 状態に一本化。systemd がそのまま再起動後も復帰させます。</li>
+          <li>監視タイマーは<strong>ウォッチドッグ</strong>に変更。ONなのにトンネルが落ちていたら自動で復帰させます。</li>
+          <li><strong>アップデートでリモートサポートが切れなくなりました</strong>。ONのまま更新しても接続が維持されます。</li>
+        </ul>
+      </Card>
+
+      {/* v1.1.40 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.40</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-08-29</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="セキュリティ修正: 状態・ログAPIの認証強化">

@@ -1,5 +1,5 @@
 [Unit]
-Description=FEELDSCOPE remote support time-limit enforcement (start within window / auto-off after 3h)
+Description=FEELDSCOPE remote support watchdog (restart wg0 if enabled but inactive)
 After=network.target
 
 [Service]
