@@ -9,6 +9,21 @@ export default function Navigation() {
   const { activeTab, setActiveTab } = useTab();
   const [clock, setClock] = useState("--:--:--");
   const { units } = useUnits();
+  // SkyLens 設定タブは、本体とライセンスがある端末にだけ出す
+  const [skylensAvailable, setSkylensAvailable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      fetch("/api/system", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled) setSkylensAvailable(!!d.skylens_available); })
+        .catch(() => {});
+    };
+    check();
+    const id = setInterval(check, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   useEffect(() => {
     const update = () => {
@@ -67,6 +82,12 @@ export default function Navigation() {
         <div style={{ width: 1, background: "var(--color-border)" }} />
         <NavTab tabId="ogn" label="OGN設定" active={activeTab === "ogn"} onClick={setActiveTab} />
         <div style={{ width: 1, background: "var(--color-border)" }} />
+        {skylensAvailable && (
+          <>
+            <NavTab tabId="skylens" label="SkyLens設定" active={activeTab === "skylens"} onClick={setActiveTab} />
+            <div style={{ width: 1, background: "var(--color-border)" }} />
+          </>
+        )}
         <NavTab tabId="aircraft-db" label="機体情報" active={activeTab === "aircraft-db"} onClick={setActiveTab} />
         <div style={{ width: 1, background: "var(--color-border)" }} />
         <div className="h-full flex items-center">

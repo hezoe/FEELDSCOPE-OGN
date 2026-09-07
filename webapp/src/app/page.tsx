@@ -6,6 +6,7 @@ import { useTab } from "@/lib/TabContext";
 import SettingsPage from "@/app/settings/page";
 import StatusPage from "@/app/status/page";
 import OgnPage from "@/app/ogn/page";
+import SkylensPage from "@/app/skylens/page";
 import AircraftDbPage from "@/app/aircraft-db/page";
 
 const FlightMap = dynamic(() => import("@/components/FlightMap"), {
@@ -38,6 +39,7 @@ export default function Home() {
       {activeTab === "status" && <StatusPage />}
       {activeTab === "settings" && <SettingsPage />}
       {activeTab === "ogn" && <OgnPage />}
+      {activeTab === "skylens" && <SkylensPage />}
       {activeTab === "aircraft-db" && <AircraftDbPage />}
     </div>
   );

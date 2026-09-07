@@ -646,8 +646,99 @@ function ManualContent() {
         </Section>
       </Card>
 
-      {/* ===== 5. 機体情報画面 ===== */}
-      <Card id="manual-aircraft-db" title="5. 機体情報画面">
+      {/* ===== 5. SkyLens設定画面 ===== */}
+      <Card id="manual-skylens" title="5. SkyLens設定画面">
+        <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+          FLARM 純正の受信ソフト SkyLens の設定を Web GUI から変更できます。このタブは SkyLens の実行ファイルがある端末にだけ表示されます。
+          保存時は <code>/home/pi/skylens/config.yml</code> を生成し直し、稼働中なら SkyLens とブリッジを再起動します。
+        </p>
+        <p className="text-sm mb-2" style={{ color: "var(--color-warning)" }}>
+          ★ 設定の変更には管理者ログインが必要です。未ログインでは入力欄とボタンが無効になり、表示のみになります。
+        </p>
+
+        <Section id="skylens-status" heading="SkyLens ステータス（リアルタイム）">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            5秒間隔で自動更新。値は設定ファイルではなく SkyLens 自身の計測エンドポイントから取るため、実際に採用されている値です。
+          </p>
+          <table className="w-full text-sm mt-2" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="受信機 / ブリッジ / アップローダ" desc="skylens・skylens-mqtt・skylens-aprs それぞれの稼働状態" />
+            <ManualRow label="ソフトウェア版数 / ビルド日時" desc="動作中の SkyLens のバージョン" />
+            <ManualRow label="インスタンスID" desc="ライセンス発行のために FLARM へ伝える識別子" />
+            <ManualRow label="ライセンス種別 / 期限" desc="node.lic の内容" />
+            <ManualRow label="バイナリ復号期限" desc="★ライセンス期限とは別物。過ぎると本体が起動しなくなるので、期限前に新しいビルドへ入れ替える" />
+            <ManualRow label="復調プラン（実測）" desc="日本では JAPAN。緑以外なら局位置を疑う" />
+            <ManualRow label="ゲイン / サンプルレート（実測）" desc="実際に適用されている受信パラメータ" />
+            <ManualRow label="プリアンブル検出 / 復号成功 / 復号失敗" desc="受信段の内訳。プリアンブルはノイズでも増える" />
+          </tbody></table>
+        </Section>
+
+        <Section id="skylens-identity" heading="受信局の識別">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>局ID</strong> — SkyLens の受信局名（英数字33文字以内）。FLARM とログを共有するため中立な名前にする</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            OGN の受信機名（APRS 呼出符号）とは別物です。OGN へのアップロードは OGN 側の受信機名で行われます。
+          </p>
+        </Section>
+
+        <Section id="skylens-position" heading="局位置（OGN 設定と共有）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>緯度・経度</strong> — 受信局（アンテナ）の座標</li>
+            <li><strong>標高 MSL</strong> — 海抜高度。ここには標高を入れる</li>
+            <li><strong>ジオイド高</strong> — 楕円体高への換算に使う値。関東はおよそ 37 m</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+            ★ SkyLens は局位置を復号そのものに使います。値がずれていると一切デコードできません。
+            また、この座標からリージョン（復調プラン）が自動決定されます。
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+            SkyLens の設定ファイルは楕円体高で持ちます。画面は「標高＋ジオイド高」で楕円体高を自動計算して書き込みます。
+            座標は OGN 設定と共有で、どちらの画面で保存しても両方に反映されます。受信機は1台なので、
+            座標が食い違うとモードによって地図上の受信機位置がずれてしまうためです。
+            GPS の実測が収束しない場所では、実測ではなく地図読みで座標を決めてください。
+          </p>
+        </Section>
+
+        <Section id="skylens-demod" heading="復調・受信">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>ゲイン</strong> — 0 は AGC（自動）。R820T が実際に持つ段のみ選べる</li>
+            <li><strong>サンプルレート</strong> — 1,600,000〜2,000,000 S/s が推奨</li>
+            <li><strong>周波数補正</strong> — ドングルの水晶誤差の補正値（ppm）</li>
+            <li><strong>bias-T</strong> — アクティブアンテナへ DC 給電する場合のみ有効にする</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            復調プランは局位置から自動で決まるため設定項目がありません。保存後にステータスで JAPAN を確認してください。
+            歩行試験では AGC のまま 1 m から 191 m まで欠測なく受信できました。
+          </p>
+        </Section>
+
+        <Section id="skylens-output" heading="出力">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>UDP 送信先・ポート</strong> — ブリッジ（skylens-mqtt）が待ち受ける宛先</li>
+            <li><strong>TCP（SSE）ポート</strong> — SSE 出力のポート</li>
+            <li><strong>監視ポート</strong> — メトリクスのポート。ステータス表示の取得元</li>
+            <li><strong>heartbeat / statistics / alertzone</strong> — 送信するメッセージ種別</li>
+            <li><strong>SQLite 記録</strong> — 自動削除されないため常用しない</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+            ★ traffic の送信と UDP 出力は地図表示に必須のため、この画面では止められません。
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+            SkyLens が出せるのは heartbeat・traffic・alertzone・statistics の4種類だけです。
+            登録記号やコンテストナンバーを載せる info メッセージは、このビルドでは出力されません。
+            そのため機体名の表示は機体情報データベースで解決します。
+          </p>
+        </Section>
+
+        <Section id="skylens-log" heading="ログ">
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            ログの詳細度を error / warn / info / debug / trace から選びます。既定は info です。
+          </p>
+        </Section>
+      </Card>
+
+      {/* ===== 6. 機体情報画面 ===== */}
+      <Card id="manual-aircraft-db" title="6. 機体情報画面">
         <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
           FLARMデバイスID（24bit hex）ごとに機体情報をデータベース管理。マップやフライトログでの表示に使用されます。
         </p>

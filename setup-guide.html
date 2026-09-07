@@ -423,6 +423,50 @@ rootのcrontabに <code>MM HH * * * /sbin/reboot</code> 行を追加・削除し
 シャットダウン後の再起動には電源の抜き差しが必要です。</p>
 
 <!-- ============================================================ -->
+<h2>SkyLens設定タブ</h2>
+
+<p>FLARM純正の受信ソフト SkyLens を使う端末では、ナビゲーションバーに「SkyLens設定」タブが表示されます。
+SkyLensの実行ファイルが無い端末では表示されません。</p>
+
+<p><strong>設定の変更には管理者ログインが必要です。</strong>未ログインでは入力欄とボタンが無効になり、表示のみになります。</p>
+
+<h3>SkyLens ステータス（リアルタイム）</h3>
+<p>SkyLens自身の計測エンドポイントから取得するため、設定ファイルの値ではなく実際に採用されている値です。
+ソフトウェア版数、インスタンスID、ライセンス種別と期限、バイナリ復号期限、復調プラン、ゲイン、サンプルレート、
+受信段の内訳（プリアンブル検出・復号成功・復号失敗）を表示します。</p>
+<p><strong>バイナリ復号期限はライセンス期限とは別物です。</strong>これを過ぎると本体が起動しなくなるため、期限前に新しいビルドへ入れ替えてください。</p>
+
+<h3>設定項目</h3>
+<table>
+  <tr><th>項目</th><th>説明</th><th>共有</th></tr>
+  <tr><td>局ID</td><td>SkyLensの受信局名（英数字33文字以内）。OGNの受信機名とは別物</td><td>SkyLens固有</td></tr>
+  <tr><td>緯度・経度</td><td>受信局（アンテナ）の座標</td><td>OGN設定と共有</td></tr>
+  <tr><td>標高 MSL</td><td>海抜高度。楕円体高はジオイド高を足して自動計算</td><td>OGN設定と共有</td></tr>
+  <tr><td>ジオイド高</td><td>楕円体高への換算に使う値。関東はおよそ 37 m</td><td>SkyLens固有</td></tr>
+  <tr><td>ゲイン</td><td>0 は AGC（自動）。R820Tが実際に持つ段のみ選択可</td><td>SkyLens固有</td></tr>
+  <tr><td>サンプルレート</td><td>1,600,000〜2,000,000 S/s が推奨</td><td>SkyLens固有</td></tr>
+  <tr><td>周波数補正</td><td>ドングルの水晶誤差の補正値（ppm）</td><td>SkyLens固有</td></tr>
+  <tr><td>bias-T</td><td>アクティブアンテナへのDC給電</td><td>SkyLens固有</td></tr>
+  <tr><td>UDP / TCP / 監視ポート</td><td>出力先とポート。UDPはブリッジの待受先</td><td>SkyLens固有</td></tr>
+  <tr><td>送信メッセージ種別</td><td>heartbeat / statistics / alertzone の送信可否</td><td>SkyLens固有</td></tr>
+  <tr><td>ログ詳細度</td><td>error / warn / info / debug / trace</td><td>SkyLens固有</td></tr>
+</table>
+
+<p><strong>局位置はOGN設定と共有です。</strong>どちらの画面で保存しても、もう一方の設定にも同じ座標が書き込まれます。
+受信機は1台しかないため、座標が食い違うとモードによって地図上の受信機位置がずれてしまうからです。</p>
+
+<p><strong>注意:</strong> SkyLensは局位置を復号そのものに使います。値がずれていると一切デコードできません。
+また、この座標から復調プランが自動決定されます。保存後にステータスで <code>JAPAN</code> になっていることを必ず確認してください。
+GPSの実測値が収束しない場所では、実測ではなく地図読みで座標を決めてください。</p>
+
+<p>traffic の送信とUDP出力は地図表示に必須のため、この画面では止められません。
+またSkyLensが出力できるのは heartbeat・traffic・alertzone・statistics の4種類だけで、
+登録記号やコンテストナンバーを載せる info メッセージはこのビルドでは出力されません。
+機体名の表示は機体情報データベースで解決します。</p>
+
+<p>設定は <code>/home/pi/skylens/config.yml</code> に書き込まれます。保存時に生成し直すため、手で書き加えた内容は失われます。</p>
+
+<!-- ============================================================ -->
 <h2>サービス構成</h2>
 
 <table>
@@ -432,7 +476,10 @@ rootのcrontabに <code>MM HH * * * /sbin/reboot</code> 行を追加・削除し
   <tr><td><code>ogn-mqtt</code></td><td>FLARM → MQTT ブリッジ</td><td>はい</td></tr>
   <tr><td><code>feeldscope-webapp</code></td><td>Web UI (ポート 80)</td><td>はい</td></tr>
   <tr><td><code>adsb-poller</code></td><td>ADS-B → MQTT (オプション)</td><td>設定時のみ</td></tr>
-  <tr><td><code>igc-simulator</code></td><td>IGC 履歴再生 → MQTT</td><td>手動 (ogn-mqtt と排他)</td></tr>
+  <tr><td><code>igc-simulator</code></td><td>IGC 履歴再生 → MQTT</td><td>手動 (受信と排他)</td></tr>
+  <tr><td><code>skylens</code></td><td>FLARM純正の受信ソフト本体</td><td>SkyLens受信モード時のみ</td></tr>
+  <tr><td><code>skylens-mqtt</code></td><td>SkyLens → MQTT ブリッジ</td><td>SkyLens受信モード時のみ</td></tr>
+  <tr><td><code>skylens-aprs</code></td><td>SkyLens → OGN アップローダ</td><td>SkyLens受信モード時のみ</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -455,7 +502,7 @@ mosquitto_sub -t "ogn/#" -v -C 5</code></pre>
 
 <!-- ============================================================ -->
 <footer>
-  FEELDSCOPE-OGN v1.1.41 &mdash;
+  FEELDSCOPE-OGN v1.1.42 &mdash;
   <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
 </footer>
 

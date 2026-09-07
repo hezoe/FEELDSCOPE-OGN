@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile, writeFile } from "fs/promises";
+import { applySharedPositionToSkylens } from "@/lib/skylens-config";
 
 const execAsync = promisify(exec);
 
@@ -219,6 +220,10 @@ async function saveOgnConfig(c: OgnConfig): Promise<void> {
       await execAsync(`sudo cp ${tmp2} ${OGN_RECEIVER_CONF_PATH}`);
     }
   } catch { /* ignore */ }
+
+  // 局位置は SkyLens とも共有する。受信機は 1 台なので、座標が食い違うと
+  // モードによって地図上の受信機位置がずれてしまう。
+  await applySharedPositionToSkylens(c.latitude, c.longitude, c.altitude).catch(() => {});
 
   // Restart rtlsdr-ogn (init.d) so changes take effect
   await execAsync("sudo /etc/init.d/rtlsdr-ogn restart").catch(() => {});
