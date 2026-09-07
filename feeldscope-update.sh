@@ -121,7 +121,7 @@ cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf"  /etc/mosquitto/conf.d/feeldscope.conf
 
-# リモートサポート時限管理（3時間で自動OFF・再起動で窓内復帰）
+# リモートサポート監視（enable 状態を正本に、落ちていたら自動復帰）
 cp "$SCRIPT_DIR/config/feeldscope-remote-support.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
@@ -130,8 +130,8 @@ install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/f
 chown -R pi:pi "$FEELDSCOPE_DIR"
 
 systemctl daemon-reload
-# 旧来 enable された恒久ONを解除し、時限タイマーを起動
-systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
+# リモートサポートの ON/OFF は wg-quick@wg0 の enable 状態が正本。
+# 更新で切り替えない（ON のまま更新しても接続は維持される）。
 systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
 log_info "Files updated"
 

@@ -393,7 +393,7 @@ cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 
-# リモートサポート時限管理（3時間で自動OFF・再起動で窓内復帰）
+# リモートサポート監視（enable 状態を正本に、落ちていたら自動復帰）
 cp "$SCRIPT_DIR/config/feeldscope-remote-support.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
@@ -405,7 +405,7 @@ install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope
 systemctl enable feeldscope-wpa-dedupe.service >/dev/null 2>&1 || true
 bash /usr/local/sbin/feeldscope-wpa-dedupe || log_warn "  wpa dedupe reported warnings (continuing)"
 
-# 既定はリモートサポートOFF: 旧来 enable されていたら解除（時限管理に移行）
+# 新規インストールの既定はリモートサポートOFF（設定画面からONにする）
 systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
 
 systemctl daemon-reload
