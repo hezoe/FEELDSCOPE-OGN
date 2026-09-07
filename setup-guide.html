@@ -186,6 +186,26 @@ sudo bash feeldscope-install.sh</code></pre>
 <p>地図画面が表示され、受信したFLARM機器がマーカーとして表示されます。</p>
 </div>
 
+<div class="step">
+<p><span class="step-num">3</span><strong>管理者パスワードの変更 (重要)</strong></p>
+<p>設定の<strong>変更</strong>とシステムアップデートには<strong>管理者ログイン</strong>が必要です (閲覧は誰でも可能)。
+<strong>初期パスワードは <code>admin</code></strong> です。設置したらすぐに変更してください。</p>
+<ol>
+  <li>ブラウザで <code>http://&lt;raspberry-pi-ip&gt;/</code> を開き、<strong>設定</strong> 画面へ</li>
+  <li>画面上部の<strong>管理者ログイン</strong>に <code>admin</code> を入力してログイン</li>
+  <li>続けて<strong>パスワード変更</strong>で新しいパスワード (4文字以上) を設定</li>
+</ol>
+<div class="warn">
+  初期パスワードは公開されています。変更しないままだと、同じLANに接続できる人は誰でも
+  設定変更・システムアップデート・電源操作を実行できます。<br>
+  初期パスワードのままの間は、設定画面に注意が表示されます。
+</div>
+<div class="info">
+  パスワードは端末ごとに <code>/home/pi/FEELDSCOPE/auth.json</code> に保存されます (scryptでハッシュ化、パーミッション600)。
+  リポジトリのディレクトリとは別の場所にあるため、システムアップデートを行っても変更後のパスワードは維持されます。
+</div>
+</div>
+
 <!-- ============================================================ -->
 <h2>Step 5: OverlayFS の再有効化 (推奨)</h2>
 
@@ -294,6 +314,11 @@ FLARMから受信した離着陸情報が自動的に記録されます。</p>
 
 <p>設定画面（Settings）の各項目について説明します。上から順に記載しています。</p>
 
+<div class="warn">
+  <strong>設定の変更には管理者ログインが必要です</strong>（閲覧は無認証）。初期パスワードは <code>admin</code>。
+  設定画面上部でいつでも変更できます (4文字以上)。
+</div>
+
 <h3>1. 滑空場設定</h3>
 <p>マップの中心位置、パス判定の基準点、ナビゲーションの滑空場名を設定します。
 ブラウザとサーバの両方に保存され、読み込み時はサーバ側の設定が優先されます。</p>
@@ -358,6 +383,9 @@ OLC等からダウンロードしたIGCファイルをアップロード・削�
 アップデート中（約2〜3分）はWebアプリが一時的に利用できなくなります。</p>
 <div class="warn">
   固定化(OverlayFS)がONの場合はアップデートできません。先に固定化をOFFにして再起動してください。
+</div>
+<div class="info">
+  アップデートの実行には<strong>管理者ログイン</strong>が必要です (初期パスワード <code>admin</code>)。
 </div>
 
 <div class="info">
@@ -438,6 +466,15 @@ mosquitto_sub -t "ogn/#" -v -C 5</code></pre>
 
 <h3>OverlayFS の状態確認</h3>
 <pre><code>overlayctl status</code></pre>
+
+<h3>管理者パスワードを忘れた</h3>
+<p>SSH でログインし、リセットコマンドを実行します。引数なしで初期値 <code>admin</code> に戻ります。</p>
+<pre><code># 初期値 admin に戻す
+sudo feeldscope-reset-password
+
+# 新しいパスワードを直接指定する
+sudo feeldscope-reset-password 新しいパスワード</code></pre>
+<p>リセット後は設定画面から改めてパスワードを変更してください。</p>
 
 <!-- ============================================================ -->
 <footer>
