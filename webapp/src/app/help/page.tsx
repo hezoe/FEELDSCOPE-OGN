@@ -648,11 +648,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.50 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.50</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="存在しない機体が1機だけ出現する問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>復号エラーは座標だけでなく<strong>機体IDそのものも壊します</strong>。1ビット化けると別の機体として扱われ、実在しない機体が見当違いの場所に1機出現します（例: FLRDB0727 が FLRFB0727 になる）。</li>
+          <li>v1.1.49 の飛躍判定では防げませんでした。壊れたIDは「初めて見る機体」なので、比べる直前の位置が無いためです。</li>
+          <li>本物の機体は1秒ごとに電波を出し続けるので受信パケット数がすぐ増えますが、壊れたIDは<strong>1のまま増えません</strong>。実測でも幽霊は全て1、本物は22〜60でした。<strong>2パケット以上受信するまで表示しない</strong>ようにしました。</li>
+          <li>本物の機体が遅れて出るのは1秒程度です。1パケットだけの機体は位置の確からしさも担保できないため、出さないほうが安全と判断しました。</li>
+          <li>この幽霊は機体データベースにも自動登録されていました。今後は登録されません。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.49 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.49</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="復号エラーで機体がとんでもない場所へ飛ぶ問題を修正">
