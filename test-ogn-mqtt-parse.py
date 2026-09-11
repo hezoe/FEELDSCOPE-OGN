@@ -137,6 +137,39 @@ def test_negative_altitude(m):
     assert pos["altitude_m"] == -5
 
 
+def test_absurd_position_rejected(m):
+    """復号エラーで壊れた座標・高度・距離の位置行を落とすこと。"""
+    base = ("073015: [ {lat},{lon}]deg {alt}m  +0.0m/s   0.1m/s "
+            "180.0deg  +0.0deg/s __1 03x03m Fn:13___ +0.50kHz 44.5/58.0dB/0 "
+            " 0e  {dist}km 090.0deg +28.3deg")
+    ok = base.format(lat="+43.55299", lon="+141.89478", alt="   28", dist="   0.4")
+    assert m.parse_position_line(ok) is not None, "正常な位置行まで落としている"
+    for tag, bad in (
+        ("緯度が範囲外", base.format(lat="+93.55299", lon="+141.89478", alt="   28", dist="   0.4")),
+        ("経度が範囲外", base.format(lat="+43.55299", lon="+191.89478", alt="   28", dist="   0.4")),
+        ("高度がありえない", base.format(lat="+43.55299", lon="+141.89478", alt="31000", dist="   0.4")),
+        ("距離がありえない", base.format(lat="+43.55299", lon="+141.89478", alt="   28", dist="9999.0")),
+    ):
+        assert m.parse_position_line(bad) is None, "%s を通している" % tag
+
+
+def test_continuity_filter(m):
+    """直前の位置からありえない速度で飛んだ位置を落とすこと。"""
+    def pos(t, lat, lon, alt):
+        return {"timestamp_epoch": float(t), "latitude": lat, "longitude": lon,
+                "altitude_m": alt}
+
+    prev = pos(1000, 43.5530, 141.8947, 800)
+    # 1秒で 30m 進む（108 km/h）＝ 正常
+    assert m.is_continuous(prev, pos(1001, 43.55327, 141.8947, 802)),         "正常な動きを落としている"
+    # 1秒で 0.1度（約11km）飛ぶ ＝ 復号エラー
+    assert not m.is_continuous(prev, pos(1001, 43.6530, 141.8947, 800)),         "座標の飛躍を通している"
+    # 1秒で 200m 上昇 ＝ 復号エラー
+    assert not m.is_continuous(prev, pos(1001, 43.5530, 141.8947, 1000)),         "高度の飛躍を通している"
+    # 10分あいたら判断できないので通す
+    assert m.is_continuous(prev, pos(1000 + 600, 43.6530, 141.8947, 800)),         "間隔が空いた場合まで落としている"
+
+
 def main():
     m = load_ogn_mqtt()
     tests = [
@@ -145,6 +178,8 @@ def main():
         test_positions_sorted_and_deduped,
         test_hhmmss_timestamp,
         test_negative_altitude,
+        test_absurd_position_rejected,
+        test_continuity_filter,
     ]
     failed = 0
     for test in tests:

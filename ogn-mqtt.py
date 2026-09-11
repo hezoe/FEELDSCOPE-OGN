@@ -6,6 +6,7 @@ Designed for the Japan 922.4 MHz OGN receiver.
 """
 
 import json
+import math
 import re
 import time
 import signal
@@ -35,6 +36,20 @@ FIRST_SEEN_POSITIONS = 5
 # 位置の時刻は FLARM パケット由来で、機体側の時計がずれている個体がある。
 # 直前に配信した時刻よりこれ以上「巻き戻った」ら時計リセットとみなす。
 CLOCK_RESET_TOLERANCE_SEC = 120
+
+# ── 復号エラーの位置を捨てるための現実的な上限 ──────────────────────────
+# 受信が弱くなると、ビット誤りを訂正しきれずに座標や高度が壊れた位置が
+# 出てくる。地図に出すと機体がとんでもない場所へ飛び、航跡も飛行記録も
+# 壊れるので、物理的にありえないものはここで落とす。
+MAX_ALTITUDE_M = 15000        # FLARM を積む機体がこれ以上へ上がることはない
+MIN_ALTITUDE_M = -500
+MAX_DISTANCE_KM = 500         # 高高度機でも見通しはこの程度が限界
+MAX_GROUND_SPEED_MS = 150     # 540 km/h。滑空機・曳航機・小型機の上限
+MAX_VERTICAL_SPEED_MS = 40    # 直前の位置からの見かけの上昇・降下率
+# 直前の位置がこれより古いと、動いたのか壊れたのか判断できないので通す
+CONTINUITY_MAX_GAP_SEC = 300
+# 連続してこれだけ弾いたら基準側が怪しいので取り直す
+MAX_CONSECUTIVE_REJECTS = 5
 STATUS_RETAIN = True
 
 
@@ -235,15 +250,28 @@ def parse_position_line(line):
         # 日付跨ぎ（UTC 23:59 の直後に 00:00 を受け取る等）
         ts -= timedelta(days=1)
 
+    latitude = float(m.group(2))
+    longitude = float(m.group(3))
+    altitude_m = int(m.group(4))
+    distance_km = float(m.group(18))
+    # 復号エラーでビットが壊れると、座標や高度が桁ごとおかしくなる。
+    # ここで落としておけば、最新位置にも機体一覧にも混ざらない。
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+        return None
+    if not (MIN_ALTITUDE_M <= altitude_m <= MAX_ALTITUDE_M):
+        return None
+    if distance_km > MAX_DISTANCE_KM:
+        return None
+
     flags_raw = m.group(9)
     return {
         "timestamp_utc": ts.isoformat(),
         "timestamp_sod": timestamp_sod,
         # 絶対時刻。日跨ぎでも単調なので並べ替え・重複除去はこれを使う
         "timestamp_epoch": ts.timestamp(),
-        "latitude": float(m.group(2)),
-        "longitude": float(m.group(3)),
-        "altitude_m": int(m.group(4)),
+        "latitude": latitude,
+        "longitude": longitude,
+        "altitude_m": altitude_m,
         "climb_rate_ms": float(m.group(5)),
         "ground_speed_ms": float(m.group(6)),
         "heading_deg": float(m.group(7)),
@@ -260,11 +288,41 @@ def parse_position_line(line):
         "signal_db": float(m.group(15)),
         "channel_errors": int(m.group(16)),
         "bit_errors": int(m.group(17)),
-        "distance_km": float(m.group(18)),
+        "distance_km": distance_km,
         "bearing_deg": float(m.group(19)),
         "elevation_deg": float(m.group(20)),
         "is_latest": line.rstrip().endswith("*"),
     }
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    """2点間の距離をメートルで返す。"""
+    R = 6371000.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def is_continuous(prev, pos):
+    """直前の位置から見て、物理的にありえる動きかを返す。
+
+    受信が弱くなると復号エラーで座標や高度が壊れる。直前の位置から
+    見かけの速度を出し、機体としてありえない値なら壊れていると判断する。
+    直前の位置が古すぎる場合は判断できないので通す。
+    """
+    dt = pos["timestamp_epoch"] - prev["timestamp_epoch"]
+    if dt <= 0 or dt > CONTINUITY_MAX_GAP_SEC:
+        return True
+    dist = haversine_m(prev["latitude"], prev["longitude"],
+                       pos["latitude"], pos["longitude"])
+    if dist / dt > MAX_GROUND_SPEED_MS:
+        return False
+    if abs(pos["altitude_m"] - prev["altitude_m"]) / dt > MAX_VERTICAL_SPEED_MS:
+        return False
+    return True
 
 
 def parse_aircraft_list(text):
@@ -437,6 +495,8 @@ class OgnMqttPublisher:
         )
         self._connected = False
         self._prev_positions = {}  # device_id -> last timestamp_epoch published
+        self._last_good = {}       # device_id -> last position accepted as plausible
+        self._reject_counts = {}   # device_id -> consecutive rejections
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
@@ -538,9 +598,37 @@ class OgnMqttPublisher:
                 else:
                     new_positions = [p for p in positions if p["timestamp_epoch"] > prev_ts]
 
-                # 必ず古い順に流す。順序が崩れるとブラウザ側の航跡がジグザグになる。
+                # 復号エラーで座標や高度が壊れた位置を落とす。地図で機体が
+                # とんでもない場所へ飛び、航跡も飛行記録も壊れるため。
+                accepted = []
                 for pos in new_positions:
+                    prev = self._last_good.get(dev_id)
+                    if prev is not None and not is_continuous(prev, pos):
+                        n = self._reject_counts.get(dev_id, 0) + 1
+                        self._reject_counts[dev_id] = n
+                        log.warning(
+                            "%s: implausible jump dropped (%.1fkm, %dm, %d consecutive)",
+                            dev_id,
+                            haversine_m(prev["latitude"], prev["longitude"],
+                                        pos["latitude"], pos["longitude"]) / 1000.0,
+                            pos["altitude_m"] - prev["altitude_m"], n)
+                        if n < MAX_CONSECUTIVE_REJECTS:
+                            continue
+                        # 連続で弾き続けるのは基準側が壊れている可能性がある。
+                        # ここで基準を取り直して追従を戻す。
+                        log.warning("%s: resyncing position reference", dev_id)
+                    self._reject_counts[dev_id] = 0
+                    self._last_good[dev_id] = pos
+                    accepted.append(pos)
+
+                # 必ず古い順に流す。順序が崩れるとブラウザ側の航跡がジグザグになる。
+                for pos in accepted:
                     self.publish_aircraft_position(dev_id, pos)
+
+                # 機体一覧・ステータスの「最新位置」も、採用した位置に揃える
+                good = self._last_good.get(dev_id)
+                if good is not None:
+                    ac["latest_position"] = good
 
                 self._prev_positions[dev_id] = newest
 
