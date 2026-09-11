@@ -159,7 +159,9 @@ async function getFlightLogStats() {
     const { stdout } = await execAsync(`curl -s --max-time 2 http://localhost/api/flight-log`);
     const data = JSON.parse(stdout);
     const entries = data.entries || [];
-    const flying = entries.filter((e: { landingTime: string | null }) => !e.landingTime).length;
+    // 着陸時刻が空欄（""）なのは「着陸済みだが時刻不明」。飛行中は null だけ
+    const flying = entries.filter(
+      (e: { landingTime: string | null }) => e.landingTime == null).length;
     return { total: entries.length, flying, landed: entries.length - flying };
   } catch {
     return { total: 0, flying: 0, landed: 0 };

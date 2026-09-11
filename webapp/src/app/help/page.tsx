@@ -196,7 +196,7 @@ function ManualContent() {
             <li><strong>#</strong> — 行番号</li>
             <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）</li>
             <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）</li>
-            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）</li>
+            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
@@ -648,11 +648,29 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.51 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.51</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="着陸を取りこぼして「飛行中」のまま残る問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでの着陸判定は<strong>「止まったところを受信できたとき」だけ</strong>でした。滑走路上は電波が届きにくく、曳航機は止まらずに次の索へ戻ることもあるため、接地したのに記録が「飛行中」のまま残ることがありました。</li>
+          <li><strong>低空・低速が続いたこと</strong>でも接地とみなすようにしました（対地50m未満・50km/h未満が8秒続いたら着陸）。進入中の機体は低空にいる時間が短く、対地速度も滑走中より速いので、誤って着陸にはなりません。</li>
+          <li><strong>受信が途切れた場合の後始末</strong>を追加しました。最後に受信できた位置が飛行場から3km以内・対地100m未満なら、そこで降りたとみなし、<strong>最後に受信できた時刻</strong>を着陸時刻にします。上空で受信が途切れただけの場合は何もしません（遠くを飛び続けて受信圏外にいるだけのことがあるため）。</li>
+          <li><strong>同じ機体が次に離陸したら、前の飛行は着陸済みとして閉じます</strong>。着陸時刻は分からないので<strong>空欄</strong>にします。そのまま手で入力できます。</li>
+          <li>地上にいる機体に「飛行中」の記録が残っている場合も同じく空欄で閉じます。飛行の途中でサービスが起動し直された場合に残っていたものです。</li>
+          <li>高く上がらなかった飛行（低い場周、離陸中止）でも、離陸を観測できていれば着陸を記録します。</li>
+          <li>ステータス画面の「飛行中」の数は、<strong>本当に飛んでいる機体だけ</strong>を数えます（着陸時刻が空欄のものは着陸済みとして扱います）。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.50 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.50</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="存在しない機体が1機だけ出現する問題を修正">
