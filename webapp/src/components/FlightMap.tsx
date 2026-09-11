@@ -403,6 +403,8 @@ export default function FlightMap() {
   /** 手動編集の直後はサーバの取得結果で上書きしない（入力中の値が消えるため） */
   const lastManualEditRef = useRef(0);
   const logTableRef = useRef<HTMLDivElement>(null);
+  /** フライトログを末尾まで送って見ているか。遡っている間は自動で戻さない */
+  const logAtBottomRef = useRef(true);
   // Position-unknown ADS-B/Mode-S aircraft (sidebar only)
   const [noPositionAircraft, setNoPositionAircraft] = useState<AircraftPosition[]>([]);
 
@@ -460,6 +462,9 @@ export default function FlightMap() {
 
       // 手動編集の直後は、入力中の値が消えるので取得結果を当てない
       if (Date.now() - lastManualEditRef.current < 8000) return;
+      // 中身が変わっていなければ差し替えない。毎回作り直すと、3秒ごとに
+      // 描き直しと自動スクロールが走ってしまう。
+      if (JSON.stringify(flightLogRef.current) === JSON.stringify(server)) return;
       flightLogRef.current = server;
       setFlightLogRaw(server);
       // ここへ来る空の server は「控えも空」の場合だけなので、潰す心配はない
@@ -874,11 +879,21 @@ export default function FlightMap() {
     return () => { client.end(); clientRef.current = null; };
   }, [handlePosition, handleAircraftList]);
 
-  // Auto-scroll flight log to bottom
+  // フライトログの自動スクロール。
+  // 記録は3秒ごとに取り直すため、無条件に末尾へ送ると、過去を遡っている最中に
+  // 引き戻されて読めない。末尾に貼り付いているときだけ追従する。
   useEffect(() => {
     const el = logTableRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && logAtBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [flightLog]);
+
+  /** 末尾から少しでも離れたら追従をやめ、戻ってきたら再開する */
+  const onLogScroll = useCallback(() => {
+    const el = logTableRef.current;
+    if (!el) return;
+    const slack = el.scrollHeight - el.scrollTop - el.clientHeight;
+    logAtBottomRef.current = slack <= 24;
+  }, []);
 
   // ── Resize handlers ──
   const startDragSidebar = useCallback((e: React.MouseEvent) => {
@@ -1040,6 +1055,7 @@ export default function FlightMap() {
             </div>
             <div
               ref={logTableRef}
+              onScroll={onLogScroll}
               className="overflow-y-auto flex-1"
             >
               <table className="text-xs w-full table-striped" style={{ tableLayout: "auto", borderCollapse: "collapse" }}>
