@@ -648,11 +648,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.48 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.48</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="受信機を再起動すると当日の飛行記録が消える問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.1.46 で飛行記録を受信機側のメモリへ移しましたが、受信機を再起動すると記録が空になり、<strong>ブラウザ側の控えまで空で上書き</strong>されていました。控えが唯一の受け皿なので、当日ぶんが完全に失われます。</li>
+          <li>控えからの復元が<strong>ページを開いた瞬間しか働かない</strong>のも原因でした。画面を開いたまま受信機を再起動すると復元の機会がありません。</li>
+          <li>記録の取得のたびに、サーバが空なら控えから戻すようにしました。空の内容で控えを潰すこともありません。<strong>画面を開いたままでも復旧します。</strong></li>
+          <li>件数が減っただけの場合は戻しません。利用者が消した行が復活しないようにするためです。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.47 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.47</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="固定化すると何が消えるかを明記しました">
