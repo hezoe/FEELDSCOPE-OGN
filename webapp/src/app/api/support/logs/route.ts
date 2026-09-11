@@ -1,34 +1,26 @@
 import { NextResponse } from "next/server";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import { isSafeServiceName, runQuiet, runShell } from "@/lib/run";
 
 const SERVICES = ["feeldscope-webapp", "ogn-mqtt", "adsb-poller", "igc-simulator", "mosquitto"];
 
 async function fetchServiceLog(service: string): Promise<string> {
-  try {
-    const { stdout } = await execAsync(
-      `journalctl -u ${service} -n 300 --no-pager --output short-iso 2>&1`,
-      { timeout: 10000 }
-    );
-    return stdout || "(no output)";
-  } catch (e: unknown) {
-    return `Error fetching log: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  if (!isSafeServiceName(service)) return "(invalid service name)";
+  const out = await runQuiet(
+    "journalctl",
+    ["-u", service, "-n", "300", "--no-pager", "--output", "short-iso"],
+    { timeout: 10000 },
+  );
+  return out || "(no output)";
 }
 
 async function fetchSystemErrors(): Promise<string> {
-  try {
-    const { stdout } = await execAsync(
-      `journalctl -n 100 --no-pager --output short-iso -p err..crit 2>&1`,
-      { timeout: 10000 }
-    );
-    return stdout || "(no errors)";
-  } catch (e: unknown) {
-    return `Error fetching system errors: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  const out = await runQuiet(
+    "journalctl",
+    ["-n", "100", "--no-pager", "--output", "short-iso", "-p", "err..crit"],
+    { timeout: 10000 },
+  );
+  return out || "(no errors)";
 }
 
 async function fetchSystemInfo(): Promise<string> {
@@ -42,7 +34,7 @@ async function fetchSystemInfo(): Promise<string> {
   const lines: string[] = [];
   for (const [cmd, label] of cmds) {
     try {
-      const { stdout } = await execAsync(cmd, { timeout: 5000 });
+      const { stdout } = await runShell(cmd, { timeout: 5000 });
       lines.push(`[${label}]\n${stdout.trim()}`);
     } catch {
       lines.push(`[${label}]\nn/a`);

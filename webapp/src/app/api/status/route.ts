@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { readFile } from "fs/promises";
-
-const execAsync = promisify(exec);
+import { isSafeServiceName, run, runQuiet, runQuietStdout, runShell } from "@/lib/run";
 
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
 
 async function isActive(service: string): Promise<boolean> {
+  if (!isSafeServiceName(service)) return false;
   try {
-    const { stdout } = await execAsync(`systemctl is-active ${service}`);
+    const { stdout } = await run("systemctl", ["is-active", service]);
     return stdout.trim() === "active";
   } catch {
     return false;
@@ -17,12 +15,10 @@ async function isActive(service: string): Promise<boolean> {
 }
 
 async function isInitdActive(name: string): Promise<boolean> {
-  try {
-    const { stdout } = await execAsync(`/etc/init.d/${name} status 2>&1 | grep -i running || true`);
-    return stdout.trim().length > 0;
-  } catch {
-    return false;
-  }
+  if (!isSafeServiceName(name)) return false;
+  // 状態表示は終了コードが 0 でないことがあるので、出力だけを見る
+  const out = await runQuiet(`/etc/init.d/${name}`, ["status"]);
+  return /running/i.test(out);
 }
 
 async function getReceiverId(): Promise<string> {
@@ -43,10 +39,13 @@ async function getReceiverId(): Promise<string> {
 }
 
 async function mqttGetRetained(topic: string): Promise<unknown> {
+  // -W 2 で待ち受けを打ち切るため、受信が無いと終了コードは 0 にならない
+  // 警告が stderr に出ても JSON が壊れないよう stdout だけを読む
+  const out = await runQuietStdout("mosquitto_sub", ["-t", topic, "-W", "2", "-C", "1"], { timeout: 10_000 });
+  const text = out.trim();
+  if (!text) return null;
   try {
-    const { stdout } = await execAsync(`mosquitto_sub -t '${topic}' -W 2 -C 1 2>/dev/null || true`);
-    if (!stdout.trim()) return null;
-    return JSON.parse(stdout);
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -55,11 +54,11 @@ async function mqttGetRetained(topic: string): Promise<unknown> {
 async function getSystemSummary() {
   try {
     const [{ stdout: uptimeOut }, { stdout: loadOut }, { stdout: memOut }, { stdout: dfOut }, { stdout: tempOut }] = await Promise.all([
-      execAsync("uptime -p").catch(() => ({ stdout: "" })),
-      execAsync("cat /proc/loadavg").catch(() => ({ stdout: "" })),
-      execAsync("free -m | awk '/^Mem:/ {print $2,$3,$7}'").catch(() => ({ stdout: "" })),
-      execAsync("df -BM / | awk 'NR==2 {print $2,$3,$5}'").catch(() => ({ stdout: "" })),
-      execAsync("cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null").catch(() => ({ stdout: "" })),
+      runShell("uptime -p").catch(() => ({ stdout: "" })),
+      runShell("cat /proc/loadavg").catch(() => ({ stdout: "" })),
+      runShell("free -m | awk '/^Mem:/ {print $2,$3,$7}'").catch(() => ({ stdout: "" })),
+      runShell("df -BM / | awk 'NR==2 {print $2,$3,$5}'").catch(() => ({ stdout: "" })),
+      runShell("cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null").catch(() => ({ stdout: "" })),
     ]);
 
     const loadParts = loadOut.trim().split(/\s+/);
@@ -85,7 +84,7 @@ async function getSystemSummary() {
 
 async function getOgnReceiverStatus() {
   try {
-    const { stdout } = await execAsync(`curl -s --max-time 3 http://localhost:8082/`);
+    const { stdout } = await runShell(`curl -s --max-time 3 http://localhost:8082/`);
     if (!stdout) return { online: false };
     const get = (label: string): string | undefined => {
       const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -118,7 +117,7 @@ async function getOgnReceiverStatus() {
 
 async function getDecoderStats() {
   try {
-    const { stdout } = await execAsync(`curl -s --max-time 3 http://localhost:8083/`);
+    const { stdout } = await runShell(`curl -s --max-time 3 http://localhost:8083/`);
     if (!stdout) return {};
     const get = (label: string): string | undefined => {
       const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -138,8 +137,9 @@ async function getDecoderStats() {
 }
 
 async function getServiceUptime(service: string): Promise<string | null> {
+  if (!isSafeServiceName(service)) return null;
   try {
-    const { stdout } = await execAsync(`systemctl show -p ActiveEnterTimestamp --value ${service}`);
+    const { stdout } = await run("systemctl", ["show", "-p", "ActiveEnterTimestamp", "--value", service]);
     const ts = stdout.trim();
     if (!ts) return null;
     const enteredAt = new Date(ts).getTime();
@@ -156,7 +156,7 @@ async function getServiceUptime(service: string): Promise<string | null> {
 
 async function getFlightLogStats() {
   try {
-    const { stdout } = await execAsync(`curl -s --max-time 2 http://localhost/api/flight-log`);
+    const { stdout } = await runShell(`curl -s --max-time 2 http://localhost/api/flight-log`);
     const data = JSON.parse(stdout);
     const entries = data.entries || [];
     // 着陸時刻が空欄（""）なのは「着陸済みだが時刻不明」。飛行中は null だけ
