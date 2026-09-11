@@ -197,6 +197,7 @@ function ManualContent() {
             <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）</li>
             <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）</li>
             <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます</li>
+            <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
@@ -649,11 +650,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.53 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.53</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="フライトログを遡ると末尾へ引き戻される問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>フライトログは3秒ごとに取り直しており、そのたびに<strong>無条件で末尾までスクロール</strong>していました。過去の記録を見ようと上へ戻しても、数秒で最後の行へ引き戻されて読めませんでした。</li>
+          <li><strong>末尾を表示しているときだけ追従</strong>するようにしました。上へ遡っている間は動きません。末尾まで戻せば、新しい飛行への追従が再開します。</li>
+          <li>あわせて、取得した記録の中身が前回と同じなら表示を作り直さないようにしました。3秒ごとの無駄な描き直しがなくなります。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.52 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.52</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="OGN設定を保存しても書き換わらない問題を修正">
