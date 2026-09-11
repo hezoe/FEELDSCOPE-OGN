@@ -19,6 +19,34 @@ interface OgnConfig {
   enableCoreOGNTeamRemoteAdmin: boolean;
 }
 
+/** 保存・確認の結果。どこで失敗したかをそのまま画面に出す */
+interface StepResult {
+  label: string;
+  ok: boolean;
+  detail?: string;
+  error?: string;
+}
+
+interface FileCheck {
+  path: string;
+  authority: boolean;
+  exists: boolean;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  receiverName?: string;
+  matches?: boolean;
+  perms?: string;
+  error?: string;
+}
+
+interface SaveReport {
+  steps: StepResult[];
+  files: FileCheck[];
+  live?: FileCheck;
+  verified: boolean;
+}
+
 interface OgnStatus {
   online: boolean;
   software?: string;
@@ -52,6 +80,8 @@ export default function OgnPage() {
   const [restarting, setRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [report, setReport] = useState<SaveReport | null>(null);
 
   // 編集中の config が定期取得で上書きされないよう、初回ロード + 保存/再起動後のみ config を更新する。
   // status は live 値なので 5秒毎に再取得して良い。
@@ -78,6 +108,7 @@ export default function OgnPage() {
     setSaving(true);
     setError(null);
     setMessage(null);
+    setReport(null);
     try {
       const res = await fetch("/api/ogn", {
         method: "POST",
@@ -85,13 +116,38 @@ export default function OgnPage() {
         body: JSON.stringify({ action: "save", config }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // 成否にかかわらず、どこまで書けたかは必ず見せる
+      if (data.report) setReport(data.report as SaveReport);
+      if (!res.ok || data.ok === false) throw new Error(data.error || "保存に失敗しました");
       setMessage(data.message);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存に失敗しました");
     }
     setSaving(false);
+  }
+
+  /** 保存せずに、設定がファイルと受信機に行き渡っているかだけを確かめる */
+  async function verifyConfig() {
+    setVerifying(true);
+    setError(null);
+    setMessage(null);
+    setReport(null);
+    try {
+      const res = await fetch("/api/ogn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", config }),
+      });
+      const data = await res.json();
+      if (data.report) setReport(data.report as SaveReport);
+      if (!res.ok) throw new Error(data.error || "確認に失敗しました");
+      if (data.report?.verified) setMessage(data.message);
+      else setError(data.message || "一致しない箇所があります");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "確認に失敗しました");
+    }
+    setVerifying(false);
   }
 
   async function restartReceiver() {
@@ -453,11 +509,23 @@ export default function OgnPage() {
           >
             {restarting ? "再起動中..." : "受信機のみ再起動"}
           </button>
+          <button
+            onClick={verifyConfig}
+            disabled={verifying}
+            className="px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)", opacity: verifying ? 0.5 : 1, cursor: verifying ? "wait" : "pointer" }}
+          >
+            {verifying ? "確認中..." : "保存内容を確認"}
+          </button>
           <HelpHint sectionId="ogn-actions" />
         </div>
 
+        {report && <ReportCard report={report} />}
+
         <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-          設定は <code>/home/pi/rtlsdr-ogn.conf</code>（runtime）と <code>/boot/OGN-receiver.conf</code>（再インストール時の参照元）の両方に書き込まれます。
+          設定は <code>/boot/rtlsdr-ogn.conf</code>（正本）、<code>/home/pi/rtlsdr-ogn.conf</code>（受信機が起動時に正本から複製）、
+          <code>/boot/OGN-receiver.conf</code>（再インストール時の参照元）に書き込まれます。正本に書けなかった場合は再起動で元に戻るため、
+          保存は失敗として扱い、受信機の再起動も行いません。書き込み後は読み戻して一致を確認します。
           固定化(OverlayFS)がONの場合、変更は再起動時にリセットされます。
         </p>
       </div>
@@ -477,6 +545,68 @@ function Card({ title, children, helpId }: { title: string; children: React.Reac
       </legend>
       {children}
     </fieldset>
+  );
+}
+
+function fmt(v: number | undefined): string {
+  return typeof v === "number" && Number.isFinite(v) ? String(v) : "—";
+}
+
+function ReportCard({ report }: { report: SaveReport }) {
+  const okColor = "var(--color-success)";
+  const ngColor = "var(--color-danger)";
+  return (
+    <Card title={report.verified ? "確認結果: 一致しています" : "確認結果: 一致しない箇所があります"}>
+      <div className="space-y-3 text-sm">
+        <div className="space-y-1">
+          {report.steps.map((s, i) => (
+            <div key={i} className="flex items-start gap-2 py-1 px-3 rounded" style={{ background: "var(--color-bg-card)" }}>
+              <span style={{ color: s.ok ? okColor : ngColor }}>{s.ok ? "✓" : "✗"}</span>
+              <span className="flex-1 min-w-0">
+                <span style={{ color: "var(--color-text-primary)" }}>{s.label}</span>
+                {s.detail && <span className="ml-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{s.detail}</span>}
+                {s.error && <div className="text-xs break-words" style={{ color: ngColor }}>{s.error}</div>}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table className="text-xs w-full" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                {["", "場所", "緯度", "経度", "高度", "受信機名"].map((h) => (
+                  <th key={h} className="text-left px-2 py-1 font-semibold whitespace-nowrap"
+                      style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...report.files, ...(report.live ? [report.live] : [])].map((f, i) => (
+                <tr key={i}>
+                  <td className="px-2 py-1" style={{ color: f.matches === false ? ngColor : okColor, borderBottom: "1px solid var(--color-border)" }}>
+                    {f.matches === false ? "✗" : f.matches === true ? "✓" : "–"}
+                  </td>
+                  <td className="px-2 py-1 font-mono whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    {f.path}{f.authority ? "（正本）" : ""}
+                    {f.perms && <div style={{ color: "var(--color-text-secondary)" }}>{f.perms}</div>}
+                    {f.error && <div style={{ color: ngColor }}>{f.error}</div>}
+                  </td>
+                  <td className="px-2 py-1 font-mono tabular-nums" style={{ borderBottom: "1px solid var(--color-border)" }}>{fmt(f.latitude)}</td>
+                  <td className="px-2 py-1 font-mono tabular-nums" style={{ borderBottom: "1px solid var(--color-border)" }}>{fmt(f.longitude)}</td>
+                  <td className="px-2 py-1 font-mono tabular-nums" style={{ borderBottom: "1px solid var(--color-border)" }}>{fmt(f.altitude)}</td>
+                  <td className="px-2 py-1 font-mono" style={{ borderBottom: "1px solid var(--color-border)" }}>{f.receiverName || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          「受信機が使用中の値」は再起動が終わるまで前の値のままです。数十秒おいてからもう一度確認してください。
+          表示は小数点以下4〜5桁に丸められるため、そこまでで比べています。
+        </p>
+      </div>
+    </Card>
   );
 }
 
