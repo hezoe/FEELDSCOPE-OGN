@@ -367,11 +367,14 @@ function addTrailPoint(
   while (i > 0 && pts[i - 1].posMs > posMs) i--;
   pts.splice(i, 0, { latlng, arrivalMs, posMs });
 
-  // 表示時間窓の外へ出た点を落とす
+  // 表示時間窓の外へ出た点を落とす。並びは時刻順なので、遅れて届いた点が
+  // 先頭に入ることがある。先頭だけ見ると取りこぼすので全体を見る。
   const cutoff = arrivalMs - TRAIL_DURATION_MS;
-  while (pts.length > 0 && pts[0].arrivalMs < cutoff) pts.shift();
+  if (pts.some((p) => p.arrivalMs < cutoff)) {
+    ac.trailPoints = pts.filter((p) => p.arrivalMs >= cutoff);
+  }
 
-  ac.trail.setLatLngs(pts.map((p) => p.latlng));
+  ac.trail.setLatLngs(ac.trailPoints.map((p) => p.latlng));
 }
 
 function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayNameMode): string {
