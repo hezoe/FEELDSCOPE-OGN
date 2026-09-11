@@ -50,6 +50,12 @@ MAX_VERTICAL_SPEED_MS = 40    # 直前の位置からの見かけの上昇・降
 CONTINUITY_MAX_GAP_SEC = 300
 # 連続してこれだけ弾いたら基準側が怪しいので取り直す
 MAX_CONSECUTIVE_REJECTS = 5
+
+# 復号エラーは機体IDそのものも壊す。1ビット化けただけで「初めて見る機体」に
+# なるため、直前の位置と比べる方法では弾けない（比べる相手がいない）。
+# 本物の機体は 1Hz で送り続けるのでパケット数がすぐ増えるが、壊れたIDは
+# 1 のまま増えない。実測でも幽霊は全て 1、本物は 22〜60 だった。
+MIN_PACKETS_TO_PUBLISH = 2
 STATUS_RETAIN = True
 
 
@@ -568,6 +574,16 @@ class OgnMqttPublisher:
         aircraft_text = fetch_url(f"{base}/aircraft-list.txt")
         if aircraft_text:
             aircraft = parse_aircraft_list(aircraft_text)
+
+            # 1パケットしか受けていない機体は、復号エラーで機体IDが壊れて
+            # できた幽霊の可能性が高い。確認できるまで出さない。
+            ghosts = [
+                dev_id for dev_id, ac in aircraft.items()
+                if ac["summary"].get("packets_received", 0) < MIN_PACKETS_TO_PUBLISH
+            ]
+            for dev_id in ghosts:
+                log.info("%s: unconfirmed (1 packet), not publishing", dev_id)
+                del aircraft[dev_id]
 
             now_epoch = time.time()
             for dev_id, ac in aircraft.items():

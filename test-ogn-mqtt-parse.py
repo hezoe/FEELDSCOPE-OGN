@@ -170,6 +170,24 @@ def test_continuity_filter(m):
     assert m.is_continuous(prev, pos(1000 + 600, 43.6530, 141.8947, 800)),         "間隔が空いた場合まで落としている"
 
 
+def test_single_packet_is_a_ghost(m):
+    """復号エラーで機体IDが壊れてできた幽霊を見分けられること。
+
+    本物の機体は 1Hz で送り続けるのでパケット数が増えるが、壊れたIDは 1 の
+    まま増えない。直前の位置と比べる方法では「初めて見る機体」なので弾けず、
+    パケット数で見るしかない。
+    """
+    ghost = ("FLRFB0727 [    1/    1sec] 1:2:FB0727 F*  < 0.1m/s> <12.3dB>, "
+             "<0.0bit/packet>, < +9.12(0.00)kHz>")
+    real = ("FLRDB0727 [   60/   60sec] 1:2:DB0727 F*  < 0.1m/s> <12.3dB>, "
+            "<0.0bit/packet>, < +9.12(0.00)kHz>")
+    g = m.parse_aircraft_header(ghost)
+    r = m.parse_aircraft_header(real)
+    assert g is not None and r is not None, "集計行がパースできない"
+    assert g["packets_received"] < m.MIN_PACKETS_TO_PUBLISH,         "1パケットの機体を確認済みとみなしている"
+    assert r["packets_received"] >= m.MIN_PACKETS_TO_PUBLISH,         "本物の機体を幽霊とみなしている"
+
+
 def main():
     m = load_ogn_mqtt()
     tests = [
@@ -180,6 +198,7 @@ def main():
         test_negative_altitude,
         test_absurd_position_rejected,
         test_continuity_filter,
+        test_single_packet_is_a_ghost,
     ]
     failed = 0
     for test in tests:
