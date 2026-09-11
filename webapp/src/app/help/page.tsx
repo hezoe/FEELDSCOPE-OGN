@@ -441,7 +441,7 @@ function ManualContent() {
             <li><strong>未ログイン時は、設定画面のすべての入力欄・ボタンが無効（グレーアウト）</strong>になり、一切の設定変更・電源操作ができません。管理者パスワードでログインすると、通常どおり操作できるようになります。</li>
             <li><strong>初期パスワードは <code>admin</code></strong>。設定画面上部で変更できます（4文字以上）。初期パスワードのままだと注意が表示されます。</li>
             <li><strong>唯一の例外が「リモートサポート」</strong>です。ログインしていなくても操作できます（パスワード失念時の復旧導線を兼ねるため）。</li>
-            <li>この判定は<strong>画面の見た目だけでなく受信機側でも行われます</strong>。設定変更・IGCファイルのアップロードと削除・ログの閲覧は、ログインしていなければ受信機が受け付けません。</li>
+            <li>設定変更・IGCファイルのアップロードと削除・ログの閲覧は、ログインしていなければ<strong>受信機が受け付けません</strong>。</li>
             <li>パスワードを<strong>失念した場合</strong>は、リモートサポートを有効化して管理者(サポート担当)にリセットを依頼できます（下記）。リモートサポートのON/OFFは<strong>ログイン不要</strong>です。</li>
           </ul>
         </Section>
@@ -652,22 +652,34 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.2.0 */}
+      {/* v1.2.1 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
-      <Card title="設定画面の入力値から端末を操作できる問題を修正（要アップデート）">
+      <Card title="「利用状況の記録（UX分析）」を廃止しました">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li><strong>ADS-B設定のURL欄に入れた文字列が、受信機上で管理者権限のコマンドとして実行できる状態でした。</strong> URLをサービス設定ファイルへ書き込む際に、シェルへ文字列のまま渡していたためです。履歴再生の設定にも同じ作りがありました。</li>
-          <li>設定ファイルへの書き込みを<strong>シェルを経由しない方式</strong>に改めました。あわせて URL は使用できる文字を限定し、空白・引用符・改行などを含むものは保存時に弾きます。</li>
-          <li>ホスト名・自動再起動の時刻・MQTTの宛先・サービスの状態取得など、<strong>値を含むコマンド実行を全24箇所すべて同じ方式へ統一</strong>しました。値は常にデータとして渡され、コマンドとして解釈されません。</li>
-          <li>今後同じ誤りが混入しないよう、コマンド実行の共通窓口を用意し、シェルを使ってよいのは値を含まない固定コマンドだけに限定しました。</li>
-          <li><strong>IGCファイルのアップロードと削除に管理者ログインを必須</strong>にしました。これまでは画面上はボタンが無効でも、ネットワークから直接操作できる状態でした。</li>
-          <li>IGCファイルのアップロードに<strong>10MBの上限</strong>を設けました。上限が無く、ログインなしでディスクを埋められる状態でした。</li>
-          <li>受信機と同じネットワークに入られた場合の被害を想定した修正です。<strong>速やかなアップデートを推奨します。</strong></li>
+          <li><strong>設定画面の「利用状況の記録（UX分析）」を廃止</strong>しました。ポインター操作の記録は行いません。設定画面から項目そのものが無くなります。</li>
+          <li>本機に残っている記録データは、<strong>アップデート時に自動で削除</strong>します。記録ファイル以外には触れません。</li>
+          <li>リリースノートの記述を見直し、<strong>改修内容の説明を簡潔</strong>にしました。</li>
+        </ul>
+      </Card>
+
+      {/* v1.2.0 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+      </div>
+
+      <Card title="ADS-B設定の脆弱性を改修しました（要アップデート）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>ADS-B設定の脆弱性を改修しました。</strong> 受信機と同じネットワークから悪用されるおそれがあるため、<strong>速やかなアップデートを推奨します。</strong></li>
+          <li>あわせて設定値の取り扱い全体を見直し、同種の問題が起きない作りに統一しました。</li>
+          <li>ADS-BのURL欄は、<strong>使用できる文字を限定</strong>しました。空白や引用符などを含むURLは保存できません。</li>
+          <li>IGCファイルの<strong>アップロードと削除に管理者ログインが必要</strong>になりました。一覧の表示はこれまでどおりログイン不要です。</li>
+          <li>IGCファイルは<strong>1ファイル10MBまで</strong>になりました。</li>
         </ul>
       </Card>
 
@@ -893,10 +905,11 @@ function ReleaseNotesContent() {
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-08-29</span>
       </div>
 
-      <Card title="セキュリティ修正: 状態・ログAPIの認証強化">
+      <Card title="ログ・状態表示の脆弱性を改修しました">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>システムログを返す <code>/api/support/logs</code> が<strong>未ログインでも全文取得できた</strong>問題を修正し、管理者/オペレーターのログインを必須にしました。</li>
-          <li><code>/api/system</code> の状態取得で、内部ネットワーク構成や上流データソースURL等の<strong>機微情報を未ログイン時は伏せる</strong>よう変更しました（画面のステータス表示は従来どおり動作します）。</li>
+          <li><strong>ログ・状態表示の脆弱性を改修しました。</strong></li>
+          <li><strong>システムログの閲覧に管理者ログインが必要</strong>になりました。</li>
+          <li>状態表示のうち、内部ネットワーク構成や上流データソースURLなどは<strong>ログイン時のみ表示</strong>します（画面のステータス表示は従来どおり動作します）。</li>
         </ul>
       </Card>
 
@@ -939,7 +952,7 @@ function ReleaseNotesContent() {
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
           <li>新規インストール（<code>feeldscope-install.sh</code>）と<strong>アップデート（<code>feeldscope-update.sh</code>）の両方で、端末のセキュリティ設定を自動適用</strong>するようにしました（冪等な <code>feeldscope-harden.sh</code>）。</li>
           <li><strong>ローカルファイアウォール(ufw)</strong>: SSH(22)・Web(80)・地図用MQTT WebSocket(9001)のみ受信許可。MQTTネイティブ(1883)やOGN内部ポートをLANから遮断。</li>
-          <li><strong>SSH</strong>: root ログイン禁止・X11転送無効。パスワード認証は<strong>pi に公開鍵が登録済みの場合のみ無効化</strong>（鍵未設定の端末はロックアウト防止のため据え置き）。</li>
+          <li><strong>SSH</strong>: root ログイン禁止・X11転送無効。公開鍵を登録済みの端末では、あわせてパスワード認証を無効化します（公開鍵での接続を推奨します）。</li>
         </ul>
       </Card>
 
@@ -949,11 +962,11 @@ function ReleaseNotesContent() {
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-07-11</span>
       </div>
 
-      <Card title="設定APIのセキュリティ強化（コマンド注入の排除）">
+      <Card title="Wi-Fi・有線LAN設定の脆弱性を改修しました">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>Wi-Fi設定・有線LAN設定の保存処理を見直し、入力値（SSID/パスワード/IP/ゲートウェイ/DNS）を<strong>シェルを介さずに</strong>設定ファイルへ書き込むよう変更。</li>
-          <li>IPアドレス類は<strong>IPv4形式を厳格に検証</strong>、SSID/パスワードは長さ検証＋エスケープ。これにより管理者権限でのコマンド注入（root昇格）の余地を構造的に排除。</li>
-          <li>（対象: <code>wifi-save</code> / <code>eth-save</code>。登録トークン・ホスト名は従来から検証済み）</li>
+          <li><strong>Wi-Fi設定・有線LAN設定の脆弱性を改修しました。</strong></li>
+          <li>IPアドレス・サブネットマスク・ゲートウェイ・DNSは<strong>IPv4の形式を厳格に検証</strong>するようになりました。形式に合わない値は保存できません。</li>
+          <li>SSIDとWi-Fiパスワードも長さを検証します（SSIDは63文字以内、パスワードは8〜63文字）。</li>
         </ul>
       </Card>
 
@@ -969,7 +982,7 @@ function ReleaseNotesContent() {
           <li><strong>未ログイン時は設定画面のすべての入力欄・ボタンを無効化（グレーアウト）</strong>し、誤操作・不正変更を防止。ログイン後は従来どおり操作可能。</li>
           <li><strong>リモートサポートだけは無認証で操作可能</strong>。パスワードを失念しても、リモートサポートを有効化すればサポート担当がパスワードをリセットできる（復旧導線）。</li>
           <li><strong>リモートサポートを時限化</strong>。既定OFF・有効化から<strong>3時間で自動OFF</strong>。時間内は再起動してもON維持、経過または手動OFFで即遮断。残り時間を画面表示。</li>
-          <li>認可方式: 送信元IPを見るカスタムサーバを導入し、CATVPNオペレーターサブネットからのアクセスのみ「サポート担当」として無パスワード変更を許可（VPN上の相互隔離により本人性を担保）。</li>
+          <li>サポート担当かどうかの判定は、CATVPN上の隔離されたネットワーク経路にもとづいて行います。</li>
         </ul>
       </Card>
 

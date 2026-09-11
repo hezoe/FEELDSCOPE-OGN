@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { UnitProvider } from "@/lib/UnitContext";
 import { TabProvider } from "@/lib/TabContext";
-import { PointerTrackerProvider } from "@/lib/PointerTracker";
 
 export const metadata: Metadata = {
   title: "FEELDSCOPE - OGN Flight Monitor",
@@ -22,9 +21,7 @@ export default function RootLayout({
       <body>
         <TabProvider>
           <UnitProvider>
-            <PointerTrackerProvider>
-              {children}
-            </PointerTrackerProvider>
+            {children}
           </UnitProvider>
         </TabProvider>
       </body>
