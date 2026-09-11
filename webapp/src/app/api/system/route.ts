@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { assertHttpUrl, assertReceiverId, isSafeServiceName, run, runShell } from "@/lib/run";
 import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 
-const execAsync = promisify(exec);
 
 const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
 const FEELDSCOPE_OGN_DIR = process.env.FEELDSCOPE_OGN_DIR || "/home/pi/FEELDSCOPE-OGN";
@@ -22,10 +20,15 @@ async function writeRootFile(target: string, content: string): Promise<void> {
   const tmp = `/tmp/feeldscope-cfg-${process.pid}-${Math.random().toString(36).slice(2)}`;
   await writeFile(tmp, content, { mode: 0o600 });
   try {
-    await execAsync(`sudo -n cp ${tmp} ${target}`);
+    await run("sudo", ["-n", "cp", tmp, target]);
   } finally {
-    await execAsync(`sudo -n rm -f ${tmp}`).catch(() => {});
+    await run("sudo", ["-n", "rm", "-f", tmp]).catch(() => {});
   }
+}
+
+/** root 所有のディレクトリを作る */
+async function mkdirRoot(dir: string): Promise<void> {
+  await run("sudo", ["-n", "mkdir", "-p", dir]);
 }
 
 function isIpv4(s: string): boolean {
@@ -110,7 +113,7 @@ async function saveAdsbConfig(config: AdsbSavedConfig): Promise<void> {
 
 async function isOverlayEnabled(): Promise<boolean> {
   try {
-    const { stdout } = await execAsync("sudo -n overlayctl status");
+    const { stdout } = await run("sudo", ["-n", "overlayctl", "status"]);
     return stdout.includes("overlay is active") || stdout.includes("overlay enabled");
   } catch {
     return false;
@@ -119,7 +122,8 @@ async function isOverlayEnabled(): Promise<boolean> {
 
 async function isActive(service: string): Promise<boolean> {
   try {
-    const { stdout } = await execAsync(`systemctl is-active ${service}`);
+    if (!isSafeServiceName(service)) return false;
+    const { stdout } = await run("systemctl", ["is-active", service]);
     return stdout.trim() === "active";
   } catch {
     return false;
@@ -128,8 +132,13 @@ async function isActive(service: string): Promise<boolean> {
 
 /** Publish a JSON message to an MQTT topic via mosquitto_pub */
 async function mqttPublish(topic: string, payload: object): Promise<void> {
-  const msg = JSON.stringify(payload).replace(/'/g, "'\\''");
-  await execAsync(`mosquitto_pub -t '${topic}' -m '${msg}'`);
+  // シェルを通さないので、トピックも本文もクォートの細工は不要
+  await run("mosquitto_pub", ["-t", topic, "-m", JSON.stringify(payload)]);
+}
+
+/** 保持メッセージを消す（-r -n で空のretainedを送る） */
+async function mqttClearRetained(topic: string): Promise<void> {
+  await run("mosquitto_pub", ["-t", topic, "-r", "-n"]).catch(() => {});
 }
 
 // ── Version / Update helpers ──
@@ -146,16 +155,20 @@ async function getVersionInfo(): Promise<{ current: string; latest: string | nul
   try {
     // Fetch remote to compare without pulling. Try sudo -u pi first (RPi),
     // fall back to plain git fetch (VPS or any other env).
-    await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && (sudo -n -u pi git fetch origin --quiet 2>/dev/null || git fetch origin --quiet)`);
+    try {
+      await run("sudo", ["-n", "-u", "pi", "git", "fetch", "origin", "--quiet"], { cwd: FEELDSCOPE_OGN_DIR });
+    } catch {
+      await run("git", ["fetch", "origin", "--quiet"], { cwd: FEELDSCOPE_OGN_DIR });
+    }
     // Compare package.json version rather than commit count — update-script commits
     // don't change the deployed version, so commits-ahead can be misleading
     try {
-      const { stdout: remotePkg } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git show origin/master:webapp/package.json`);
+      const { stdout: remotePkg } = await run("git", ["show", "origin/master:webapp/package.json"], { cwd: FEELDSCOPE_OGN_DIR });
       latest = JSON.parse(remotePkg).version || null;
     } catch { /* ignore */ }
     // Update available only when version string differs.
     // Same version = same state for all users (policy: always bump patch for any change).
-    const { stdout } = await execAsync(`cd ${FEELDSCOPE_OGN_DIR} && git rev-list HEAD..origin/master --count`);
+    const { stdout } = await run("git", ["rev-list", "HEAD..origin/master", "--count"], { cwd: FEELDSCOPE_OGN_DIR });
     const behind = parseInt(stdout.trim(), 10);
     updateAvailable = behind > 0 && latest !== current;
   } catch { /* ignore */ }
@@ -182,19 +195,19 @@ async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
   // /etc/wireguard/wg0.conf は root:root 0600 が普通なので sudo で存在確認する
   let configured = false;
   try {
-    await execAsync("sudo -n test -f /etc/wireguard/wg0.conf");
+    await run("sudo", ["-n", "test", "-f", "/etc/wireguard/wg0.conf"]);
     configured = true;
   } catch { /* not configured or no sudo */ }
 
   let enabled = false;
   try {
-    const { stdout } = await execAsync("systemctl is-enabled wg-quick@wg0 2>/dev/null || true");
+    const { stdout } = await runShell("systemctl is-enabled wg-quick@wg0 2>/dev/null || true");
     enabled = stdout.trim() === "enabled";
   } catch { /* ignore */ }
 
   let active = false;
   try {
-    const { stdout } = await execAsync("systemctl is-active wg-quick@wg0 2>/dev/null || true");
+    const { stdout } = await runShell("systemctl is-active wg-quick@wg0 2>/dev/null || true");
     active = stdout.trim() === "active";
   } catch { /* ignore */ }
 
@@ -222,10 +235,10 @@ async function setRemoteSupport(enable: boolean): Promise<void> {
   }
   if (enable) {
     // enable --now: 即時起動＋再起動後も自動復帰（OFF にするまで維持）
-    await execAsync("sudo -n systemctl enable --now wg-quick@wg0");
+    await run("sudo", ["-n", "systemctl", "enable", "--now", "wg-quick@wg0"]);
   } else {
-    await execAsync("sudo -n systemctl disable --now wg-quick@wg0").catch(() => {});
-    await execAsync("sudo -n systemctl stop wg-quick@wg0").catch(() => {});
+    await run("sudo", ["-n", "systemctl", "disable", "--now", "wg-quick@wg0"]).catch(() => {});
+    await run("sudo", ["-n", "systemctl", "stop", "wg-quick@wg0"]).catch(() => {});
   }
 }
 
@@ -241,7 +254,7 @@ async function getAutoRebootConfig(): Promise<AutoRebootConfig> {
   // Try sudo first (RPi has passwordless sudo); fall back to plain crontab
   // -n: never prompt for password (fails fast on VPS without sudoers entry)
   try {
-    const { stdout } = await execAsync("sudo -n crontab -l 2>/dev/null || crontab -l 2>/dev/null || true");
+    const { stdout } = await runShell("sudo -n crontab -l 2>/dev/null || crontab -l 2>/dev/null || true");
     const lines = stdout.split("\n");
     for (const line of lines) {
       const m = line.match(/^\s*(\d+)\s+(\d+)\s+\*\s+\*\s+\*\s+.*reboot/);
@@ -258,7 +271,7 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
   if (cfg.minute < 0 || cfg.minute > 59) throw new Error("分(minute)は 0〜59 の範囲です");
 
   // Read existing crontab (sans reboot lines), append new line if enabled
-  const { stdout } = await execAsync("sudo -n crontab -l 2>/dev/null || true");
+  const { stdout } = await runShell("sudo -n crontab -l 2>/dev/null || true");
   const filtered = stdout.split("\n").filter(line => !/.*\/sbin\/reboot\s*$/.test(line)).join("\n");
   let newCron = filtered.trimEnd();
   if (cfg.enabled) {
@@ -267,8 +280,15 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
   } else {
     newCron += "\n";
   }
-  // Install via stdin
-  await execAsync(`echo ${JSON.stringify(newCron)} | sudo -n crontab -`);
+  // 一時ファイルへ書いてから crontab に読ませる。
+  // 以前は echo でシェルへ渡していたため、既存行に `$(...)` があると実行された。
+  const tmp = `/tmp/feeldscope-cron-${process.pid}-${Date.now()}`;
+  await writeFile(tmp, newCron.endsWith("\n") ? newCron : newCron + "\n", { mode: 0o600 });
+  try {
+    await run("sudo", ["-n", "crontab", tmp]);
+  } finally {
+    await run("sudo", ["-n", "rm", "-f", tmp]).catch(() => {});
+  }
 }
 
 // ── Network helpers ──
@@ -299,7 +319,7 @@ function subnetToCidr(subnet: string): number {
 
 async function getHostname(): Promise<string> {
   try {
-    const { stdout } = await execAsync("hostname");
+    const { stdout } = await run("hostname");
     return stdout.trim();
   } catch {
     return "";
@@ -312,11 +332,15 @@ async function applyHostname(name: string): Promise<void> {
   if (!safe || safe.length > 63 || /^-/.test(safe) || /-$/.test(safe)) {
     throw new Error("ホスト名は英数字とハイフンのみ、63文字以内、先頭末尾はハイフン不可です");
   }
-  await execAsync(`sudo -n hostnamectl set-hostname ${safe}`);
-  // Update /etc/hosts 127.0.1.1 entry
-  await execAsync(`sudo -n sed -i -E 's/^(127\\.0\\.1\\.1\\s+).*/\\1${safe}/' /etc/hosts`);
+  await run("sudo", ["-n", "hostnamectl", "set-hostname", safe]);
+  // /etc/hosts の 127.0.1.1 行を書き換える。sed へ値を渡さず、読んで書き直す。
+  try {
+    const hosts = await readFile("/etc/hosts", "utf-8");
+    const next = hosts.replace(/^(127\.0\.1\.1[ \t]+).*$/m, `$1${safe}`);
+    if (next !== hosts) await writeRootFile("/etc/hosts", next);
+  } catch { /* /etc/hosts が読めない環境では飛ばす */ }
   // Restart avahi to refresh mDNS
-  await execAsync("sudo -n systemctl restart avahi-daemon").catch(() => {});
+  await run("sudo", ["-n", "systemctl", "restart", "avahi-daemon"]).catch(() => {});
 }
 
 async function getNetworkStatus(): Promise<NetworkStatus> {
@@ -325,7 +349,7 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
   let wifiSsid = "";
   let wifiConnected = false;
   try {
-    const { stdout } = await execAsync("iwgetid -r 2>/dev/null || true");
+    const { stdout } = await runShell("iwgetid -r 2>/dev/null || true");
     wifiSsid = stdout.trim();
     wifiConnected = wifiSsid.length > 0;
   } catch { /* ignore */ }
@@ -339,24 +363,24 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
   let ethMethod: "dhcp" | "static" = "dhcp";
 
   try {
-    const { stdout } = await execAsync("ip -4 addr show eth0 2>/dev/null || true");
+    const { stdout } = await runShell("ip -4 addr show eth0 2>/dev/null || true");
     const m = stdout.match(/inet (\d+\.\d+\.\d+\.\d+)\/(\d+)/);
     if (m) {
       ethIp = m[1];
       ethSubnet = cidrToSubnet(parseInt(m[2], 10));
     }
-    const { stdout: carrier } = await execAsync("cat /sys/class/net/eth0/carrier 2>/dev/null || echo 0");
+    const { stdout: carrier } = await runShell("cat /sys/class/net/eth0/carrier 2>/dev/null || echo 0");
     ethConnected = carrier.trim() === "1";
   } catch { /* ignore */ }
 
   try {
-    const { stdout: routeOut } = await execAsync("ip route show dev eth0 2>/dev/null | grep default || true");
+    const { stdout: routeOut } = await runShell("ip route show dev eth0 2>/dev/null | grep default || true");
     const gm = routeOut.match(/default via (\d+\.\d+\.\d+\.\d+)/);
     if (gm) ethGateway = gm[1];
   } catch { /* ignore */ }
 
   try {
-    const { stdout: resolvOut } = await execAsync("cat /etc/resolv.conf");
+    const { stdout: resolvOut } = await runShell("cat /etc/resolv.conf");
     const dnsServers = [...resolvOut.matchAll(/nameserver\s+(\S+)/g)].map(m => m[1]);
     ethDns = dnsServers.join(", ");
   } catch { /* ignore */ }
@@ -437,7 +461,7 @@ network={
   await writeRootFile(WPA_SUPPLICANT_CONF, content);
   // OGN 設定マネージャが古い認証情報を復活させないよう /boot 側も揃える
   await syncOgnReceiverWifi(ssid, password);
-  await execAsync("sudo -n wpa_cli -i wlan0 reconfigure").catch(() => {});
+  await run("sudo", ["-n", "wpa_cli", "-i", "wlan0", "reconfigure"]).catch(() => {});
 }
 
 async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: string, gateway?: string, dns?: string): Promise<void> {
@@ -466,7 +490,7 @@ async function applyEthConfig(method: "dhcp" | "static", ip?: string, subnet?: s
   // 書き込みは writeRootFile 経由でシェルを介さない（コマンド注入不可）
   await writeRootFile(DHCPCD_CONF, content + "\n");
   // Restart dhcpcd to apply
-  await execAsync("sudo -n systemctl restart dhcpcd").catch(() => {});
+  await run("sudo", ["-n", "systemctl", "restart", "dhcpcd"]).catch(() => {});
 }
 
 // GET /api/system - Get current system status
@@ -538,7 +562,7 @@ export async function POST(request: Request) {
     switch (action) {
       case "realtime":
         // Start ogn-mqtt (Conflicts= will stop igc-simulator)
-        await execAsync("sudo -n systemctl start ogn-mqtt");
+        await run("sudo", ["-n", "systemctl", "start", "ogn-mqtt"]);
         return NextResponse.json({ ok: true, mode: "realtime" });
 
       case "history": {
@@ -555,50 +579,50 @@ export async function POST(request: Request) {
         }
 
         // Not running: update systemd override and start
-        const ridForSim = (await detectReceiverId()).replace(/'/g, "");
+        const ridForSim = assertReceiverId(await detectReceiverId());
         const overrideDir = "/etc/systemd/system/igc-simulator.service.d";
-        await execAsync(`sudo -n mkdir -p ${overrideDir}`);
-        await execAsync(`sudo -n bash -c 'cat > ${overrideDir}/speed.conf << EOF
-[Service]
-ExecStart=
-ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --receiver-id ${ridForSim} --dir ${FEELDSCOPE_DIR}/testdata
-EOF'`);
-        await execAsync("sudo -n systemctl daemon-reload");
-        await execAsync("sudo -n systemctl start igc-simulator");
+        await mkdirRoot(overrideDir);
+        // ユニットファイルはシェルを介さず書く（ヒアドキュメントに値を入れない）
+        await writeRootFile(
+          `${overrideDir}/speed.conf`,
+          `[Service]\nExecStart=\nExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/igc-simulator.py --speed ${replaySpeed} --loop --receiver-id ${ridForSim} --dir ${FEELDSCOPE_DIR}/testdata\n`,
+        );
+        await run("sudo", ["-n", "systemctl", "daemon-reload"]);
+        await run("sudo", ["-n", "systemctl", "start", "igc-simulator"]);
         return NextResponse.json({ ok: true, mode: "history", speed: replaySpeed });
       }
 
       case "stop":
-        await execAsync(
-          "sudo -n systemctl stop ogn-mqtt; sudo -n systemctl stop igc-simulator"
-        );
+        await run("sudo", ["-n", "systemctl", "stop", "ogn-mqtt"]).catch(() => {});
+        await run("sudo", ["-n", "systemctl", "stop", "igc-simulator"]).catch(() => {});
         return NextResponse.json({ ok: true, mode: "stopped" });
 
       case "adsb-start": {
-        const adsbUrl = body.url || "";
+        // URL は systemd のユニットファイルに書き込まれる。空白・引用符・改行を
+        // 通すと別のディレクティブを足せてしまうため、ここで形を確かめる。
+        const adsbUrl = assertHttpUrl(String(body.url || ""), "ADS-Bデータ元のURL");
         const adsbInterval = Math.max(1, Math.min(30, parseInt(body.interval, 10) || 3));
         // webapp と adsb-poller でトピック宛先を一致させるため receiver-id を明示
-        const ridForPoller = (await detectReceiverId()).replace(/'/g, "");
-        // Write systemd override with the URL, interval and receiver-id
+        const ridForPoller = assertReceiverId(await detectReceiverId());
         const adsbOverrideDir = "/etc/systemd/system/adsb-poller.service.d";
-        await execAsync(`sudo -n mkdir -p ${adsbOverrideDir}`);
-        const safeUrl = adsbUrl.replace(/'/g, "");
-        await execAsync(`sudo -n bash -c 'cat > ${adsbOverrideDir}/config.conf << EOF
-[Service]
-ExecStart=
-ExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${safeUrl} --interval ${adsbInterval} --receiver-id ${ridForPoller}
-EOF'`);
-        await execAsync("sudo -n systemctl daemon-reload");
-        await execAsync("sudo -n systemctl restart adsb-poller");
+        await mkdirRoot(adsbOverrideDir);
+        // ユニットファイルはシェルを介さず書く。以前は bash のヒアドキュメントに
+        // URL を埋めており、`$(...)` を含む URL が root 権限で実行されていた。
+        await writeRootFile(
+          `${adsbOverrideDir}/config.conf`,
+          `[Service]\nExecStart=\nExecStart=/usr/bin/python3 ${FEELDSCOPE_DIR}/adsb-poller.py --url ${adsbUrl} --interval ${adsbInterval} --receiver-id ${ridForPoller}\n`,
+        );
+        await run("sudo", ["-n", "systemctl", "daemon-reload"]);
+        await run("sudo", ["-n", "systemctl", "restart", "adsb-poller"]);
         // Persist config and enable auto-start on boot
         await saveAdsbConfig({ enabled: true, url: adsbUrl, interval: adsbInterval });
-        await execAsync("sudo -n systemctl enable adsb-poller").catch(() => {});
+        await run("sudo", ["-n", "systemctl", "enable", "adsb-poller"]).catch(() => {});
         return NextResponse.json({ ok: true, adsb: "started" });
       }
 
       case "adsb-stop": {
-        await execAsync("sudo -n systemctl stop adsb-poller");
-        await execAsync("sudo -n systemctl disable adsb-poller").catch(() => {});
+        await run("sudo", ["-n", "systemctl", "stop", "adsb-poller"]);
+        await run("sudo", ["-n", "systemctl", "disable", "adsb-poller"]).catch(() => {});
         // Persist disabled state (preserve url/interval for re-enable convenience)
         const prev = await loadAdsbConfig();
         await saveAdsbConfig({
@@ -609,19 +633,19 @@ EOF'`);
         // Clear retained ADS-B MQTT messages（receiverIdが変わった過去残存にも対応するためワイルドカードクリアは不可、
         // 主要トピックだけ明示クリア。adsb_status の取り残しが「停止中なのに正常受信中」と誤表示する原因）
         const rid = await detectReceiverId();
-        await execAsync(`mosquitto_pub -t 'ogn/${rid}/aircraft_adsb' -r -n`).catch(() => {});
-        await execAsync(`mosquitto_pub -t 'ogn/${rid}/adsb_status'   -r -n`).catch(() => {});
+        await mqttClearRetained(`ogn/${rid}/aircraft_adsb`);
+        await mqttClearRetained(`ogn/${rid}/adsb_status`);
         return NextResponse.json({ ok: true, adsb: "stopped" });
       }
 
       case "reboot":
         // Respond before rebooting
-        setTimeout(() => execAsync("sudo -n systemctl reboot"), 500);
+        setTimeout(() => run("sudo", ["-n", "systemctl", "reboot"]), 500);
         return NextResponse.json({ ok: true, message: "再起動します..." });
 
       case "shutdown":
         // Respond before shutting down
-        setTimeout(() => execAsync("sudo -n systemctl poweroff"), 500);
+        setTimeout(() => run("sudo", ["-n", "systemctl", "poweroff"]), 500);
         return NextResponse.json({ ok: true, message: "シャットダウンします..." });
 
       case "airfield-save": {
@@ -673,14 +697,15 @@ EOF'`);
           );
         }
         try {
-          const { stdout } = await execAsync(
-            `sudo -n /usr/local/bin/catvpn-enroll ${token} 2>&1`,
+          const { stdout, stderr } = await run(
+            "sudo",
+            ["-n", "/usr/local/bin/catvpn-enroll", token],
             { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 }
           );
           return NextResponse.json({
             ok: true,
             message: "CATVPNに登録しました。リモートサポートが有効になりました。",
-            log: stdout,
+            log: stdout + stderr,
           });
         } catch (e: unknown) {
           const err = e as { stdout?: string; stderr?: string; message?: string };
@@ -737,16 +762,18 @@ EOF'`);
           return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
         }
         // Remove stale log and launch updater as independent systemd transient unit
-        await execAsync("sudo -n rm -f /tmp/feeldscope-update.log && sudo -n touch /tmp/feeldscope-update.log && sudo -n chmod 666 /tmp/feeldscope-update.log");
-        await execAsync(`sudo -n bash -c 'cat > /tmp/feeldscope-do-update.sh << "SCRIPT"
-#!/bin/bash
-cd ${FEELDSCOPE_OGN_DIR}
-exec bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1
-SCRIPT
-chmod +x /tmp/feeldscope-do-update.sh'`);
+        await run("sudo", ["-n", "rm", "-f", "/tmp/feeldscope-update.log"]);
+        await run("sudo", ["-n", "touch", "/tmp/feeldscope-update.log"]);
+        await run("sudo", ["-n", "chmod", "666", "/tmp/feeldscope-update.log"]);
+        // 起動スクリプトもシェルを介さず書く
+        await writeRootFile(
+          "/tmp/feeldscope-do-update.sh",
+          `#!/bin/bash\ncd ${FEELDSCOPE_OGN_DIR}\nexec bash feeldscope-update.sh > /tmp/feeldscope-update.log 2>&1\n`,
+        );
+        await run("sudo", ["-n", "chmod", "+x", "/tmp/feeldscope-do-update.sh"]);
         // Reset any previous failed unit before starting new one
-        await execAsync("sudo -n systemctl reset-failed feeldscope-update 2>/dev/null || true");
-        await execAsync("sudo -n systemd-run --unit=feeldscope-update --description='FEELDSCOPE Update' /tmp/feeldscope-do-update.sh");
+        await runShell("sudo -n systemctl reset-failed feeldscope-update 2>/dev/null || true");
+        await run("sudo", ["-n", "systemd-run", "--unit=feeldscope-update", "--description=FEELDSCOPE Update", "/tmp/feeldscope-do-update.sh"]);
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
 
@@ -760,11 +787,11 @@ chmod +x /tmp/feeldscope-do-update.sh'`);
       }
 
       case "overlay-enable":
-        await execAsync("sudo -n overlayctl enable");
+        await run("sudo", ["-n", "overlayctl", "enable"]);
         return NextResponse.json({ ok: true, message: "オーバーレイFSを有効にしました。再起動後に反映されます。" });
 
       case "overlay-disable":
-        await execAsync("sudo -n overlayctl disable");
+        await run("sudo", ["-n", "overlayctl", "disable"]);
         return NextResponse.json({ ok: true, message: "オーバーレイFSを無効にしました。再起動後に反映されます。" });
 
       default:

@@ -334,8 +334,9 @@ function ManualContent() {
 
         <Section id="settings-igc" heading="3-3. IGC ファイル管理（履歴再生用）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>IGC ファイルをアップロード</strong>ボタン — 拡張子 .igc のファイルをサーバに保存</li>
+            <li><strong>IGC ファイルをアップロード</strong>ボタン — 拡張子 .igc のファイルをサーバに保存。<strong>1ファイル10MBまで</strong></li>
             <li><strong>削除</strong>ボタン — 各ファイルを削除(確認ダイアログ)</li>
+            <li>アップロードと削除には<strong>管理者ログインが必要</strong>です。一覧の表示はログイン不要です</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
             OLC（onlinecontest.org）等からダウンロードしたIGCを使用可能。
@@ -346,7 +347,7 @@ function ManualContent() {
         <Section id="settings-adsb" heading="3-4. ADS-B 受信設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ADS-B 受信を有効にする</strong>チェックボックス（ブラウザ + サーバ） — adsb-pollerサービスのON/OFF</li>
-            <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code></li>
+            <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code>。<code>http://</code> か <code>https://</code> で始まる必要があり、空白・引用符・改行などを含むURLは保存できません</li>
             <li><strong>ポーリング間隔（秒）</strong>（ブラウザ + サーバ） — 1〜30秒</li>
           </ul>
         </Section>
@@ -440,6 +441,7 @@ function ManualContent() {
             <li><strong>未ログイン時は、設定画面のすべての入力欄・ボタンが無効（グレーアウト）</strong>になり、一切の設定変更・電源操作ができません。管理者パスワードでログインすると、通常どおり操作できるようになります。</li>
             <li><strong>初期パスワードは <code>admin</code></strong>。設定画面上部で変更できます（4文字以上）。初期パスワードのままだと注意が表示されます。</li>
             <li><strong>唯一の例外が「リモートサポート」</strong>です。ログインしていなくても操作できます（パスワード失念時の復旧導線を兼ねるため）。</li>
+            <li>この判定は<strong>画面の見た目だけでなく受信機側でも行われます</strong>。設定変更・IGCファイルのアップロードと削除・ログの閲覧は、ログインしていなければ受信機が受け付けません。</li>
             <li>パスワードを<strong>失念した場合</strong>は、リモートサポートを有効化して管理者(サポート担当)にリセットを依頼できます（下記）。リモートサポートのON/OFFは<strong>ログイン不要</strong>です。</li>
           </ul>
         </Section>
@@ -650,11 +652,29 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.0 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="設定画面の入力値から端末を操作できる問題を修正（要アップデート）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>ADS-B設定のURL欄に入れた文字列が、受信機上で管理者権限のコマンドとして実行できる状態でした。</strong> URLをサービス設定ファイルへ書き込む際に、シェルへ文字列のまま渡していたためです。履歴再生の設定にも同じ作りがありました。</li>
+          <li>設定ファイルへの書き込みを<strong>シェルを経由しない方式</strong>に改めました。あわせて URL は使用できる文字を限定し、空白・引用符・改行などを含むものは保存時に弾きます。</li>
+          <li>ホスト名・自動再起動の時刻・MQTTの宛先・サービスの状態取得など、<strong>値を含むコマンド実行を全24箇所すべて同じ方式へ統一</strong>しました。値は常にデータとして渡され、コマンドとして解釈されません。</li>
+          <li>今後同じ誤りが混入しないよう、コマンド実行の共通窓口を用意し、シェルを使ってよいのは値を含まない固定コマンドだけに限定しました。</li>
+          <li><strong>IGCファイルのアップロードと削除に管理者ログインを必須</strong>にしました。これまでは画面上はボタンが無効でも、ネットワークから直接操作できる状態でした。</li>
+          <li>IGCファイルのアップロードに<strong>10MBの上限</strong>を設けました。上限が無く、ログインなしでディスクを埋められる状態でした。</li>
+          <li>受信機と同じネットワークに入られた場合の被害を想定した修正です。<strong>速やかなアップデートを推奨します。</strong></li>
+        </ul>
+      </Card>
+
       {/* v1.1.53 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.53</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="フライトログを遡ると末尾へ引き戻される問題を修正">

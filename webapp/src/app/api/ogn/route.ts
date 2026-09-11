@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { readFile, rename, unlink, writeFile } from "fs/promises";
-
-const execAsync = promisify(exec);
+import { access, constants, readFile, rename, unlink, writeFile } from "fs/promises";
+import { run } from "@/lib/run";
 
 // /boot/rtlsdr-ogn.conf が正本。init.d は起動のたびにこれを /home/pi へ複製するので、
 // /boot に書けていないと再起動で元に戻る。両方に書き、両方を確認する。
@@ -11,11 +8,12 @@ const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.con
 const RTLSDR_OGN_CONF_AUTHORITY = "/boot/rtlsdr-ogn.conf";
 const OGN_RECEIVER_CONF_PATH = "/boot/OGN-receiver.conf";
 
-/** 受信機を再起動する手段。上から順に試す（イメージによって作りが違う） */
-const RESTART_COMMANDS = [
-  "sudo -n /etc/init.d/rtlsdr-ogn restart",
-  "sudo -n service rtlsdr-ogn restart",
-  "sudo -n systemctl restart rtlsdr-ogn",
+/** 受信機を再起動する手段。上から順に試す（イメージによって作りが違う）。
+ *  シェルを通さないので、要素はそのまま実行ファイルと引数になる。 */
+const RESTART_COMMANDS: string[][] = [
+  ["sudo", "-n", "/etc/init.d/rtlsdr-ogn", "restart"],
+  ["sudo", "-n", "service", "rtlsdr-ogn", "restart"],
+  ["sudo", "-n", "systemctl", "restart", "rtlsdr-ogn"],
 ];
 
 /** 保存の各段階の結果。画面にそのまま出して、どこで失敗したか分かるようにする */
@@ -110,6 +108,27 @@ async function readReceiverConf(): Promise<string> {
   }
 }
 
+/** 設定ファイルから読んだポート番号を、そのまま外部へ渡さないよう正規化する */
+function rfPort(port: number): number {
+  const n = Math.trunc(Number(port));
+  return Number.isFinite(n) && n > 0 && n < 65536 ? n : 8082;
+}
+
+/** デコーダ側のポート（RF ポート + 1 が慣例） */
+function decodePort(port: number): number {
+  return rfPort(port) + 1;
+}
+
+/** 受信機の状態ページを読む。ローカルの HTTP なのでシェルは介さない */
+async function fetchLocalPage(port: number): Promise<string> {
+  const { stdout } = await run(
+    "curl",
+    ["-s", "--max-time", "3", `http://localhost:${rfPort(port)}/`],
+    { timeout: 8_000 },
+  );
+  return stdout;
+}
+
 function errMsg(e: unknown): string {
   if (e && typeof e === "object") {
     const o = e as { stderr?: string; message?: string };
@@ -146,7 +165,7 @@ async function writeConfFile(target: string, content: string): Promise<string> {
   const tmp = `/tmp/feeldscope-ogn-${process.pid}-${Date.now()}.conf`;
   try {
     await writeFile(tmp, content);
-    await execAsync(`sudo -n cp ${tmp} ${target}`);
+    await run("sudo", ["-n", "cp", tmp, target]);
     return "sudo で書き込み";
   } catch (e) {
     tried.push(`sudo: ${errMsg(e)}`);
@@ -221,14 +240,19 @@ HTTP:
 
 /** 所有者・パーミッションと、このプロセスから書けるかどうか */
 async function permsOf(path: string): Promise<string | undefined> {
+  let owner = "";
   try {
-    const { stdout } = await execAsync(
-      `stat -c '%U:%G %a' ${path} 2>/dev/null; test -w ${path} && echo writable || echo not-writable`,
-    );
-    return stdout.trim().split("\n").join(" / ") || undefined;
+    const { stdout } = await run("stat", ["-c", "%U:%G %a", path]);
+    owner = stdout.trim();
   } catch {
     return undefined;
   }
+  let writable = "not-writable";
+  try {
+    await access(path, constants.W_OK);
+    writable = "writable";
+  } catch { /* 書けない */ }
+  return `${owner} / ${writable}`;
 }
 
 /** 1つの設定ファイルを読んで、期待した値になっているか調べる */
@@ -266,13 +290,14 @@ function sameAs(f: FileCheck, expect: OgnConfig): boolean {
 
 /** 受信機が実際に使っている位置。デコーダの状態ページ（8083）が持っている */
 async function checkLivePosition(httpPort: number, expect?: OgnConfig): Promise<FileCheck> {
+  const port = decodePort(httpPort);
   const out: FileCheck = {
-    path: `受信機が使用中の値（localhost:${httpPort + 1}）`,
+    path: `受信機が使用中の値（localhost:${port}）`,
     authority: false,
     exists: false,
   };
   try {
-    const { stdout } = await execAsync(`curl -s --max-time 3 http://localhost:${httpPort + 1}/`);
+    const stdout = await fetchLocalPage(port);
     if (!stdout) throw new Error("デコーダの状態ページに接続できません");
     out.exists = true;
     const lat = extractStatusField(stdout, "Position.Latitude");
@@ -318,7 +343,7 @@ async function checkReceiverConf(expect?: OgnConfig): Promise<FileCheck> {
 async function verifyOgnConfig(expect?: OgnConfig): Promise<SaveReport> {
   const steps: StepResult[] = [];
   try {
-    await execAsync("sudo -n true");
+    await run("sudo", ["-n", "true"]);
     steps.push({ label: "sudo（パスワード無しで実行できるか）", ok: true });
   } catch (e) {
     steps.push({
@@ -407,21 +432,21 @@ async function saveOgnConfig(c: OgnConfig): Promise<SaveReport> {
   if (wroteAuthority) {
     let restarted = false;
     const errors: string[] = [];
-    for (const cmd of RESTART_COMMANDS) {
+    for (const [cmd, ...args] of RESTART_COMMANDS) {
       try {
-        await execAsync(cmd);
-        steps.push({ label: "受信機の再起動", ok: true, detail: cmd });
+        await run(cmd, args);
+        steps.push({ label: "受信機の再起動", ok: true, detail: [cmd, ...args].join(" ") });
         restarted = true;
         break;
       } catch (e) {
-        errors.push(`${cmd}: ${errMsg(e)}`);
+        errors.push(`${[cmd, ...args].join(" ")}: ${errMsg(e)}`);
       }
     }
     if (!restarted) steps.push({ label: "受信機の再起動", ok: false, error: errors.join(" / ") });
 
     // OGN 設定マネージャは起動のたびに wpa_supplicant.conf へ network ブロックを
     // 追記するため、restart 直後に重複を畳んでおく（詳細は feeldscope-wpa-dedupe.sh）
-    await execAsync("sudo -n /usr/local/sbin/feeldscope-wpa-dedupe").catch(() => {});
+    await run("sudo", ["-n", "/usr/local/sbin/feeldscope-wpa-dedupe"]).catch(() => {});
   } else {
     steps.push({
       label: "受信機の再起動",
@@ -448,7 +473,7 @@ function extractStatusField(html: string, label: string): string | undefined {
 
 async function getOgnStatus(httpPort: number): Promise<OgnStatus> {
   try {
-    const { stdout } = await execAsync(`curl -s --max-time 3 http://localhost:${httpPort}/`);
+    const stdout = await fetchLocalPage(httpPort);
     const html = stdout || "";
     if (!html) return { online: false };
 
@@ -476,7 +501,7 @@ async function getOgnStatus(httpPort: number): Promise<OgnStatus> {
 
     // Also fetch decoder stats from port 8083 (rf port + 1 by convention)
     try {
-      const { stdout: dec } = await execAsync(`curl -s --max-time 3 http://localhost:${httpPort + 1}/`);
+      const dec = await fetchLocalPage(decodePort(httpPort));
       if (dec) {
         base.detectSNR = extractStatusField(dec, "Demodulator.DetectSNR");
         base.aircraftsLast12h = extractStatusField(dec, "Aircrafts received over last 12 hours");
@@ -542,12 +567,13 @@ export async function POST(request: Request) {
       }
       case "restart": {
         const errors: string[] = [];
-        for (const cmd of RESTART_COMMANDS) {
+        for (const [cmd, ...args] of RESTART_COMMANDS) {
+          const shown = [cmd, ...args].join(" ");
           try {
-            await execAsync(cmd);
-            return NextResponse.json({ ok: true, message: `OGN受信機を再起動しました（${cmd}）。` });
+            await run(cmd, args);
+            return NextResponse.json({ ok: true, message: `OGN受信機を再起動しました（${shown}）。` });
           } catch (e) {
-            errors.push(`${cmd}: ${errMsg(e)}`);
+            errors.push(`${shown}: ${errMsg(e)}`);
           }
         }
         throw new Error(`受信機を再起動できませんでした。${errors.join(" / ")}`);
