@@ -117,7 +117,10 @@ const LOW_ALT_FT = 1500;
 const LOST_SIGNAL_SEC = 10;
 const TAKEOFF_SPEED_MS = 30 / 3.6;   // 30 km/h
 const LANDING_SPEED_MS = 10 / 3.6;   // 10 km/h
-const LANDING_AGL_M = 1500 * 0.3048; // 1500 ft AGL
+// 「確かに離陸した」とみなす高度。着陸判定はこの高度を一度超えた機体にしか
+// 立たないため、高く取りすぎると低い曳航で着陸を取りこぼす。取りこぼすと
+// 状態が「飛行中」のまま残り、その機体の以後の離陸が一切記録されなくなる。
+const LANDING_AGL_M = 500 * 0.3048; // 500 ft AGL
 const RELEASE_TURN_THRESHOLD = 8;       // °/s  sharp right turn at release
 const RELEASE_SPEED_DROP_MS = 10/3.6;  // 10 km/h speed drop (in m/s)
 const RELEASE_MIN_AGL_M = 150;         // ~500ft minimum altitude for release detection
