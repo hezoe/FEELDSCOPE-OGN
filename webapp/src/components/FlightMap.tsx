@@ -202,6 +202,7 @@ function saveLocalFlightLog(entries: FlightLogEntry[]): void {
 }
 
 function calcFlightDuration(takeoff: string, landing: string | null): string | null {
+  if (landing === "") return null; // 着陸済みだが時刻が分からない（空欄）
   const end = landing || nowClockStr();
   const [th, tm] = takeoff.split(":").map(Number);
   const [lh, lm] = end.split(":").map(Number);
