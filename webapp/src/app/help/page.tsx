@@ -403,6 +403,16 @@ function ManualContent() {
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-success-dim)", color: "var(--color-success)", border: "1px solid var(--color-success)" }}>
             <strong>推奨:</strong> 通常運用では固定化ONを推奨。設定変更が必要な時のみOFFに切替。
           </div>
+          <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            <strong>⚠ 機体情報を残したい場合は固定化をOFFにしてください。</strong><br />
+            固定化中に残らないもの（再起動でリセット）:
+            <strong>機体情報</strong>（登録番号・コンテストID・機種・曳航機の指定）、
+            飛行場設定、ADS-B設定、管理者パスワード、ネットワーク設定。<br />
+            固定化中でも残るもの: <strong>OGN受信機の設定</strong>（受信機名・位置・周波数補正・AGC）。
+            これらは <code>/boot</code> にあり固定化の対象外です。<br />
+            機体の顔ぶれが変わる間は固定化をOFFのまま運用し、落ち着いてから固定化してください。
+            固定化後に機体を追加するときは「固定化を解除して再起動」→ 登録 → 「固定化を有効にして再起動」の順です。
+          </div>
         </Section>
 
         <Section id="settings-autoreboot" heading="3-9. 自動再起動">
@@ -638,11 +648,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.47 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.47</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="固定化すると何が消えるかを明記しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報は <code>/home/pi/FEELDSCOPE/aircraft-db.json</code> に保存されます。このファイルは固定化(OverlayFS)の対象なので、<strong>固定化中に登録した機体情報は再起動で消えます</strong>。</li>
+          <li>マニュアルとセットアップガイドに、固定化中に残るものと残らないものを書きました。<strong>機体情報を残したい場合は固定化をOFFにしてください。</strong></li>
+          <li>「固定化を有効にして再起動」を押したときの確認にも、機体情報が同じ扱いであることを出すようにしました。</li>
+          <li>受信機の設定は <code>/boot</code> にあるため、固定化中でも残ります。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.46 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.46</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="飛行記録を受信機側で作るようにしました">

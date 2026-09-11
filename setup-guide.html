@@ -225,6 +225,18 @@ sudo bash feeldscope-install.sh</code></pre>
 </div>
 
 <div class="warn">
+  <strong>機体情報を残したい場合は、固定化を有効にする前に登録してください。</strong><br>
+  機体データベース（Device ID と登録番号・コンテストID・機種・曳航機かどうか）は
+  <code>/home/pi/FEELDSCOPE/aircraft-db.json</code> に保存されます。このファイルは
+  OverlayFS の対象なので、<strong>固定化中に追加・編集した機体情報は再起動で消えます</strong>。<br>
+  機体の入れ替えが多い間は固定化をOFFのまま運用し、顔ぶれが固まってから固定化してください。
+  固定化後に機体を追加する場合は、<strong>「固定化を解除して再起動」→ 登録 → 「固定化を有効にして再起動」</strong>
+  の手順を踏みます。<br>
+  飛行場設定・ADS-B設定・管理者パスワードも同じ扱いです。
+  受信機の設定（<code>/boot/rtlsdr-ogn.conf</code>）だけは固定化中でも残ります。
+</div>
+
+<div class="warn">
   OverlayFS 有効時にFEELDSCOPEをアップデートする場合は、<br>
   設定画面で <strong>「固定化を解除して再起動」</strong> → アップデート → <strong>「固定化を有効にして再起動」</strong><br>
   の手順で行います。
@@ -478,7 +490,7 @@ sudo feeldscope-reset-password 新しいパスワード</code></pre>
 
 <!-- ============================================================ -->
 <footer>
-  FEELDSCOPE-OGN v1.1.46 &mdash;
+  FEELDSCOPE-OGN v1.1.47 &mdash;
   <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
 </footer>
 

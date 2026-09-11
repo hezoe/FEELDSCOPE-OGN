@@ -1281,7 +1281,12 @@ export default function SettingsPage() {
                 ) : (
                   <button
                     onClick={async () => {
-                      if (!confirm("システムを固定化して再起動しますか？\n再起動後、設定変更は再起動時にリセットされるモードになります。")) return;
+                      if (!confirm(
+                        "システムを固定化して再起動しますか？\n" +
+                        "再起動後、設定変更は再起動時にリセットされるモードになります。\n\n" +
+                        "機体情報（登録番号・機種・曳航機の指定）も同じです。\n" +
+                        "未登録の機体がある場合は、先に登録してから固定化してください。"
+                      )) return;
                       setOverlayAction(true);
                       setError(null);
                       try {
