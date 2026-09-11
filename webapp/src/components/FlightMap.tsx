@@ -201,40 +201,6 @@ function saveLocalFlightLog(entries: FlightLogEntry[]): void {
   } catch { /* ignore quota/availability errors */ }
 }
 
-/** A flight is uniquely identified by its aircraft + takeoff time. */
-function flightKey(e: FlightLogEntry): string {
-  return `${e.deviceId}|${e.takeoffTime}`;
-}
-
-function preferReg(a: string, b: string, deviceId: string): string {
-  if (a && a !== deviceId) return a; // a real registration beats the deviceId fallback
-  if (b && b !== deviceId) return b;
-  return a || b || deviceId;
-}
-
-/** Merge two flight logs de-duplicated by (deviceId, takeoffTime), keeping the
- *  more complete fields, sorted chronologically. Ensures no duplicates and no
- *  gaps when combining server memory with the localStorage mirror. `a` wins
- *  ties on already-recorded fields, so pass the more authoritative log first. */
-function mergeFlightLogs(a: FlightLogEntry[], b: FlightLogEntry[]): FlightLogEntry[] {
-  const map = new Map<string, FlightLogEntry>();
-  for (const e of [...a, ...b]) {
-    const k = flightKey(e);
-    const prev = map.get(k);
-    if (!prev) { map.set(k, { ...e }); continue; }
-    map.set(k, {
-      id: prev.id || e.id,
-      registration: preferReg(prev.registration, e.registration, e.deviceId),
-      deviceId: e.deviceId,
-      takeoffTime: e.takeoffTime,
-      landingTime: prev.landingTime ?? e.landingTime,
-      releaseAlt: prev.releaseAlt ?? e.releaseAlt,
-      releaseDist: prev.releaseDist ?? e.releaseDist,
-    });
-  }
-  return Array.from(map.values()).sort((x, y) => x.takeoffTime.localeCompare(y.takeoffTime));
-}
-
 function calcFlightDuration(takeoff: string, landing: string | null): string | null {
   const end = landing || nowClockStr();
   const [th, tm] = takeoff.split(":").map(Number);
@@ -428,10 +394,11 @@ export default function FlightMap() {
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     // 飛行記録はサーバ側で検知・保持している。ここでは定期的に取得して表示する。
-    // 起動直後だけ、サーバが再起動で当日ぶんを失っていないかをブラウザ側の
-    // 控えと突き合わせ、失っていれば戻す。
+    // 記録はサーバのメモリ上にしかないので（端末は OverlayFS で SD カードへ
+    // 書けない）、webapp を再起動すると当日ぶんが消える。ブラウザ側の控えを
+    // 唯一の受け皿として、サーバが空になっていたら戻す。
     let disposed = false;
-    const pull = async (restore: boolean) => {
+    const pull = async () => {
       let server: FlightLogEntry[] = [];
       let phases: Record<string, FlightPhase> = {};
       try {
@@ -445,27 +412,29 @@ export default function FlightMap() {
       if (disposed) return;
       phasesRef.current = phases;
 
-      if (restore) {
+      // サーバが空＝再起動直後。控えがあれば戻す。
+      // 件数が減っただけの場合は戻さない（利用者が消した行を復活させないため）。
+      if (server.length === 0) {
         const local = loadLocalFlightLog();
-        const merged = mergeFlightLogs(server, local);
-        if (merged.length > server.length) {
+        if (local.length > 0) {
           fetch("/api/flight-log", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "set", entries: merged }),
+            body: JSON.stringify({ action: "set", entries: local }),
           }).catch(() => {});
+          return; // 次回の取得で戻ったものを表示する
         }
-        server = merged;
       }
 
       // 手動編集の直後は、入力中の値が消えるので取得結果を当てない
       if (Date.now() - lastManualEditRef.current < 8000) return;
       flightLogRef.current = server;
       setFlightLogRaw(server);
+      // ここへ来る空の server は「控えも空」の場合だけなので、潰す心配はない
       saveLocalFlightLog(server);
     };
-    void pull(true);
-    const logPollId = setInterval(() => void pull(false), 3000);
+    void pull();
+    const logPollId = setInterval(() => void pull(), 3000);
     // Restore panel sizes
     try {
       const sw = localStorage.getItem("ogn-sidebar-width");
