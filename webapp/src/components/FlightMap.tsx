@@ -287,7 +287,10 @@ function isTowPlane(gliderType?: string, registration?: string, aircraftType?: s
 
 interface TrailPoint {
   latlng: L.LatLng;
-  timeMs: number;
+  /** 受信した時刻（航跡の表示時間窓に使う。機体側の時計ずれの影響を受けない） */
+  arrivalMs: number;
+  /** 位置そのものの時刻（並び順と重複判定に使う） */
+  posMs: number;
 }
 
 interface TrackedAircraft {
@@ -301,6 +304,75 @@ interface TrackedAircraft {
 }
 
 const TRAIL_DURATION_MS = 60_000; // 1 minute trail
+
+// 航跡として受け付ける最大の見かけ速度。これを超える点は、別機体の位置が
+// 混入した／座標が壊れた、と判断して航跡には足さない（マーカーは動かす）。
+const MAX_TRAIL_SPEED_MS = 140;       // FLARM: 504 km/h
+const MAX_TRAIL_SPEED_ADSB_MS = 350;  // ADS-B: 1260 km/h
+
+/**
+ * 位置の「発生時刻」をミリ秒で返す。送信側が timestamp_epoch を持たない
+ * 古い版や、値が壊れている場合は受信時刻で代用する。
+ */
+function positionTimeMs(pos: AircraftPosition, fallbackMs: number): number {
+  const epoch = pos.timestamp_epoch;
+  if (typeof epoch === "number" && Number.isFinite(epoch) && epoch > 0) {
+    return Math.round(epoch * 1000);
+  }
+  if (pos.timestamp_utc) {
+    const t = Date.parse(pos.timestamp_utc);
+    if (Number.isFinite(t)) return t;
+  }
+  return fallbackMs;
+}
+
+/**
+ * 航跡へ1点追加する。
+ *
+ * MQTT は QoS 0 で、送信側の不具合や再接続で「同じ点の再送」「順序の乱れ」が
+ * 起き得る。到着順にそのまま繋ぐと航跡がジグザグになり、ブラウザごとに
+ * 取りこぼす点が違うため見え方まで変わる。ここで時刻順に整列・重複除去し、
+ * ありえない飛躍を弾くことで、表示はブラウザによらず同じになる。
+ */
+function addTrailPoint(
+  ac: TrackedAircraft,
+  latlng: L.LatLng,
+  posMs: number,
+  arrivalMs: number,
+): void {
+  const pts = ac.trailPoints;
+
+  // 同じ時刻の点は捨てる（再送）
+  for (let i = pts.length - 1; i >= 0; i--) {
+    if (pts[i].posMs === posMs) return;
+    if (pts[i].posMs < posMs) break;
+  }
+
+  // ありえない飛躍（別機体の位置の混入など）を弾く
+  const last = pts[pts.length - 1];
+  if (last) {
+    const dtSec = Math.max(1, Math.abs(posMs - last.posMs) / 1000);
+    const distM = haversineM(last.latlng.lat, last.latlng.lng, latlng.lat, latlng.lng);
+    const limit = ac.adsb ? MAX_TRAIL_SPEED_ADSB_MS : MAX_TRAIL_SPEED_MS;
+    if (distM / dtSec > limit) {
+      console.warn(
+        `[TRAIL] implausible jump ignored: ${(distM / 1000).toFixed(1)}km in ${dtSec.toFixed(0)}s`,
+      );
+      return;
+    }
+  }
+
+  // 時刻順に挿入する（通常は末尾）
+  let i = pts.length;
+  while (i > 0 && pts[i - 1].posMs > posMs) i--;
+  pts.splice(i, 0, { latlng, arrivalMs, posMs });
+
+  // 表示時間窓の外へ出た点を落とす
+  const cutoff = arrivalMs - TRAIL_DURATION_MS;
+  while (pts.length > 0 && pts[0].arrivalMs < cutoff) pts.shift();
+
+  ac.trail.setLatLngs(pts.map((p) => p.latlng));
+}
 
 function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayNameMode): string {
   if (mode === "pilot" && pos.pilot) return pos.pilot;
@@ -709,12 +781,7 @@ export default function FlightMap() {
         existing.marker.setIcon(makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType));
         existing.marker.setTooltipContent(buildTooltip(label, pos, unitsRef.current, isAdsb));
         const nowMs = Date.now();
-        existing.trailPoints.push({ latlng, timeMs: nowMs });
-        const cutoff = nowMs - TRAIL_DURATION_MS;
-        while (existing.trailPoints.length > 0 && existing.trailPoints[0].timeMs < cutoff) {
-          existing.trailPoints.shift();
-        }
-        existing.trail.setLatLngs(existing.trailPoints.map(p => p.latlng));
+        addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
         existing.trail.setStyle({ color });
       } else {
         const marker = L.marker(latlng, {
@@ -732,8 +799,15 @@ export default function FlightMap() {
 
         const trail = L.polyline([latlng], { color, weight: 2, opacity: 0.6 }).addTo(map);
 
+        const createdMs = Date.now();
         aircraft.set(deviceId, {
-          position: pos, marker, trail, trailPoints: [{ latlng, timeMs: Date.now() }], label, lastUpdateMs: Date.now(), adsb: isAdsb,
+          position: pos,
+          marker,
+          trail,
+          trailPoints: [{ latlng, arrivalMs: createdMs, posMs: positionTimeMs(pos, createdMs) }],
+          label,
+          lastUpdateMs: createdMs,
+          adsb: isAdsb,
         });
       }
 

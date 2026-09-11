@@ -638,11 +638,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.43 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.43</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="航跡がジグザグになる・機体どうしで入れ替わる問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信の弱い機体（平均SNRが10dB未満）の集計行を読み取れず、<strong>その機体の位置がリスト上ひとつ前の機体の航跡に混ざっていました</strong>。2機の座標が1本の線に交互に入るため、航跡がジグザグになり、機体どうしで航跡が入れ替わって見えます。</li>
+          <li>混ざった結果として配信済みかどうかの判定も壊れ、<strong>直近60秒ぶんの位置が2秒ごとに丸ごと再送</strong>されていました。ブラウザは受け取った順に線を引くので、航跡が何度も前後に往復します。</li>
+          <li>位置の時刻（HHMMSS）を秒数として解釈していた誤りを修正しました。表示時刻が正しくなり、並べ替えも正しく効きます。</li>
+          <li>ブラウザ側も、航跡の点を<strong>時刻順に並べ、重複を捨て、ありえない飛躍を無視</strong>するようにしました。取りこぼしの違いで<strong>ブラウザごとに見え方が変わることがなくなります</strong>。</li>
+          <li>ページを開いた直後に過去60点が一気に描かれて航跡が巻き戻る挙動も解消しました。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.42 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.42</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-08</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="リモートサポートが切れたまま戻らない問題を修正">

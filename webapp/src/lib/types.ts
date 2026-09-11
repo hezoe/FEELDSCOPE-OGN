@@ -1,6 +1,8 @@
 export interface AircraftPosition {
   timestamp_utc: string;
   timestamp_sod: number;
+  /** 絶対時刻(UNIX秒)。航跡の並び替え・重複除去に使う。古い送信側には無い */
+  timestamp_epoch?: number;
   latitude: number;
   longitude: number;
   altitude_m: number;
