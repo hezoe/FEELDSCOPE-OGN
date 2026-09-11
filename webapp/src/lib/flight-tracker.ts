@@ -47,6 +47,16 @@ const RELEASE_SPEED_DROP_MS = 5;
 /** 離陸からこの時間を過ぎたら、もう曳航・ウィンチではない */
 const RELEASE_MAX_AGE_SEC = 20 * 60;
 
+// ── 復号エラーの位置を弾く（送信側 ogn-mqtt.py と同じ考え方） ────────────
+const MAX_ALTITUDE_M = 15000;
+const MIN_ALTITUDE_M = -500;
+const MAX_GROUND_SPEED_MS = 150;
+const MAX_VERTICAL_SPEED_MS = 40;
+/** 直前の位置がこれより古いと、動いたのか壊れたのか判断できないので通す */
+const JUMP_MAX_GAP_SEC = 300;
+/** 連続でこれだけ弾いたら基準側が怪しいので取り直す */
+const MAX_CONSECUTIVE_REJECTS = 5;
+
 export type FlightPhase = "ground" | "airborne" | "released";
 
 export interface FlightLogEntry {
@@ -65,8 +75,19 @@ interface Sample {
   climbMs: number;
 }
 
+interface LastFix {
+  lat: number;
+  lon: number;
+  altM: number;
+  timeMs: number;
+}
+
 interface TrackingState {
   phase: FlightPhase;
+  /** 直近で妥当と判断した位置。復号エラーの飛躍を弾く基準 */
+  lastFix: LastFix | null;
+  /** ありえない位置を連続で弾いた回数 */
+  rejects: number;
   /** 離陸を実際に観測できた飛行の id。観測できていなければ null */
   flightId: string | null;
   takeoffMs: number | null;
@@ -236,6 +257,10 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     rec?.aircraft_type,
   );
 
+  // 復号エラーで壊れた位置は、飛行記録も航跡も壊すので採用しない
+  if (Math.abs(pos.latitude) > 90 || Math.abs(pos.longitude) > 180) return;
+  if (pos.altitude_m < MIN_ALTITUDE_M || pos.altitude_m > MAX_ALTITUDE_M) return;
+
   const agl = pos.altitude_m - s.airfield.elevation_m;
   const speedMs = pos.ground_speed_ms;
   const climbMs = Number.isFinite(pos.climb_rate_ms) ? pos.climb_rate_ms : 0;
@@ -246,6 +271,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     const onGround = agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS;
     tr = {
       phase: onGround ? "ground" : "airborne",
+      lastFix: null,
+      rejects: 0,
       flightId: null,
       takeoffMs: null,
       maxAltAgl: agl,
@@ -255,6 +282,24 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     };
     s.tracking.set(deviceId, tr);
   }
+
+  // 直前の位置から見て、ありえない速度で動いていたら復号エラーとみなす
+  const fix = tr.lastFix;
+  if (fix) {
+    const dtSec = (nowMs - fix.timeMs) / 1000;
+    if (dtSec > 0 && dtSec <= JUMP_MAX_GAP_SEC) {
+      const distM = haversineM(fix.lat, fix.lon, pos.latitude, pos.longitude);
+      const bad =
+        distM / dtSec > MAX_GROUND_SPEED_MS ||
+        Math.abs(pos.altitude_m - fix.altM) / dtSec > MAX_VERTICAL_SPEED_MS;
+      if (bad && tr.rejects < MAX_CONSECUTIVE_REJECTS) {
+        tr.rejects += 1;
+        return;
+      }
+    }
+  }
+  tr.rejects = 0;
+  tr.lastFix = { lat: pos.latitude, lon: pos.longitude, altM: pos.altitude_m, timeMs: nowMs };
 
   tr.recent.push({ timeMs: nowMs, speedMs, climbMs });
   const windowStart = nowMs - RELEASE_WINDOW_SEC * 1000;

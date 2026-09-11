@@ -648,11 +648,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.49 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.49</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="復号エラーで機体がとんでもない場所へ飛ぶ問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信が弱くなるとビット誤りを訂正しきれず、<strong>座標や高度が壊れた位置</strong>が出ることがあります。そのまま地図に出すと機体が突然ありえない場所・高度へ飛び、航跡も飛行記録も壊れます。</li>
+          <li>物理的にありえない位置を受け付けないようにしました。<strong>座標・高度・距離が範囲外</strong>のものは受信機側で捨てます。さらに<strong>直前の位置からの見かけの速度</strong>が水平540km/h・垂直40m/sを超えるものも捨てます。</li>
+          <li>ブラウザ側でも同じ判定を行い、<strong>マーカーを動かしません</strong>。航跡も飛行記録も汚れません。</li>
+          <li>間隔が5分以上あいた位置は、動いたのか壊れたのか判断できないため通します。連続5回弾いた場合は基準側が怪しいので取り直し、機体が止まったままにならないようにしています。</li>
+          <li>実運用の受信データ9410点で誤検出がないことを確認しました。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.48 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.48</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="受信機を再起動すると当日の飛行記録が消える問題を修正">

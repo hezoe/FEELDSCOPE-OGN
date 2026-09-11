@@ -268,6 +268,35 @@ function positionTimeMs(pos: AircraftPosition, fallbackMs: number): number {
   return fallbackMs;
 }
 
+/** 復号エラーの位置を弾くための現実的な上限（送信側 ogn-mqtt.py と同じ考え方） */
+const MAX_ALTITUDE_M = 15000;
+const MIN_ALTITUDE_M = -500;
+/** 直前の位置がこれより古いと、動いたのか壊れたのか判断できないので通す */
+const JUMP_MAX_GAP_SEC = 300;
+/** 連続でこれだけ弾いたら基準側が怪しいので取り直す */
+const MAX_CONSECUTIVE_REJECTS = 5;
+
+/**
+ * 直前の位置から見て、物理的にありえる動きかを返す。
+ *
+ * 受信が弱くなると復号エラーで座標や高度が壊れる。地図に出すと機体が
+ * とんでもない場所へ飛ぶので、見かけの速度がありえない値なら採用しない。
+ */
+function isPlausiblePosition(
+  prev: AircraftPosition,
+  pos: AircraftPosition,
+  prevMs: number,
+  nowMs: number,
+  adsb: boolean,
+): boolean {
+  const dtSec = Math.max(1, (nowMs - prevMs) / 1000);
+  if (dtSec > JUMP_MAX_GAP_SEC) return true;
+  const distM = haversineM(prev.latitude, prev.longitude, pos.latitude, pos.longitude);
+  if (distM / dtSec > (adsb ? MAX_TRAIL_SPEED_ADSB_MS : MAX_TRAIL_SPEED_MS)) return false;
+  if (Math.abs(pos.altitude_m - prev.altitude_m) / dtSec > 40) return false;
+  return true;
+}
+
 /**
  * 航跡へ1点追加する。
  *
@@ -368,6 +397,8 @@ export default function FlightMap() {
   const flightLogRef = useRef<FlightLogEntry[]>([]);
   /** 機体ごとの状態（サーバ側の検知結果）。地図の着陸進入表示に使う */
   const phasesRef = useRef<Record<string, FlightPhase>>({});
+  /** 機体ごとに、ありえない位置を連続で弾いた回数 */
+  const rejectCountsRef = useRef<Record<string, number>>({});
   /** 手動編集の直後はサーバの取得結果で上書きしない（入力中の値が消えるため） */
   const lastManualEditRef = useRef(0);
   const logTableRef = useRef<HTMLDivElement>(null);
@@ -665,10 +696,33 @@ export default function FlightMap() {
       if (!map) return;
 
       const isAdsb = !!pos.adsb;
-      const latlng = L.latLng(pos.latitude, pos.longitude);
       const aircraft = aircraftRef.current;
       const existing = aircraft.get(deviceId);
       const u = unitsRef.current;
+
+      // 復号エラーで壊れた位置は表示しない（マーカーも航跡も動かさない）
+      if (
+        !Number.isFinite(pos.latitude) || !Number.isFinite(pos.longitude) ||
+        Math.abs(pos.latitude) > 90 || Math.abs(pos.longitude) > 180 ||
+        pos.altitude_m < MIN_ALTITUDE_M || pos.altitude_m > MAX_ALTITUDE_M
+      ) {
+        return;
+      }
+      const nowMsIn = Date.now();
+      if (existing) {
+        const rejects = rejectCountsRef.current[deviceId] || 0;
+        if (
+          rejects < MAX_CONSECUTIVE_REJECTS &&
+          !isPlausiblePosition(existing.position, pos, existing.lastUpdateMs, nowMsIn, isAdsb)
+        ) {
+          rejectCountsRef.current[deviceId] = rejects + 1;
+          console.warn(`[POS] implausible position ignored: ${deviceId}`);
+          return;
+        }
+        rejectCountsRef.current[deviceId] = 0;
+      }
+
+      const latlng = L.latLng(pos.latitude, pos.longitude);
 
       // Aircraft DB lookup — first by device_id, then by registration (for history replay)
       const dbRec = lookupDbRecord(aircraftDbRef.current, deviceId, pos.glider_id);
