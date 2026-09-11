@@ -1,84 +1,36 @@
 import { NextResponse } from "next/server";
+import {
+  getFlightLog,
+  getPhases,
+  resetFlightLog,
+  setFlightLog,
+  startFlightTracker,
+  type FlightLogEntry,
+} from "@/lib/flight-tracker";
 
-interface FlightLogEntry {
-  registration: string;
-  deviceId: string;
-  takeoffTime: string;
-  landingTime: string | null;
-  releaseAlt: number | null;
-  releaseDist: number | null;
-}
+// 検知は instrumentation.ts から起動されるが、そこが走らない構成でも
+// 動くよう、このルートが読み込まれた時点でも起動しておく（二重起動はしない）。
+startFlightTracker();
 
-// In-memory flight log store
-let flightLog: FlightLogEntry[] = [];
-let lastResetDate: string = "";
-
-/** Reset at 05:00 JST daily */
-function checkDailyReset(): void {
-  const now = new Date();
-  // JST = UTC+9
-  const jstHours = (now.getUTCHours() + 9) % 24;
-  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-
-  // Reset if it's past 05:00 JST and we haven't reset for today
-  if (jstHours >= 5 && lastResetDate !== jstDate) {
-    flightLog = [];
-    lastResetDate = jstDate;
-  }
-}
-
-// GET /api/flight-log — return current flight log
+// GET /api/flight-log — 現在の飛行記録と、機体ごとの状態
 export async function GET() {
-  checkDailyReset();
-  return NextResponse.json({ entries: flightLog });
+  return NextResponse.json({ entries: getFlightLog(), phases: getPhases() });
 }
 
-// POST /api/flight-log — update flight log
+// POST /api/flight-log — ブラウザからの手動編集
 export async function POST(request: Request) {
-  checkDailyReset();
   const body = await request.json();
   const { action } = body;
 
   switch (action) {
     case "set": {
-      // Replace entire log (used for sync from client)
       const entries: FlightLogEntry[] = body.entries || [];
-      flightLog = entries;
-      return NextResponse.json({ ok: true, count: flightLog.length });
-    }
-
-    case "append": {
-      // Add a single entry
-      const entry: FlightLogEntry = body.entry;
-      if (!entry) return NextResponse.json({ error: "entry required" }, { status: 400 });
-      flightLog.push(entry);
-      return NextResponse.json({ ok: true, index: flightLog.length - 1 });
-    }
-
-    case "update": {
-      // Update entry at index
-      const idx: number = body.index;
-      const entry: Partial<FlightLogEntry> = body.entry;
-      if (idx < 0 || idx >= flightLog.length) {
-        return NextResponse.json({ error: "invalid index" }, { status: 400 });
-      }
-      flightLog[idx] = { ...flightLog[idx], ...entry };
-      return NextResponse.json({ ok: true });
-    }
-
-    case "delete": {
-      const idx: number = body.index;
-      if (idx < 0 || idx >= flightLog.length) {
-        return NextResponse.json({ error: "invalid index" }, { status: 400 });
-      }
-      flightLog.splice(idx, 1);
-      return NextResponse.json({ ok: true, count: flightLog.length });
+      setFlightLog(entries);
+      return NextResponse.json({ ok: true, count: getFlightLog().length });
     }
 
     case "reset": {
-      flightLog = [];
+      resetFlightLog();
       return NextResponse.json({ ok: true });
     }
 

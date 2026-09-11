@@ -19,6 +19,8 @@ import type {
 } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
+// 飛行記録の検知と保持はサーバ側 (src/lib/flight-tracker.ts)。ここは表示と手動編集のみ。
+import type { FlightLogEntry, FlightPhase } from "@/lib/flight-tracker";
 
 // ── Colors ──
 const COLOR_NORMAL = "#2e7d32";   // green
@@ -115,20 +117,7 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
 const GROUND_ALT_M = 100;
 const LOW_ALT_FT = 1500;
 const LOST_SIGNAL_SEC = 10;
-const TAKEOFF_SPEED_MS = 30 / 3.6;   // 30 km/h
-const LANDING_SPEED_MS = 10 / 3.6;   // 10 km/h
-// 「確かに離陸した」とみなす高度。着陸判定はこの高度を一度超えた機体にしか
-// 立たないため、高く取りすぎると低い曳航で着陸を取りこぼす。取りこぼすと
-// 状態が「飛行中」のまま残り、その機体の以後の離陸が一切記録されなくなる。
-const LANDING_AGL_M = 500 * 0.3048; // 500 ft AGL
-const RELEASE_TURN_THRESHOLD = 8;       // °/s  sharp right turn at release
-const RELEASE_SPEED_DROP_MS = 10/3.6;  // 10 km/h speed drop (in m/s)
-const RELEASE_MIN_AGL_M = 150;         // ~500ft minimum altitude for release detection
-// Tow plane release: retrospective detection via altitude drop from peak
-// During tow the altitude only rises; after release the tow plane dives away.
-// A sustained 50m+ drop from peak is unmistakable — no instantaneous values needed.
-const TOW_RELEASE_ALT_DROP_M = 50;     // ~160ft  sustained drop confirms release
-const TOW_RELEASE_MIN_AGL_M = 300;     // ~1000ft  tow release never happens below this
+// 離着陸・離脱の判定に使う閾値はサーバ側 (src/lib/flight-tracker.ts) にある。
 
 // Haversine distance in meters
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -169,27 +158,6 @@ function alertColor(alert: AircraftAlert): string {
   return COLOR_NORMAL;
 }
 
-// ── Flight log types ──
-interface FlightLogEntry {
-  registration: string;
-  deviceId: string;
-  takeoffTime: string;   // local time HH:MM:SS
-  landingTime: string | null;
-  releaseAlt: number | null;
-  releaseDist: number | null; // distance from airfield in meters
-}
-
-interface FlightTrackingState {
-  phase: "ground" | "airborne" | "released";
-  takeoffTime: string | null;
-  maxAltSinceTakeoff: number;
-  releaseAlt: number | null;
-  wasHigh: boolean;
-  flightIdx: number; // index in flightLog, -1 if not in flight
-  prevSpeedMs: number; // previous speed for speed-drop detection
-  prevClimbMs: number; // previous climb rate for tow plane release detection
-}
-
 function nowClockStr(): string {
   return new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
@@ -217,7 +185,11 @@ function loadLocalFlightLog(): FlightLogEntry[] {
       localStorage.removeItem(FLIGHT_LOG_LS_KEY); // stale (previous logbook day)
       return [];
     }
-    return parsed.entries as FlightLogEntry[];
+    // 旧版の控えには id が無いので補う（サーバ側は id で飛行を追う）
+    return (parsed.entries as FlightLogEntry[]).map((e, i) => ({
+      ...e,
+      id: e.id || `ls${e.deviceId}-${e.takeoffTime}-${i}`,
+    }));
   } catch {
     return [];
   }
@@ -251,6 +223,7 @@ function mergeFlightLogs(a: FlightLogEntry[], b: FlightLogEntry[]): FlightLogEnt
     const prev = map.get(k);
     if (!prev) { map.set(k, { ...e }); continue; }
     map.set(k, {
+      id: prev.id || e.id,
       registration: preferReg(prev.registration, e.registration, e.deviceId),
       deviceId: e.deviceId,
       takeoffTime: e.takeoffTime,
@@ -413,12 +386,13 @@ export default function FlightMap() {
   const [now, setNow] = useState(0);
   const { units, unitsLoaded } = useUnits();
   const [flightLog, setFlightLogRaw] = useState<FlightLogEntry[]>([]);
+  /** 手動編集を保存する。検知はサーバ側が行うので、ここは編集の反映だけ */
   const setFlightLog = useCallback((log: FlightLogEntry[]) => {
+    lastManualEditRef.current = Date.now();
     setFlightLogRaw(log);
-    // Mirror to client localStorage so the current day's log survives a server
-    // restart (the overlay server holds it only in memory).
+    // サーバの再起動で当日ぶんが消えないよう、ブラウザ側にも控えを置く。
+    // 端末は OverlayFS で SD カードへ書けないため、控えはここにしか作れない。
     saveLocalFlightLog(log);
-    // Sync to server memory
     fetch("/api/flight-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -426,7 +400,10 @@ export default function FlightMap() {
     }).catch(() => {});
   }, []);
   const flightLogRef = useRef<FlightLogEntry[]>([]);
-  const trackingRef = useRef<Map<string, FlightTrackingState>>(new Map());
+  /** 機体ごとの状態（サーバ側の検知結果）。地図の着陸進入表示に使う */
+  const phasesRef = useRef<Record<string, FlightPhase>>({});
+  /** 手動編集の直後はサーバの取得結果で上書きしない（入力中の値が消えるため） */
+  const lastManualEditRef = useRef(0);
   const logTableRef = useRef<HTMLDivElement>(null);
   // Position-unknown ADS-B/Mode-S aircraft (sidebar only)
   const [noPositionAircraft, setNoPositionAircraft] = useState<AircraftPosition[]>([]);
@@ -450,61 +427,45 @@ export default function FlightMap() {
   // Hydration-safe: restore client-only state in useEffect
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
-    // Restore flight log: merge server memory with the client localStorage
-    // mirror, so a mid-day server restart doesn't lose the morning's flights.
-    (async () => {
-      const local = loadLocalFlightLog();
+    // 飛行記録はサーバ側で検知・保持している。ここでは定期的に取得して表示する。
+    // 起動直後だけ、サーバが再起動で当日ぶんを失っていないかをブラウザ側の
+    // 控えと突き合わせ、失っていれば戻す。
+    let disposed = false;
+    const pull = async (restore: boolean) => {
       let server: FlightLogEntry[] = [];
+      let phases: Record<string, FlightPhase> = {};
       try {
         const res = await fetch("/api/flight-log");
         const data = await res.json();
         server = data.entries || [];
-      } catch { /* server unreachable — fall back to localStorage */ }
-      // Server memory is authoritative for already-recorded fields; localStorage
-      // fills in whatever the server lost across a restart.
-      const merged = mergeFlightLogs(server, local);
-      if (merged.length === 0) return;
+        phases = data.phases || {};
+      } catch {
+        return; // サーバに届かない間は今の表示のまま
+      }
+      if (disposed) return;
+      phasesRef.current = phases;
 
-      setFlightLogRaw(merged);
-      flightLogRef.current = merged;
-      saveLocalFlightLog(merged);
-      // If localStorage carried flights the server had lost, push the merged log
-      // back so server memory is repopulated and other clients stay in sync.
-      if (local.length > 0) {
-        fetch("/api/flight-log", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "set", entries: merged }),
-        }).catch(() => {});
-      }
-      // Rebuild tracking state
-      const map = new Map<string, FlightTrackingState>();
-      for (let i = 0; i < merged.length; i++) {
-        const entry = merged[i];
-        if (!entry.landingTime) {
-          map.set(entry.deviceId, {
-            phase: entry.releaseAlt != null ? "released" : "airborne",
-            takeoffTime: entry.takeoffTime,
-            maxAltSinceTakeoff: entry.releaseAlt ?? 0,
-            releaseAlt: entry.releaseAlt,
-            wasHigh: true,
-            flightIdx: i,
-            prevSpeedMs: 0, prevClimbMs: 0,
-          });
-        } else {
-          map.set(entry.deviceId, {
-            phase: "ground",
-            takeoffTime: null,
-            maxAltSinceTakeoff: 0,
-            releaseAlt: null,
-            wasHigh: false,
-            flightIdx: -1,
-            prevSpeedMs: 0, prevClimbMs: 0,
-          });
+      if (restore) {
+        const local = loadLocalFlightLog();
+        const merged = mergeFlightLogs(server, local);
+        if (merged.length > server.length) {
+          fetch("/api/flight-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "set", entries: merged }),
+          }).catch(() => {});
         }
+        server = merged;
       }
-      trackingRef.current = map;
-    })();
+
+      // 手動編集の直後は、入力中の値が消えるので取得結果を当てない
+      if (Date.now() - lastManualEditRef.current < 8000) return;
+      flightLogRef.current = server;
+      setFlightLogRaw(server);
+      saveLocalFlightLog(server);
+    };
+    void pull(true);
+    const logPollId = setInterval(() => void pull(false), 3000);
     // Restore panel sizes
     try {
       const sw = localStorage.getItem("ogn-sidebar-width");
@@ -527,7 +488,12 @@ export default function FlightMap() {
     }
     loadAircraftDb();
     const dbInterval = setInterval(loadAircraftDb, 30000);
-    return () => { clearInterval(id); clearInterval(dbInterval); };
+    return () => {
+      disposed = true;
+      clearInterval(id);
+      clearInterval(dbInterval);
+      clearInterval(logPollId);
+    };
   }, []);
 
   const airfield = units.airfield;
@@ -713,8 +679,7 @@ export default function FlightMap() {
         let color = alertColor(alert);
         const blink = alert === "danger";
         // Landing approach override
-        const trState = trackingRef.current.get(id);
-        if (trState && trState.phase !== "ground" && alert === "normal" && ac.position.altitude_m < GROUND_ALT_M + af.elevation_m) {
+        if (phasesRef.current[id] && phasesRef.current[id] !== "ground" && alert === "normal" && ac.position.altitude_m < GROUND_ALT_M + af.elevation_m) {
           color = COLOR_LOW;
         }
         const dbRec = lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id);
@@ -772,8 +737,8 @@ export default function FlightMap() {
         const alert = getAlert(pos, u.safeGlideRatio, u.airfield.latitude, u.airfield.longitude, u.airfield.elevation_m);
         color = alertColor(alert);
         blink = alert === "danger";
-        const trState = trackingRef.current.get(deviceId);
-        if (trState && trState.phase !== "ground" && alert === "normal" && pos.altitude_m < GROUND_ALT_M + u.airfield.elevation_m) {
+        const phase = phasesRef.current[deviceId];
+        if (phase && phase !== "ground" && alert === "normal" && pos.altitude_m < GROUND_ALT_M + u.airfield.elevation_m) {
           color = COLOR_LOW;
         }
       }
@@ -817,126 +782,9 @@ export default function FlightMap() {
         });
       }
 
-      // ── Flight log tracking (skip ADS-B) ──
-      if (isAdsb) {
-        setAircraftCount(aircraft.size);
-        setUpdateTick((t) => t + 1);
-        return;
-      }
-      const fieldElev = u.airfield.elevation_m;
-      const agl = pos.altitude_m - fieldElev;
-      const speedMs = pos.ground_speed_ms;
-      const registration = dbRec?.registration || pos.glider_id || pos.competition_id || deviceId;
-
-      let tr = trackingRef.current.get(deviceId);
-      if (!tr) {
-        tr = { phase: "ground", takeoffTime: null, maxAltSinceTakeoff: 0, releaseAlt: null, wasHigh: false, flightIdx: -1, prevSpeedMs: 0, prevClimbMs: 0 };
-        trackingRef.current.set(deviceId, tr);
-      }
-
-      let logChanged = false;
-
-      if (tr.phase === "ground") {
-        // Takeoff: speed > 30 km/h
-        if (speedMs > TAKEOFF_SPEED_MS) {
-          const timeStr = nowClockStr();
-          tr.phase = "airborne";
-          tr.takeoffTime = timeStr;
-          tr.maxAltSinceTakeoff = agl;
-          tr.releaseAlt = null;
-          tr.wasHigh = agl > LANDING_AGL_M;
-          console.log(`[FLIGHT] TAKEOFF ${registration} (${deviceId}) type="${pos.glider_type}" isTow=${isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)} speed=${(speedMs*3.6).toFixed(0)}km/h agl=${agl.toFixed(0)}m`);
-
-          tr.prevSpeedMs = speedMs;
-          const entry: FlightLogEntry = {
-            registration,
-            deviceId,
-            takeoffTime: timeStr,
-            landingTime: null,
-            releaseAlt: null,
-            releaseDist: null,
-          };
-          flightLogRef.current = [...flightLogRef.current, entry];
-          tr.flightIdx = flightLogRef.current.length - 1;
-          logChanged = true;
-        }
-      } else {
-        // Track max altitude AGL since takeoff
-        if (agl > tr.maxAltSinceTakeoff) {
-          tr.maxAltSinceTakeoff = agl;
-          if (isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)) {
-            console.log(`[FLIGHT] TOW-ALT ${registration} maxAlt=${agl.toFixed(0)}m agl=${agl.toFixed(0)}m`);
-          }
-        }
-
-        // Mark wasHigh once above 1500ft AGL
-        if (agl > LANDING_AGL_M) {
-          tr.wasHigh = true;
-        }
-
-        // Release detection
-        const speedDropMs = tr.prevSpeedMs - speedMs;
-        let releaseDetected = false;
-
-        if (tr.phase === "airborne" && agl > RELEASE_MIN_AGL_M) {
-          if (isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType) && agl > TOW_RELEASE_MIN_AGL_M) {
-            const altDrop = tr.maxAltSinceTakeoff - agl;
-            console.log(`[FLIGHT] TOW-CHECK ${registration} phase=${tr.phase} agl=${agl.toFixed(0)}m maxAlt=${tr.maxAltSinceTakeoff.toFixed(0)}m drop=${altDrop.toFixed(0)}m threshold=${TOW_RELEASE_ALT_DROP_M}m`);
-            if (altDrop > TOW_RELEASE_ALT_DROP_M) {
-              releaseDetected = true;
-            }
-          } else if (!isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)) {
-            // Glider release: sharp right turn (>8°/s) + speed dropping (>10 km/h)
-            if (
-              pos.turn_rate_degs > RELEASE_TURN_THRESHOLD &&
-              speedDropMs > RELEASE_SPEED_DROP_MS
-            ) {
-              releaseDetected = true;
-            }
-          }
-        }
-
-        if (releaseDetected) {
-          const distM = haversineM(u.airfield.latitude, u.airfield.longitude, pos.latitude, pos.longitude);
-          console.log(`[FLIGHT] RELEASE DETECTED ${registration} (${deviceId}) releaseAlt=${tr.maxAltSinceTakeoff.toFixed(0)}m dist=${(distM/1000).toFixed(1)}km isTow=${isTowPlane(pos.glider_type, registration, pos.aircraft_type, dbType)}`);
-          tr.phase = "released";
-          tr.releaseAlt = tr.maxAltSinceTakeoff;
-          if (tr.flightIdx >= 0 && tr.flightIdx < flightLogRef.current.length) {
-            const updated = [...flightLogRef.current];
-            updated[tr.flightIdx] = { ...updated[tr.flightIdx], releaseAlt: tr.releaseAlt, releaseDist: distM };
-            flightLogRef.current = updated;
-            logChanged = true;
-          }
-        }
-
-        // Landing: was above 1500ft AGL at some point, now AGL < 1500ft AND speed < 10 km/h
-        if (tr.wasHigh && agl < LANDING_AGL_M && speedMs < LANDING_SPEED_MS) {
-          console.log(`[FLIGHT] LANDING ${registration} (${deviceId}) phase=${tr.phase} releaseAlt=${tr.releaseAlt?.toFixed(0) ?? "null"} maxAlt=${tr.maxAltSinceTakeoff.toFixed(0)}m`);
-          const timeStr = nowClockStr();
-          if (tr.flightIdx >= 0 && tr.flightIdx < flightLogRef.current.length) {
-            const updated = [...flightLogRef.current];
-            updated[tr.flightIdx] = { ...updated[tr.flightIdx], landingTime: timeStr };
-            flightLogRef.current = updated;
-            logChanged = true;
-          }
-          // Reset to ground for next flight
-          tr.phase = "ground";
-          tr.takeoffTime = null;
-          tr.maxAltSinceTakeoff = 0;
-          tr.releaseAlt = null;
-          tr.wasHigh = false;
-
-          tr.flightIdx = -1;
-        }
-
-        tr.prevSpeedMs = speedMs;
-        tr.prevClimbMs = pos.climb_rate_ms;
-      }
-
-      if (logChanged) {
-        setFlightLog([...flightLogRef.current]);
-      }
-
+      // 離着陸・離脱の検知はサーバ側 (src/lib/flight-tracker.ts) が行う。
+      // ブラウザで計算すると、ページを開いていない間は記録されず、複数の
+      // ブラウザが共有ログを上書きし合う。ここは表示だけを受け持つ。
       setAircraftCount(aircraft.size);
       setUpdateTick((t) => t + 1);
     },

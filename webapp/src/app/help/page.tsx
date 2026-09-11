@@ -638,11 +638,43 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.46 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.46</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="飛行記録を受信機側で作るようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまで離着陸・離脱の判定は<strong>ブラウザ側</strong>で行っていました。そのため、ページを開いていない間は何も記録されず、複数のブラウザがそれぞれ判定して<strong>共有の記録を上書きし合って</strong>いました。</li>
+          <li>判定を<strong>受信機側</strong>へ移しました。ブラウザを開いていなくても記録が残り、どの端末から見ても同じ内容になります。</li>
+          <li>記録は<strong>メモリ上だけ</strong>に置き、SDカードには書きません。OverlayFS を有効にしたままでも動きます。ブラウザ側にも控えを残すので、受信機の再起動で当日ぶんが消えることもありません。</li>
+          <li>記録の時刻は<strong>日本時間で固定</strong>しました。端末のタイムゾーン設定に左右されません。</li>
+        </ul>
+      </Card>
+
+      <Card title="受信を始めた時点で飛んでいる機体を、離陸として記録しなくなりました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでは全機体を「地上にいる」前提で見始めていたため、<strong>上空を飛行中の機体が必ず離陸として記録</strong>されていました。ブラウザを開き直すたびに偽の記録が増えます。</li>
+          <li>地上にいることを確認できた機体だけを離陸の対象にしました。飛行中に受信を始めた機体は、着陸を見届けた時点で地上に戻り、<strong>次の離陸からは正しく記録</strong>されます。</li>
+        </ul>
+      </Card>
+
+      <Card title="離脱の判定を作り直しました（ウィンチ曳航にも対応）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>従来は「右旋回8°/s超」と「1秒で10km/h減速」の同時成立だけで判定していたため、<strong>場周から12.5km離れた場所でのサーマル旋回を離脱と誤認</strong>していました。逆に本当の離脱は取り逃がしていました。</li>
+          <li>離脱は「続いていた上昇が終わり、索から解放されて<strong>はっきり減速する</strong>」ところに現れます。この2つが同時に起きたときだけ離脱とするようにしました。サーマルから抜けるときは加速するので、区別がつきます。</li>
+          <li>曳航機がいない<strong>ウィンチ曳航</strong>でも、急上昇のあとの急減速で離脱を取れます。</li>
+          <li>たきかわの実データで検証しました。実際の離脱は 01:55:28・484m でしたが、従来は110秒遅れて別の場所を離脱と記録していました。新しい判定は 01:55:29・484m を捉えています。</li>
+          <li>曳航機は従来どおり「最高高度から50m下がったら離脱」で判定します。こちらは確実に動きます。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.45 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.45</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="低い曳航のあと、その機体の離着陸が記録されなくなる問題を修正">
