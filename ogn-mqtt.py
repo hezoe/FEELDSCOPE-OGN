@@ -11,7 +11,7 @@ import time
 import signal
 import sys
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.request import urlopen
 from urllib.error import URLError
 from html.parser import HTMLParser
@@ -29,6 +29,12 @@ MQTT_PORT = 1883
 MQTT_BASE_TOPIC = "ogn"
 POLL_INTERVAL = 2  # seconds
 POSITION_RETAIN = False
+# 初見の機体で一度に流す位置の最大数。ogn-decode は機体ごとに過去60件を
+# 保持し続けるので、無制限に流すとブラウザの航跡が一気に書き戻される。
+FIRST_SEEN_POSITIONS = 5
+# 位置の時刻は FLARM パケット由来で、機体側の時計がずれている個体がある。
+# 直前に配信した時刻よりこれ以上「巻き戻った」ら時計リセットとみなす。
+CLOCK_RESET_TOLERANCE_SEC = 120
 STATUS_RETAIN = True
 
 
@@ -149,9 +155,9 @@ def parse_aircraft_header(line):
     m = re.match(
         r"(\w+)\s+\[\s*(\d+)/\s*(\d+)sec\]\s+"
         r"(\d+):(\d+):(\w+)\s+(\S+)\s+"
-        r"<\s*([\d.]+)m/s>\s+<([\d.]+)dB>,\s+"
-        r"<([\d.]+)bit/packet>,\s+"
-        r"<\s*([+\-\d.]+)\(([+\-\d.]+)\)kHz>",
+        r"<\s*([\d.]+)\s*m/s>\s*,?\s*<\s*([\d.]+)\s*dB>\s*,\s*"
+        r"<\s*([\d.]+)\s*bit/packet>\s*,\s*"
+        r"<\s*([+\-\d.]+)\s*\(\s*([+\-\d.]+)\s*\)kHz>",
         line,
     )
     if not m:
@@ -177,6 +183,16 @@ def parse_aircraft_header(line):
     }
 
 
+# ogn-decode の集計行は「ID [ n/ msec] ...」で始まる。厳密パースに失敗しても
+# この形に一致する行は必ず「別機体の先頭」なので、直前の機体へ位置を混ぜない。
+HEADER_SHAPE_RE = re.compile(r"^\w+\s+\[\s*\d+\s*/\s*\d+\s*sec\]")
+
+
+def looks_like_header(line):
+    """Return True if the line is an aircraft summary line (even if unparsable)."""
+    return bool(HEADER_SHAPE_RE.match(line))
+
+
 def parse_position_line(line):
     """Parse a position report line.
 
@@ -185,7 +201,7 @@ def parse_position_line(line):
     """
     m = re.match(
         r"\s*(\d+):\s+\[\s*([+\-\d.]+),\s*([+\-\d.]+)\]deg\s+"
-        r"(\d+)m\s+"
+        r"([+\-]?\d+)m\s+"
         r"([+\-\d.]+)m/s\s+"
         r"([\d.]+)m/s\s+"
         r"([\d.]+)deg\s+"
@@ -204,22 +220,27 @@ def parse_position_line(line):
     if not m:
         return None
 
-    timestamp_sod = int(m.group(1))
+    # ogn-decode prints the time as zero-padded HHMMSS (例: "070201" = 07:02:01 UTC)。
+    # 秒数ではないので、桁を分解してから真の seconds-of-day に直す。
+    # ここを誤ると timestamp_sod が単調にならず、配信の重複除去が壊れて
+    # 航跡がジグザグになる。
+    raw = int(m.group(1))
+    h, mi, sec = raw // 10000, (raw // 100) % 100, raw % 100
+    if h > 23 or mi > 59 or sec > 59:
+        return None
+    timestamp_sod = h * 3600 + mi * 60 + sec
     now_utc = datetime.now(timezone.utc)
-    # ogn-decode uses seconds-of-day but can exceed 86400 (cumulative uptime counter)
-    sod = timestamp_sod % 86400
-    h = sod // 3600
-    mi = (sod % 3600) // 60
-    s = sod % 60
-    ts = now_utc.replace(hour=h, minute=mi, second=s, microsecond=0)
-    if ts > now_utc:
-        from datetime import timedelta
+    ts = now_utc.replace(hour=h, minute=mi, second=sec, microsecond=0)
+    if ts > now_utc + timedelta(minutes=5):
+        # 日付跨ぎ（UTC 23:59 の直後に 00:00 を受け取る等）
         ts -= timedelta(days=1)
 
     flags_raw = m.group(9)
     return {
         "timestamp_utc": ts.isoformat(),
         "timestamp_sod": timestamp_sod,
+        # 絶対時刻。日跨ぎでも単調なので並べ替え・重複除去はこれを使う
+        "timestamp_epoch": ts.timestamp(),
         "latitude": float(m.group(2)),
         "longitude": float(m.group(3)),
         "altitude_m": int(m.group(4)),
@@ -266,17 +287,33 @@ def parse_aircraft_list(text):
             }
             continue
 
+        # 集計行の形をしているのに厳密パースに失敗した場合。以降の位置行は
+        # 「別機体のもの」なので、直前の機体へ混ぜてはいけない。混ぜると
+        # 2機の座標が1本の航跡に交互に入り、ジグザグ＋航跡の入れ替わりになる。
+        if looks_like_header(line):
+            log.warning("Unparsable aircraft header, skipping its positions: %s", line)
+            current_id = None
+            continue
+
         if current_id:
             pos = parse_position_line(line)
             if pos:
                 aircraft[current_id]["positions"].append(pos)
-                if pos["is_latest"]:
-                    aircraft[current_id]["latest_position"] = pos
 
-    # If no position was marked latest, use the last one
     for ac in aircraft.values():
-        if ac["latest_position"] is None and ac["positions"]:
-            ac["latest_position"] = ac["positions"][-1]
+        # 時刻順に並べ替え、同一時刻の重複を落とす。ogn-decode のリングバッファは
+        # 折り返して出力されることがあり、並び順は信用できない。
+        seen = set()
+        ordered = []
+        for pos in sorted(ac["positions"], key=lambda p: p["timestamp_epoch"]):
+            if pos["timestamp_epoch"] in seen:
+                continue
+            seen.add(pos["timestamp_epoch"])
+            ordered.append(pos)
+        ac["positions"] = ordered
+        # 行末の "*" は1機体に複数付くので「最新」の印にはならない。
+        # 最新＝一番新しい時刻の位置、とする。
+        ac["latest_position"] = ordered[-1] if ordered else None
 
     return aircraft
 
@@ -399,7 +436,7 @@ class OgnMqttPublisher:
             retain=True,
         )
         self._connected = False
-        self._prev_positions = {}  # device_id -> last timestamp_sod published
+        self._prev_positions = {}  # device_id -> last timestamp_epoch published
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
@@ -472,24 +509,47 @@ class OgnMqttPublisher:
         if aircraft_text:
             aircraft = parse_aircraft_list(aircraft_text)
 
+            now_epoch = time.time()
             for dev_id, ac in aircraft.items():
-                # Publish only new positions (avoid duplicates)
-                prev_ts = self._prev_positions.get(dev_id)
-                new_positions = []
-                for pos in ac["positions"]:
-                    if prev_ts is None or pos["timestamp_sod"] > prev_ts:
-                        new_positions.append(pos)
-
-                for pos in new_positions:
-                    self.publish_aircraft_position(dev_id, pos)
-
-                if ac["positions"]:
-                    self._prev_positions[dev_id] = ac["positions"][-1]["timestamp_sod"]
-
                 # Always publish status with latest position
                 self.publish_aircraft_status(
                     dev_id, ac["summary"], ac["latest_position"]
                 )
+
+                positions = ac["positions"]          # 時刻昇順・重複除去済み
+                if not positions:
+                    continue
+                newest = positions[-1]["timestamp_epoch"]
+                prev_ts = self._prev_positions.get(dev_id)
+
+                if prev_ts is not None and newest < prev_ts - CLOCK_RESET_TOLERANCE_SEC:
+                    # 機体側の時計が巻き戻った。そのままだと以後ずっと配信が
+                    # 止まるので、この機体だけ初見として扱い直す。
+                    log.warning(
+                        "%s: position time went backwards (%.0fs), resyncing",
+                        dev_id, prev_ts - newest,
+                    )
+                    prev_ts = None
+
+                if prev_ts is None:
+                    # 初見の機体（ogn-mqtt 再起動直後を含む）。60件を一気に流すと
+                    # ブラウザの航跡が一瞬で書き戻されるので末尾だけにする。
+                    new_positions = positions[-FIRST_SEEN_POSITIONS:]
+                else:
+                    new_positions = [p for p in positions if p["timestamp_epoch"] > prev_ts]
+
+                # 必ず古い順に流す。順序が崩れるとブラウザ側の航跡がジグザグになる。
+                for pos in new_positions:
+                    self.publish_aircraft_position(dev_id, pos)
+
+                self._prev_positions[dev_id] = newest
+
+            # 長時間運転で _prev_positions が膨らまないよう、十分古い記録は捨てる
+            if len(self._prev_positions) > 1000:
+                cutoff = now_epoch - 86400
+                self._prev_positions = {
+                    k: v for k, v in self._prev_positions.items() if v > cutoff
+                }
 
             # Publish aggregated list
             self.publish_aircraft_list(aircraft)
