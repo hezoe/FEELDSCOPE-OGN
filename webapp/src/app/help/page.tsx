@@ -581,8 +581,9 @@ function ManualContent() {
 
         <Section id="ogn-actions" heading="アクションボタン">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>設定を保存して受信機を再起動</strong> — 設定変更を保存＋rtlsdr-ogn再起動</li>
+            <li><strong>設定を保存して受信機を再起動</strong> — 設定変更を保存＋rtlsdr-ogn再起動。書き込んだ内容を読み戻して確認し、一致したときだけ成功と表示します</li>
             <li><strong>受信機のみ再起動</strong> — 設定は変更せずrtlsdr-ognだけ再起動</li>
+            <li><strong>保存内容を確認</strong> — 保存せずに、設定ファイル・再インストール用の設定・受信機が実際に使っている値を並べて比べます。食い違っていればその場所と理由（所有者・パーミッション・エラー内容）を表示します</li>
           </ul>
         </Section>
       </Card>
@@ -648,11 +649,29 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.52 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.52</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OGN設定を保存しても書き換わらない問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN設定の保存は、設定ファイルの書き込みに失敗しても<strong>その失敗を捨てて「保存しました」と表示</strong>していました。アンテナ設置位置を変えても地図上のアンテナが動かないのに、画面には成功と出る状態でした。</li>
+          <li>書き込み後に<strong>ファイルを読み戻し、値が一致したときだけ成功</strong>と表示するようにしました。一致しない場合は、どのファイルでどう失敗したかを画面に出します。</li>
+          <li><strong>「保存内容を確認」ボタン</strong>を追加しました。保存せずに、設定ファイル・再インストール用の設定・<strong>受信機が実際に使っている値</strong>を並べて比べられます。所有者とパーミッションも表示するので、書けない理由が分かります。</li>
+          <li>書き込み方法を3段構えにしました。そのまま書く → 同じディレクトリに作って差し替える → sudo で置く、の順に試し、全部だめならその理由をまとめて表示します。</li>
+          <li><code>/boot/rtlsdr-ogn.conf</code> が<strong>正本</strong>です。受信機は起動のたびにこれを <code>/home/pi</code> へ複製するため、正本に書けていなければ再起動で元に戻ります。正本に書けなかった場合は<strong>受信機を再起動しません</strong>（元の設定で動き続けるほうが安全なため）。</li>
+          <li>受信機の再起動は init.d / service / systemctl の順に試します。イメージによって起動の仕組みが違うためです。</li>
+          <li><code>/boot/OGN-receiver.conf</code> の書き換えで、コメントアウトされた行や空白入りの行が<strong>黙って無視される</strong>問題も直しました。項目が無ければ追記します。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.51 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.51</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="着陸を取りこぼして「飛行中」のまま残る問題を修正">
