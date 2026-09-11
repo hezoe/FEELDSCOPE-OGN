@@ -271,6 +271,22 @@ else
     log_warn "  feeldscope-wpa-dedupe.sh not found; skipping"
 fi
 
+# ---- 廃止した機能の後片付け — idempotent ----
+# v1.2.1 で「利用状況の記録(UX分析)」を削除した。記録先のディレクトリは
+# コードを消しても残るため、更新のたびに残骸が無いか見て、あれば片付ける。
+# 対象は下の1ディレクトリだけに限定し、中身も pointer-*.jsonl しか消さない。
+ANALYTICS_DIR="$FEELDSCOPE_DIR/analytics"
+if [ -d "$ANALYTICS_DIR" ]; then
+    log_info "  Removing retired analytics data ($ANALYTICS_DIR)..."
+    find "$ANALYTICS_DIR" -maxdepth 1 -type f -name 'pointer-*.jsonl' -delete 2>/dev/null || true
+    # 他に何も入っていなければディレクトリごと消す（空でなければ残して知らせる）
+    if rmdir "$ANALYTICS_DIR" 2>/dev/null; then
+        log_info "  Analytics data removed"
+    else
+        log_warn "  $ANALYTICS_DIR is not empty; left as is"
+    fi
+fi
+
 # =============================================================================
 # Step 5: Rebuild webapp
 # =============================================================================
