@@ -638,11 +638,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.1.45 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.45</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="低い曳航のあと、その機体の離着陸が記録されなくなる問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>着陸の判定は「一度 1500ft AGL を超えた機体」にしか立ちませんでした。<strong>1500ft に届かない曳航では着陸が記録されず</strong>、その機体は飛行中のまま残ります。</li>
+          <li>飛行中のままになると状態が戻らないため、<strong>その機体の以後の離陸がすべて記録されなくなります</strong>。曳航機は1日に何十回も上がるので、低い曳航が1回あるだけでその日の残りが失われます。</li>
+          <li>この判定の高度を <strong>500ft AGL</strong> に下げました。たきかわの実測では曳航の頂点が 485m AGL で、従来の 1500ft（457m）とほとんど差がなく、曳航ごとに通ったり通らなかったりする状態でした。</li>
+        </ul>
+      </Card>
+
       {/* v1.1.44 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.1.44</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="航跡の修正の仕上げ">
