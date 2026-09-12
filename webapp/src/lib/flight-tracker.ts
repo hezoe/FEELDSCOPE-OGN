@@ -23,6 +23,18 @@ const CONFIG_REFRESH_MS = 30_000;
 
 // ── 閾値 ──────────────────────────────────────────────────────────────────
 const TAKEOFF_SPEED_MS = 30 / 3.6;    // 30 km/h を超えたら滑走開始
+/**
+ * 滑走を離陸として確定する高度。曳航機は着陸後、止まらずに次の索の位置まで
+ * 地上を戻る。たきかわ実測(2026-09-12)ではその速度が 30〜42 km/h あり、
+ * 離陸判定の 30 km/h を超えて「1分未満の飛行」が次々に記録されていた。
+ * 速度だけでは地上滑走と離陸滑走を分けられないので、実際に浮いたことを見る。
+ */
+const TAKEOFF_CONFIRM_AGL_M = 20;
+/**
+ * 滑走開始からこれを過ぎても浮かなければ、地上滑走だったとみなす。
+ * 実測の離陸は 30 km/h 超えから対地 20m まで、ウィンチ 4〜5秒・曳航 16〜25秒。
+ */
+const TAKEOFF_CONFIRM_SEC = 60;
 const LANDING_SPEED_MS = 10 / 3.6;    // 10 km/h を下回ったら停止
 /** 接地後の滑走・地上走行とみなす速度。止まるまで受信できるとは限らない */
 const LANDING_ROLL_SPEED_MS = 50 / 3.6;
@@ -61,6 +73,47 @@ const RELEASE_SPEED_DROP_MS = 5;
 /** 離陸からこの時間を過ぎたら、もう曳航・ウィンチではない */
 const RELEASE_MAX_AGE_SEC = 20 * 60;
 
+// ── 曳航ペアからの離脱高度の補完 ────────────────────────────────────────
+// 曳航機の離脱は「最高高度からの降下」で確実に取れるが、グライダー側は
+// 減速を見ているので、上空で受信が飛ぶと取りこぼす。索でつながっていた
+// 相手が分かれば、その高度をグライダーへ写せる。
+/** ペア候補とみなす離陸時刻の差 */
+const TOW_PAIR_TAKEOFF_WINDOW_SEC = 60;
+/** 相手の位置がこれより古いと、並んで飛んでいるか判断できない */
+const TOW_PAIR_FIX_MAX_AGE_SEC = 15;
+/** 曳航中とみなす水平距離（索長 50〜60m に受信誤差を足した余裕） */
+const TOW_PAIR_MAX_HORIZ_M = 200;
+/** 曳航中とみなす高度差 */
+const TOW_PAIR_MAX_VERT_M = 100;
+/** これだけ連続して近接したらペア確定。一度離れたら数え直す */
+const TOW_PAIR_MIN_SAMPLES = 3;
+/**
+ * これを超える上昇率で上がり続ける機体は、曳航機に引かれていない。
+ * たきかわ実測（2026-09-12）: ウィンチ発航は 8〜18.4 m/s を 33秒continuous、
+ * 同じ日の曳航6機は 6 m/s すら1秒も continuous しなかった（離陸直後の
+ * 引き起こしで 6.1〜6.2 m/s の単発が出るだけ）。境目は十分に広い。
+ */
+const WINCH_CLIMB_MS = 7;
+/**
+ * 曳航機の離脱を見てから、グライダー自身の離脱検知を待つ時間。
+ * 自分で測れた値のほうが確かなので、待ってから空欄のときだけ写す。
+ */
+const TOW_PAIR_INFER_GRACE_SEC = 120;
+
+// ── ウィンチ発航の離脱 ──────────────────────────────────────────────────
+// 曳航は索が外れると機体が自分の速度まで落ちるので減速で分かるが、ウィンチは
+// 逆に機首を下げて加速する。減速では取れないので、上昇率の崩れで見る。
+// たきかわ実測: 上昇 8〜18 m/s が 35秒続き、最後の 2秒で 8.0 → 5.4 → 0.5 と
+// 落ちた。この崩れが飛行中で最も鋭い変化で、離脱の瞬間そのもの。
+/** これだけ上昇が続いたらウィンチ発航中とみなす */
+const WINCH_CLIMB_MIN_SEC = 5;
+/** ウィンチ発航の急上昇は離陸直後に始まる。遅れて来た上昇はサーマル */
+const WINCH_START_MAX_SEC = 60;
+/** 上昇がここまで落ちたら索が外れた */
+const WINCH_RELEASE_CLIMB_MS = 2;
+/** ウィンチ発航は 30〜60秒で終わる。これを過ぎたら発航ではない */
+const WINCH_MAX_AGE_SEC = 180;
+
 // ── 復号エラーの位置を弾く（送信側 ogn-mqtt.py と同じ考え方） ────────────
 const MAX_ALTITUDE_M = 15000;
 const MIN_ALTITUDE_M = -500;
@@ -85,6 +138,8 @@ export interface FlightLogEntry {
   landingTime: string | null;
   releaseAlt: number | null;
   releaseDist: number | null;
+  /** 離脱高度を曳航機から写した場合に true。自分で測れた値には付かない */
+  releaseInferred?: boolean;
 }
 
 interface Sample {
@@ -114,7 +169,32 @@ interface TrackingState {
   wasHigh: boolean;
   /** 低空・低速が続き始めた時刻。接地の判断に使う */
   lowSlowSinceMs: number | null;
+  /** 滑走を始めた時刻。浮いたらこの時刻を離陸時刻として飛行を作る */
+  rollingSinceMs: number | null;
+  /** 滑走を始めたときの対地高度 */
+  rollingAgl: number;
   recent: Sample[];
+  /** この機体が曳航機かどうか。相手側から引くので状態に持たせる */
+  isTow: boolean;
+  /** 曳航でつながっていると判断した相手 */
+  pairDeviceId: string | null;
+  /** 相手と近接して観測できた連続回数 */
+  pairSamples: number;
+  /**
+   * 索でつながっていたと確定した。曳航機の離脱検知は最高高度から 50m 下がって
+   * 初めて出るので、実際の離脱から十数秒遅れる。そのころには2機は離れていて
+   * 近接は途切れている。「この飛行で組だった」のは離脱の瞬間に確かめ直せる
+   * ことではないので、一度確定したら飛行が終わるまで持ち続ける。
+   */
+  pairConfirmed: boolean;
+  /** ウィンチ域の上昇が続き始めた時刻。途切れたら null に戻す */
+  winchClimbSinceMs: number | null;
+  /** ウィンチ発航中と判断した。離脱を取るまで下ろさない */
+  winchLaunch: boolean;
+  /** 相手の離脱高度。猶予のあいだ自力検知を待ってから使う */
+  pendingReleaseAlt: number | null;
+  pendingReleaseDist: number | null;
+  pendingSinceMs: number | null;
 }
 
 interface Airfield {
@@ -238,6 +318,20 @@ function toGround(tr: TrackingState, agl: number): void {
   tr.takeoffAgl = agl;
   tr.wasHigh = false;
   tr.lowSlowSinceMs = null;
+  tr.rollingSinceMs = null;
+  clearPair(tr);
+}
+
+/** 曳航ペアの状態を捨てる。次の飛行に前の索の相手を持ち越さない */
+function clearPair(tr: TrackingState): void {
+  tr.pairDeviceId = null;
+  tr.pairSamples = 0;
+  tr.pairConfirmed = false;
+  tr.winchClimbSinceMs = null;
+  tr.winchLaunch = false;
+  tr.pendingReleaseAlt = null;
+  tr.pendingReleaseDist = null;
+  tr.pendingSinceMs = null;
 }
 
 /**
@@ -275,6 +369,7 @@ function sweepStaleTracks(): void {
   for (const [deviceId, tr] of s.tracking) {
     const fix = tr.lastFix;
     if (!fix) continue;
+    applyPendingRelease(tr, nowMs);
     const silenceSec = (nowMs - fix.timeMs) / 1000;
     if (silenceSec < SIGNAL_LOST_SEC) continue;
 
@@ -288,6 +383,90 @@ function sweepStaleTracks(): void {
       }
     }
   }
+}
+
+/** 相手が「索でつながっていそうな位置」にいるか */
+function isAlongside(
+  other: TrackingState, lat: number, lon: number, altM: number, nowMs: number,
+): boolean {
+  const fix = other.lastFix;
+  if (!fix) return false;
+  if ((nowMs - fix.timeMs) / 1000 > TOW_PAIR_FIX_MAX_AGE_SEC) return false;
+  if (Math.abs(altM - fix.altM) > TOW_PAIR_MAX_VERT_M) return false;
+  return haversineM(lat, lon, fix.lat, fix.lon) <= TOW_PAIR_MAX_HORIZ_M;
+}
+
+/**
+ * いま索でつながっている相手を探す。曳航機とグライダーが、ほぼ同時に離陸して
+ * 並んで上がっていれば曳航中とみなす。近接が続いた回数を数え、たまたま
+ * すれ違っただけの機体を除く。
+ *
+ * ウィンチ発航は相手がいないので、そもそもここには掛からない。同じ滑走路で
+ * 曳航離陸と同時にウィンチ発航が出た場合は、上昇率で分かれる。
+ */
+function updateTowPair(
+  deviceId: string, tr: TrackingState,
+  lat: number, lon: number, altM: number, climbMs: number, nowMs: number,
+): void {
+  const s = S();
+  if (tr.pairConfirmed) return;   // 確定済み。離れても組は変わらない
+  if (tr.phase !== "airborne" || tr.takeoffMs === null) return;
+  if (nowMs - tr.takeoffMs > RELEASE_MAX_AGE_SEC * 1000) return;
+
+  // 索で引かれている機体はこんなに上がらない（ウィンチ発航・サーマル）
+  if (climbMs > WINCH_CLIMB_MS) {
+    tr.pairDeviceId = null;
+    tr.pairSamples = 0;
+    return;
+  }
+
+  const found: string[] = [];
+  for (const [otherId, other] of s.tracking) {
+    if (otherId === deviceId) continue;
+    if (other.isTow === tr.isTow) continue;   // 曳航機とグライダーの組だけ
+    if (other.phase !== "airborne" || other.takeoffMs === null) continue;
+    if (Math.abs(other.takeoffMs - tr.takeoffMs) > TOW_PAIR_TAKEOFF_WINDOW_SEC * 1000) continue;
+    if (!isAlongside(other, lat, lon, altM, nowMs)) continue;
+    found.push(otherId);
+  }
+
+  // 相手が絞れないときは決めない（編隊で上がっている、位置が荒れている）
+  if (found.length !== 1) {
+    tr.pairSamples = 0;
+    return;
+  }
+  if (tr.pairDeviceId !== found[0]) {
+    tr.pairDeviceId = found[0];
+    tr.pairSamples = 0;
+  }
+  tr.pairSamples += 1;
+  if (tr.pairSamples >= TOW_PAIR_MIN_SAMPLES) tr.pairConfirmed = true;
+}
+
+/**
+ * 曳航機から預かった離脱高度を、猶予のあとで飛行記録へ写す。
+ * 自分で測れた値があればそちらを残す。
+ */
+function applyPendingRelease(tr: TrackingState, nowMs: number): void {
+  const s = S();
+  if (tr.pendingSinceMs === null || tr.pendingReleaseAlt === null) return;
+  if (nowMs - tr.pendingSinceMs < TOW_PAIR_INFER_GRACE_SEC * 1000) return;
+
+  const id = tr.flightId;
+  const alt = tr.pendingReleaseAlt;
+  const dist = tr.pendingReleaseDist;
+  tr.pendingReleaseAlt = null;
+  tr.pendingReleaseDist = null;
+  tr.pendingSinceMs = null;
+  if (!id) return;
+
+  const f = s.flights.find((x) => x.id === id);
+  if (!f || f.releaseAlt != null) return;
+  s.flights = s.flights.map((x) =>
+    x.id === id
+      ? { ...x, releaseAlt: alt, releaseDist: dist, releaseInferred: true }
+      : x);
+  if (tr.phase === "airborne") tr.phase = "released";
 }
 
 function isTowPlane(
@@ -373,6 +552,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   const climbMs = Number.isFinite(pos.climb_rate_ms) ? pos.climb_rate_ms : 0;
 
   let tr = s.tracking.get(deviceId);
+  if (tr) tr.isTow = tow;   // 運用中に機体種別を設定されることがある
   if (!tr) {
     // 初めて見る機体。地上にいると確認できたときだけ "ground" から始める。
     const onGround = agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS;
@@ -386,7 +566,18 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       takeoffAgl: agl,
       wasHigh: agl > AIRBORNE_CONFIRM_AGL_M,
       lowSlowSinceMs: null,
+      rollingSinceMs: null,
+      rollingAgl: 0,
       recent: [],
+      isTow: tow,
+      pairDeviceId: null,
+      pairSamples: 0,
+      pairConfirmed: false,
+      winchClimbSinceMs: null,
+      winchLaunch: false,
+      pendingReleaseAlt: null,
+      pendingReleaseDist: null,
+      pendingSinceMs: null,
     };
     s.tracking.set(deviceId, tr);
   }
@@ -421,12 +612,27 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     if (agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS) {
       closeOpenFlights(deviceId, "");
     }
+    // 滑走の始まりを覚えておく。離陸時刻はここなので、あとで浮いたときに使う。
     if (speedMs > TAKEOFF_SPEED_MS) {
+      if (tr.rollingSinceMs === null) {
+        tr.rollingSinceMs = nowMs;
+        tr.rollingAgl = agl;
+      }
+    } else {
+      tr.rollingSinceMs = null;   // 速度が落ちた＝離陸ではなかった
+    }
+
+    if (tr.rollingSinceMs !== null && nowMs - tr.rollingSinceMs > TAKEOFF_CONFIRM_SEC * 1000) {
+      tr.rollingSinceMs = null;   // 走り続けているが浮かない＝地上滑走
+    }
+
+    // 浮いて初めて飛行として記録する。地上を走っただけでは作らない。
+    if (tr.rollingSinceMs !== null && agl >= TAKEOFF_CONFIRM_AGL_M) {
       const entry: FlightLogEntry = {
         id: `f${nowMs.toString(36)}${(s.seq++).toString(36)}`,
         registration,
         deviceId,
-        takeoffTime: clockStr(),
+        takeoffTime: clockStr(tr.rollingSinceMs),
         landingTime: null,
         releaseAlt: null,
         releaseDist: null,
@@ -436,17 +642,38 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       closeOpenFlights(deviceId, "", entry.id);
       tr.phase = "airborne";
       tr.flightId = entry.id;
-      tr.takeoffMs = nowMs;
+      tr.takeoffMs = tr.rollingSinceMs;
       tr.maxAltAgl = agl;
-      tr.takeoffAgl = agl;
+      tr.takeoffAgl = tr.rollingAgl;
       tr.wasHigh = agl > AIRBORNE_CONFIRM_AGL_M;
       tr.lowSlowSinceMs = null;
+      tr.rollingSinceMs = null;
+      clearPair(tr);
     }
     return;
   }
 
   if (agl > tr.maxAltAgl) tr.maxAltAgl = agl;
   if (agl > AIRBORNE_CONFIRM_AGL_M) tr.wasHigh = true;
+
+  // ── ウィンチ発航中かどうか ──
+  // 離脱判定の高度ゲート(150m)より下から急上昇が始まるので、ここで見る。
+  if (!tow && tr.phase === "airborne" && tr.takeoffMs !== null) {
+    const ageSec = (nowMs - tr.takeoffMs) / 1000;
+    if (climbMs >= WINCH_CLIMB_MS) {
+      if (tr.winchClimbSinceMs === null) tr.winchClimbSinceMs = nowMs;
+      // 離陸から間を置いて始まった上昇はサーマル。ウィンチ発航ではない
+      if (
+        (tr.winchClimbSinceMs - tr.takeoffMs) / 1000 <= WINCH_START_MAX_SEC &&
+        nowMs - tr.winchClimbSinceMs >= WINCH_CLIMB_MIN_SEC * 1000
+      ) {
+        tr.winchLaunch = true;
+      }
+    } else {
+      tr.winchClimbSinceMs = null;
+    }
+    if (ageSec > WINCH_MAX_AGE_SEC) tr.winchLaunch = false;
+  }
 
   // サーバを再起動した直後は、飛行中の機体と記録の対応が切れている
   // （記録はブラウザの控えから戻される）。飛行中なら未着陸の記録を引き受けて、
@@ -480,6 +707,10 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     if (tow && agl > TOW_RELEASE_MIN_AGL_M) {
       // 曳航機は離脱後に降下していく。最高高度からの下がりが確実な合図。
       if (tr.maxAltAgl - agl > TOW_RELEASE_ALT_DROP_M) released = true;
+    } else if (!tow && tr.winchLaunch) {
+      // ウィンチ発航。索が外れると上昇が一気に止まる。速度は見ない
+      // （機首を下げて加速するので、曳航のような減速は起きない）。
+      if (climbMs <= WINCH_RELEASE_CLIMB_MS) released = true;
     } else if (!tow && tr.maxAltAgl - tr.takeoffAgl >= RELEASE_MIN_CLIMB_GAIN_M) {
       // 曳航でもウィンチでも、離脱は「続いていた上昇の終わり」に現れる。
       // 索が外れた機体は引かれなくなって自分の速度まで落ちるので、
@@ -502,8 +733,29 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       const alt = Math.round(tr.maxAltAgl);
       s.flights = s.flights.map((f) =>
         f.id === flight.id ? { ...f, releaseAlt: alt, releaseDist: distM } : f);
+      tr.winchLaunch = false;
+      tr.winchClimbSinceMs = null;
+      // 自分で測れたので、預かっていた値は捨てる
+      tr.pendingReleaseAlt = null;
+      tr.pendingReleaseDist = null;
+      tr.pendingSinceMs = null;
+
+      // 曳航機の離脱は確実に取れる。索の相手が分かっていれば、その高度を
+      // 預けておく。グライダー自身が測れなかったときだけ、あとで使われる。
+      if (tow && tr.pairConfirmed && tr.pairDeviceId) {
+        const mate = s.tracking.get(tr.pairDeviceId);
+        if (mate && mate.phase === "airborne" && mate.flightId) {
+          mate.pendingReleaseAlt = alt;
+          mate.pendingReleaseDist = distM;
+          mate.pendingSinceMs = nowMs;
+        }
+      }
     }
   }
+
+  // 索でつながっている相手を追い、預かった離脱高度があれば頃合いを見て使う
+  updateTowPair(deviceId, tr, pos.latitude, pos.longitude, pos.altitude_m, climbMs, nowMs);
+  applyPendingRelease(tr, nowMs);
 
   // ── 着陸 ──
   // 止まったところまで受信できるとは限らない。滑走路上は電波が届きにくく、

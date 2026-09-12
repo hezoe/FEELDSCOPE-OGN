@@ -199,7 +199,7 @@ function ManualContent() {
             <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
-            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）</li>
+            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は、その機体自身の離脱を検知できず<strong>曳航機の離脱高度から写したもの</strong>です（手で直すと※は消えます）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
             <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）</li>
             <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
@@ -217,10 +217,13 @@ function ManualContent() {
         </Section>
         <Section id="map-detection-thresholds" heading="自動検知の閾値">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>離陸検知</strong> — 対地速度が <strong>30 km/h</strong> を超えた瞬間</li>
+            <li><strong>離陸検知</strong> — 対地速度が <strong>30 km/h</strong> を超えた瞬間。ただし飛行として記録するのは、そこから<strong>60秒以内に対地20mまで浮いた</strong>ときだけです（地上滑走と区別するため）。記録される離陸時刻は滑走を始めた時刻です</li>
             <li><strong>着陸検知</strong> — 一度 1500ft AGL を超えた機体が、1500ft AGL以下かつ <strong>10 km/h以下</strong> になった瞬間</li>
-            <li><strong>離脱検知（グライダー）</strong> — 旋回率8°/s以上 + 速度低下10 km/h以上 + 高度500ft AGL以上</li>
-            <li><strong>離脱検知（曳航機）</strong> — 高度ピークから50m以上の降下</li>
+            <li><strong>離脱検知（グライダー・曳航）</strong> — 対地150m以上で、離陸から100m以上上昇したあと、上昇が止まり、かつ6秒以内に <strong>5 m/s以上</strong> 減速したとき</li>
+            <li><strong>離脱検知（グライダー・ウィンチ）</strong> — 離陸から60秒以内に上昇率 <strong>7 m/s</strong> 以上が5秒続いたらウィンチ発航とみなし、そのあと上昇率が <strong>2 m/s</strong> 以下に落ちた瞬間を離脱とします。速度は見ません</li>
+            <li><strong>離脱検知（曳航機）</strong> — 対地300m以上で、高度ピークから50m以上の降下</li>
+            <li><strong>離脱高度の補完（曳航）</strong> — 曳航機とグライダーが60秒以内に離陸し、水平200m・垂直100m以内で3回以上並んで上がったら曳航ペアとみなします。曳航機の離脱を検知したあと<strong>2分待って</strong>もグライダー側で検知できなければ、曳航機の離脱高度を写します（※印付き）</li>
+            <li><strong>ウィンチ発航との区別</strong> — 上昇率が <strong>6 m/s</strong> を超える機体は索で曳かれていないとみなし、曳航ペアに入れません</li>
           </ul>
         </Section>
       </Card>
@@ -652,11 +655,70 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.2 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.2</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-12</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="電源を切った機体が地図に残り続ける問題を修正しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>運用が終わって FLARM の電源を切った機体が、<strong>いつまでも地図に置かれたまま</strong>になっていました。たきかわでは運用終了の1時間後も10機が残り、そのうち1機は<strong>4か月前の位置</strong>のままでした。</li>
+          <li>原因は、受信機の機体リストが一度載った機体を落とさないことです。表示側はこのリストから消えた機体だけを地図から下ろすので、消える機会がありませんでした。リストにある <code>last_seen_sec</code> は経過時間と対応しないため、<strong>位置の時刻</strong>で判断するようにしました。</li>
+          <li><strong>地上にいる機体</strong>は、受信が10分間途絶えたら地図から下ろします。</li>
+          <li><strong>上空で電波が途切れた機体は残します。</strong>最後に見えた場所は捜すときに必要な情報なので、勝手に消しません。翌朝 5:00 のログブック更新で片付きます。</li>
+          <li>受信機側でも、前日以前の位置しか持たない機体を配信対象から外すようにしました。</li>
+        </ul>
+      </Card>
+
+      <Card title="曳航機の地上滑走が「飛行」として記録される問題を修正しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>曳航機が着陸後に次の索の位置まで地上を戻るとき、<strong>1分未満の飛行が次々と記録される</strong>問題がありました。たきかわの実運用では、1回の戻りで6便の記録が作られていました。</li>
+          <li>原因は、離陸の判定が<strong>対地速度 30 km/h だけ</strong>だったことです。曳航機の地上滑走は 30〜42 km/h 出るので、この閾値を超えてしまいます。速度だけでは地上滑走と離陸滑走を分けられません。</li>
+          <li><strong>実際に浮いたときだけ</strong>飛行を作るようにしました。滑走を始めてから60秒以内に対地20mへ達したら離陸、達しなければ地上滑走です。記録される離陸時刻は、これまでどおり<strong>滑走を始めた時刻</strong>です。</li>
+          <li>実測で余裕を確認しました。離陸滑走は最高 92〜106 km/h に達し、対地20mまでウィンチ4〜5秒・曳航16〜25秒です。地上滑走は最高でも 42 km/h で、いつまでも浮きません。</li>
+        </ul>
+      </Card>
+
+      <Card title="進入中の機体が「地上」に表示される問題を修正しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>着陸進入中でまだ飛んでいる機体が、機体一覧で<strong>「地上」へ移ってしまう</strong>問題がありました。飛行ログは正しく「飛行中」のままなので、画面の中で表示が食い違っていました。</li>
+          <li>原因は、一覧の振り分けが<strong>海抜100m未満を地上</strong>としていて、滑空場の標高を足していなかったことです。標高23mのたきかわでは<strong>対地77m</strong>——まだファイナルの途中——で地上扱いになっていました。</li>
+          <li><strong>標高100mを超える滑空場では、全機がずっと地上扱い</strong>になります。こちらのほうが影響は深刻です。</li>
+          <li>振り分けを<strong>サーバ側の離着陸判定</strong>に合わせました。飛行ログと機体一覧が必ず一致します。画面側で高度の閾値を持たなくなったので、同じずれは起きません。</li>
+          <li>低高度の色分け・滑空経路の警告・信号消失の判定も、同じく標高を足すよう揃えました。</li>
+        </ul>
+      </Card>
+
+      <Card title="ウィンチ発航の離脱を検知できるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでウィンチ発航は<strong>離脱高度が空欄のまま</strong>になっていました。判定が「索が外れたあとの減速」を見ていたためです。</li>
+          <li>減速は曳航のかたちです。曳航機に引かれていた機体は索が外れると自分の速度まで落ちますが、<strong>ウィンチは逆に機首を下げて加速します</strong>。そのため条件が一度も成立しませんでした。</li>
+          <li>ウィンチは<strong>上昇率の崩れ</strong>で取るようにしました。離陸直後から 7 m/s 以上の上昇が5秒続いたらウィンチ発航とみなし、上昇が 2 m/s 以下に落ちた瞬間を離脱とします。速度は見ません。</li>
+          <li>たきかわの実測（2026-09-12）で検証しました。発航は 8〜18.4 m/s の上昇が35秒続き、最後の2秒で 8.0 → 5.4 → 0.5 と崩れます。同日のウィンチ発航2本を、それぞれ <strong>離陸38秒後・対地459m</strong> と <strong>離陸40秒後・対地447m</strong> で捉えられました。</li>
+          <li>同じ日の曳航機・被曳航機あわせて6機は、7 m/s の上昇が<strong>1秒も続きませんでした</strong>（引き起こしで 6 m/s台の単発が出るだけ）。誤検知はゼロです。曳航とウィンチの境目は十分に広く取れています。</li>
+          <li>その後の実運用で<strong>ウィンチ発航6便</strong>まで検証を広げ、すべて<strong>誤差0m・遅れ0秒</strong>でした。ウィンチは場内の低高度で完結するため受信が途切れず、最も確実に取れます。</li>
+        </ul>
+      </Card>
+
+      <Card title="グライダーの離脱高度を、曳航機の値から補えるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>曳航機の離脱は「最高高度からの降下」で確実に取れますが、グライダー側は減速を見ているため、<strong>上空で受信が飛ぶと取りこぼす</strong>ことがありました。</li>
+          <li>同じ索でつながっていた曳航機とグライダーを見分け、グライダー側で離脱を検知できなかったときに<strong>曳航機の離脱高度を写す</strong>ようにしました。索長は 50〜60m なので、実用上は同じ高度です。</li>
+          <li>ペアの判定は、<strong>60秒以内の離陸</strong>に加えて、<strong>水平200m・垂直100m以内で並んで上がったことを3回以上確認</strong>できたときだけ成立します。たまたま同時に飛んだだけの機体は組になりません。</li>
+          <li><strong>ウィンチ発航は混ざりません。</strong>上昇率 6 m/s を超える機体は索で曳かれていないとみなします。曳航は 2〜4 m/s、ウィンチ発航は 8〜15 m/s ではっきり差が出ます。同じ滑走路から同時に出ても区別できます。</li>
+          <li>自分で測れた値のほうが確かなので、曳航機の離脱から<strong>2分待って</strong>から、まだ空欄のときだけ写します。曳航機だけが飛んだ場合は、相手がいないので何も起きません。</li>
+          <li>写した値には飛行ログで<strong>※</strong>が付きます。手で入力し直すと※は消えます。</li>
+          <li>実運用データで精度を測りました。曳航機の記録値とグライダーの実際の離脱高度の差は <strong>+1m と -1m</strong>、遅れは4〜6秒でした。索長 50〜60m ぶんの差は実用上あらわれません。</li>
+          <li>この方式が強いのは、<strong>ペアが離陸直後の場内至近で確定する</strong>からです。上空では受信が頻繁に途切れ（実測で最長479秒）、離脱の瞬間を受信できているとは限りません。一度組を確定しておけば、その後どれだけ受信が飛んでも高度を写せます。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.1 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="「利用状況の記録（UX分析）」を廃止しました">
