@@ -471,6 +471,33 @@ def parse_receiver_status(html):
 # HTTP fetch helpers
 # ---------------------------------------------------------------------------
 
+def logbook_start_utc():
+    """ログブックの1日の始まり（日本時間 05:00）を UTC で返す。
+
+    webapp の飛行記録と同じ区切りにする。ここで切ると、翌朝の更新で
+    地図からも前日の機体が消える。
+    """
+    jst = datetime.now(timezone.utc) + timedelta(hours=9)
+    start = jst.replace(hour=5, minute=0, second=0, microsecond=0)
+    if jst < start:
+        start -= timedelta(days=1)
+    return start - timedelta(hours=9)
+
+
+def _position_before(pos, cutoff_utc):
+    """位置の時刻が cutoff より前か。読めない時刻は落とさない（安全側）。"""
+    ts = pos.get("timestamp_utc")
+    if not ts:
+        return False
+    try:
+        t = datetime.fromisoformat(ts)
+    except ValueError:
+        return False
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t < cutoff_utc.replace(tzinfo=timezone.utc)
+
+
 def fetch_url(url, timeout=5):
     """Fetch URL content, return string or None on error."""
     try:
@@ -541,13 +568,23 @@ class OgnMqttPublisher:
         self._publish(topic, payload, retain=True, qos=1)
 
     def publish_aircraft_list(self, aircraft_dict):
-        """Publish aggregated list of all tracked aircraft."""
+        """Publish aggregated list of all tracked aircraft.
+
+        ogn-decode の aircraft-list.txt は一度載った機体を落とさない。
+        たきかわ実測(2026-09-12)では運用終了後も 10 機が残り、うち 1 機は
+        4 か月前の位置のままだった。summary の last_seen_sec は経過時間と
+        対応しないので、位置の時刻で当日ぶんだけを配信する。
+        """
         topic = f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft"
+        cutoff = logbook_start_utc()
         summary_list = []
         for dev_id, ac in aircraft_dict.items():
             entry = {**ac["summary"]}
-            if ac["latest_position"]:
-                entry["latest_position"] = ac["latest_position"]
+            pos = ac["latest_position"]
+            if pos:
+                if _position_before(pos, cutoff):
+                    continue          # 前日以前の機体。もう当日の運用ではない
+                entry["latest_position"] = pos
             summary_list.append(entry)
         self._publish(
             topic,

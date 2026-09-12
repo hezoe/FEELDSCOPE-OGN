@@ -117,6 +117,17 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
 const GROUND_ALT_M = 100;
 const LOW_ALT_FT = 1500;
 const LOST_SIGNAL_SEC = 10;
+/**
+ * 地上にいる機体を地図から消すまでの無受信時間。
+ * FLARM の電源を切った機体は受信機の機体リストから落ちない
+ * （たきかわ実測 2026-09-12: 運用終了1時間後も10機が残り、うち1機は
+ * 4か月前の位置のままだった）。リストの `last_seen_sec` は経過時間と
+ * 対応しないので、位置の時刻で判断する。
+ *
+ * 上空で受信が途切れた機体は消さない。最後に見えた場所は捜す側に必要な
+ * 情報で、勝手に消してはいけない。翌朝のログブック更新まで残す。
+ */
+const GROUND_STALE_MS = 10 * 60_000;
 // 離着陸・離脱の判定に使う閾値はサーバ側 (src/lib/flight-tracker.ts) にある。
 
 // Haversine distance in meters
@@ -133,7 +144,7 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 // glide ratio needed = distance / height_above_field
 // danger when needed ratio > safe ratio (can't reach field)
 function isDanger(pos: AircraftPosition, safeGlideRatio: number, fieldLat: number, fieldLon: number, fieldElev: number): boolean {
-  if (pos.altitude_m < GROUND_ALT_M) return false; // on ground
+  if (pos.altitude_m < GROUND_ALT_M + fieldElev) return false; // on ground
   const heightAboveField = pos.altitude_m - fieldElev;
   if (heightAboveField <= 0) return false;
   const distM = haversineM(fieldLat, fieldLon, pos.latitude, pos.longitude);
@@ -145,7 +156,7 @@ function isDanger(pos: AircraftPosition, safeGlideRatio: number, fieldLat: numbe
 type AircraftAlert = "normal" | "low" | "danger";
 
 function getAlert(pos: AircraftPosition, safeGlideRatio: number, fieldLat: number, fieldLon: number, fieldElev: number): AircraftAlert {
-  if (pos.altitude_m < GROUND_ALT_M) return "normal";
+  if (pos.altitude_m < GROUND_ALT_M + fieldElev) return "normal";
   if (isDanger(pos, safeGlideRatio, fieldLat, fieldLon, fieldElev)) return "danger";
   const lowAltM = LOW_ALT_FT * 0.3048 + fieldElev;
   if (pos.altitude_m < lowAltM) return "low";
@@ -400,6 +411,8 @@ export default function FlightMap() {
   const phasesRef = useRef<Record<string, FlightPhase>>({});
   /** 機体ごとに、ありえない位置を連続で弾いた回数 */
   const rejectCountsRef = useRef<Record<string, number>>({});
+  /** 前回の掃除で見たログブック日。変わったら地図を片付ける */
+  const lastSweepDayRef = useRef<string>("");
   /** 手動編集の直後はサーバの取得結果で上書きしない（入力中の値が消えるため） */
   const lastManualEditRef = useRef(0);
   const logTableRef = useRef<HTMLDivElement>(null);
@@ -423,6 +436,37 @@ export default function FlightMap() {
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [logHeight, setLogHeight] = useState(160);
   const mainRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 地上で受信が途絶えた機体を地図から下ろす。
+   * 上空で消えた機体は残し、ログブックの日が変わったところで全部片付ける。
+   */
+  useEffect(() => {
+    const sweep = () => {
+      const aircraft = aircraftRef.current;
+      const map = mapRef.current;
+      const nowMs = Date.now();
+      const day = logbookDay();
+      const newDay = lastSweepDayRef.current !== "" && lastSweepDayRef.current !== day;
+      lastSweepDayRef.current = day;
+      let changed = false;
+      for (const [id, ac] of aircraft) {
+        const silentMs = nowMs - ac.lastUpdateMs;
+        const airborne = phasesRef.current[id]
+          ? phasesRef.current[id] !== "ground"
+          : ac.position.altitude_m >= GROUND_ALT_M + unitsRef.current.airfield.elevation_m;
+        // 上空で消えた機体は日が変わるまで残す
+        if (!newDay && (airborne || silentMs < GROUND_STALE_MS)) continue;
+        map?.removeLayer(ac.marker);
+        map?.removeLayer(ac.trail);
+        aircraft.delete(id);
+        changed = true;
+      }
+      if (changed) setAircraftCount(aircraft.size);
+    };
+    const id = setInterval(sweep, 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Hydration-safe: restore client-only state in useEffect
   useEffect(() => {
@@ -945,24 +989,38 @@ export default function FlightMap() {
   // ── Categorize aircraft ──
   const allAircraft = Array.from(aircraftRef.current.entries());
 
-  const isLost = (ac: TrackedAircraft) =>
-    ac.position.altitude_m >= GROUND_ALT_M && (now - ac.lastUpdateMs) > LOST_SIGNAL_SEC * 1000;
+  const { latitude: fLat, longitude: fLon, elevation_m: fElev } = airfield;
+
+  // 地上か上空かは、離着陸を実際に判定しているサーバ側の phase を使う。
+  // 画面側でも高度の閾値を持つと判定が二重になり、必ずどこかでずれる。
+  // 実際、素の海抜 100m と比べていたため滑空場の標高が抜けており、標高 23m の
+  // たきかわでは対地 77m——まだ進入中——で地上リストへ落ちていた。
+  // 標高 100m を超える滑空場では全機が地上扱いになる。
+  // サーバがまだ見ていない機体（受信開始時から飛んでいる等）だけ高度で補う。
+  const isAirborne = (id: string, ac: TrackedAircraft): boolean => {
+    const phase = phasesRef.current[id];
+    if (phase) return phase !== "ground";
+    return ac.position.altitude_m >= GROUND_ALT_M + fElev;
+  };
+
+  const isLost = (id: string, ac: TrackedAircraft) =>
+    isAirborne(id, ac) && (now - ac.lastUpdateMs) > LOST_SIGNAL_SEC * 1000;
 
   // "Danger" = lost signal OR insufficient glide path (while airborne) — FLARM only
-  const { latitude: fLat, longitude: fLon, elevation_m: fElev } = airfield;
-  const dangerList = allAircraft.filter(([, ac]) =>
+  const dangerList = allAircraft.filter(([id, ac]) =>
     !ac.adsb &&
-    ac.position.altitude_m >= GROUND_ALT_M &&
-    (isLost(ac) || isDanger(ac.position, units.safeGlideRatio, fLat, fLon, fElev))
+    isAirborne(id, ac) &&
+    (isLost(id, ac) || isDanger(ac.position, units.safeGlideRatio, fLat, fLon, fElev))
   );
-  const airborne = allAircraft.filter(([, ac]) =>
+  const airborne = allAircraft.filter(([id, ac]) =>
     !ac.adsb &&
-    ac.position.altitude_m >= GROUND_ALT_M &&
-    !isLost(ac) &&
+    isAirborne(id, ac) &&
+    !isLost(id, ac) &&
     !isDanger(ac.position, units.safeGlideRatio, fLat, fLon, fElev)
   );
-  const adsbAirborne = allAircraft.filter(([, ac]) => ac.adsb && ac.position.altitude_m >= GROUND_ALT_M);
-  const ground = allAircraft.filter(([, ac]) => !ac.adsb && ac.position.altitude_m < GROUND_ALT_M);
+  // ADS-B は飛行記録の検知対象外（サーバ側 phase を持たない）ので高度で見る
+  const adsbAirborne = allAircraft.filter(([, ac]) => ac.adsb && ac.position.altitude_m >= GROUND_ALT_M + fElev);
+  const ground = allAircraft.filter(([id, ac]) => !ac.adsb && !isAirborne(id, ac));
 
   const selectedDetail = selectedAircraft
     ? aircraftRef.current.get(selectedAircraft)
@@ -970,7 +1028,7 @@ export default function FlightMap() {
 
   const lowAltM = LOW_ALT_FT * 0.3048 + fElev;
   function isLowAlt(alt_m: number): boolean {
-    return alt_m >= GROUND_ALT_M && alt_m < lowAltM;
+    return alt_m >= GROUND_ALT_M + fElev && alt_m < lowAltM;
   }
 
   return (
@@ -1129,10 +1187,11 @@ export default function FlightMap() {
                         <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           <ReleaseAltInput
                                 releaseAlt={entry.releaseAlt}
+                                inferred={entry.releaseInferred === true}
                                 altUnit={units.altitude}
                                 onChange={(newAlt) => {
                                   const updated = [...flightLog];
-                                  updated[i] = { ...updated[i], releaseAlt: newAlt };
+                                  updated[i] = { ...updated[i], releaseAlt: newAlt, releaseInferred: false };
                                   flightLogRef.current = updated;
                                   setFlightLog(updated);
                                 }}
@@ -1259,7 +1318,7 @@ export default function FlightMap() {
                 <HelpHint sectionId="map-path-warning" title="警告の判定基準" />
               </div>
               {dangerList.map(([id, ac]) => {
-                const lost = isLost(ac);
+                const lost = isLost(id, ac);
                 const secAgo = lost ? Math.round((now - ac.lastUpdateMs) / 1000) : 0;
                 const h = ac.position.altitude_m - fElev;
                 const d = haversineM(fLat, fLon, ac.position.latitude, ac.position.longitude);
@@ -1567,10 +1626,13 @@ function StatusItem({
 
 function ReleaseAltInput({
   releaseAlt,
+  inferred,
   altUnit,
   onChange,
 }: {
   releaseAlt: number | null;
+  /** 曳航機から写した値。自分で測れた値と見分けが付くようにする */
+  inferred?: boolean;
   altUnit: "m" | "ft";
   onChange: (alt: number | null) => void;
 }) {
@@ -1608,6 +1670,15 @@ function ReleaseAltInput({
       <span className="text-[10px] ml-0.5" style={{ color: "var(--color-text-secondary)" }}>
         {altUnit === "ft" ? "ft" : "m"}
       </span>
+      {inferred && !editing && (
+        <span
+          className="text-[10px] ml-0.5"
+          style={{ color: "var(--color-text-secondary)" }}
+          title="曳航機の離脱高度から推定した値です（この機体自身の離脱は検知できませんでした）"
+        >
+          ※
+        </span>
+      )}
     </>
   );
 }
