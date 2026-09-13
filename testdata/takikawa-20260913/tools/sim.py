@@ -1,7 +1,8 @@
 import sys,os,json,collections,math
-ELEV=23.0; REG={"FLRDB072C":"JA0000","FLRDB0730":"JA0000","FLRDB0733":"T2",
- "ICA84B58E":"HC","FLRDB0732":"JA0000","FLRDB072E":"KH","FLRDB072F":"MT"}
-TOW={"FLRDB072C","FLRDB0730"}
+ELEV=23.0
+# 登録記号と曳航機の一覧は、リポジトリに入れない機体DB（../aircraft-db.json）から読む
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lib_legs import REG, TOW
 TAKEOFF=30/3.6; LANDSPD=10/3.6; ROLLSPD=50/3.6; ROLLSEC=8
 AIRCONF=500*0.3048; ONGND=50
 RELMIN=150; TOWDROP=50; TOWMIN=300; GAIN=100; CLACT=1.5; CLSTOP=0.0
