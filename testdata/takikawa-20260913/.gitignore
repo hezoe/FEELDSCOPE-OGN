@@ -1,3 +1,7 @@
 # 生の受信ログは1日で 65MB を超えるのでリポジトリには入れない。
 # 解析の手順と結果は README.md と tools/ に残す。
 capture-*.jsonl
+# 機体の登録記号と機体IDの対応が分かる記録は GitHub で配布しない。手元にだけ置く。
+flight-log-*.json
+flightlog-changes.log
+monitor-notes.md

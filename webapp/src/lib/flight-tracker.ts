@@ -900,7 +900,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       }
     } else if (tr.phase === "ground" && agl >= ON_GROUND_AGL_M) {
       // 地上にいた機体が、受信の途切れているあいだに離陸していた。たきかわ 2026-09-13
-      // 実測: JA03KH は地上で受信が2時間途切れ、次は曳航中の対地572m で見つかった
+      // 実測: あるグライダーは地上で受信が2時間途切れ、次は曳航中の対地572m で見つかった
       // （実際の離陸は5分前）。見つかった時刻で離陸を作ると時刻がずれ、曳航機との
       // 組も離脱高度も取れないので、並んで上がる曳航機を探してから決める。
       tr.phase = "airborne";

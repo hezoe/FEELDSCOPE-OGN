@@ -201,15 +201,15 @@ def _parked(t0, n, step=1):
 def test_power_on_garbage_first_position(m):
     """電源投入直後の壊れた1点目を配信せず、続く正常な位置を捨てないこと。
 
-    たきかわ 2026-09-13 実測: T2 の1点目は 対地3m・238km 先。それを基準にした
+    たきかわ 2026-09-13 実測: あるグライダーの1点目は 対地3m・238km 先。それを基準にした
     ため、続く正常な駐機位置を5点「跳び」として捨て、壊れた1点目は配信していた。
     """
     f = m.PositionFilter()
     garbage = _fix(1000, 45.6, 143.9, 26)             # 238km 先
-    out = f.filter("FLRDB0733", [garbage] + _parked(1005, 6))
+    out = f.filter("FLRTEST01", [garbage] + _parked(1005, 6))
     assert garbage not in out, "壊れた1点目を配信している"
     assert len(out) == 6, "正常な位置を捨てている: %d件" % len(out)
-    assert f.last_good("FLRDB0733")["latitude"] == 43.55298
+    assert f.last_good("FLRTEST01")["latitude"] == 43.55298
 
 
 def test_garbage_after_silence(m):
@@ -219,9 +219,9 @@ def test_garbage_after_silence(m):
     1点を出し、偽の離陸が記録された。
     """
     f = m.PositionFilter()
-    f.filter("FLRDB0730", _parked(1000, 3))
+    f.filter("FLRTEST02", _parked(1000, 3))
     garbage = _fix(1600, 44.4, 142.5, 8258)
-    out = f.filter("FLRDB0730", [garbage] + _parked(1605, 3))
+    out = f.filter("FLRTEST02", [garbage] + _parked(1605, 3))
     assert garbage not in out, "無受信明けの壊れた位置を配信している"
     assert len(out) == 3, "無受信明けの正常な位置を捨てている: %d件" % len(out)
 
