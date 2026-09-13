@@ -50,6 +50,13 @@ MAX_VERTICAL_SPEED_MS = 40    # 直前の位置からの見かけの上昇・降
 CONTINUITY_MAX_GAP_SEC = 300
 # 連続してこれだけ弾いたら基準側が怪しいので取り直す
 MAX_CONSECUTIVE_REJECTS = 5
+# 比べる相手がいない位置（初見・無受信明け・基準の取り直し）は、互いにつながった
+# 位置がこれだけそろうまで配信しない。電源を入れた直後の FLARM は GPS が測位する
+# 前の位置を出すことがある（たきかわ実測: 対地3mで 539 km/h・238km 先、
+# 対地8235m・102km 先）。その1点は前の位置と比べる方法では弾けない。
+CONFIRM_POSITIONS = 2
+# 裏付けを待つ位置の保持時間。これより古い保留は、つながる相手が来なかった壊れた位置
+PENDING_MAX_AGE_SEC = 60
 
 # 復号エラーは機体IDそのものも壊す。1ビット化けただけで「初めて見る機体」に
 # なるため、直前の位置と比べる方法では弾けない（比べる相手がいない）。
@@ -331,6 +338,97 @@ def is_continuous(prev, pos):
     return True
 
 
+def _linked(a, b):
+    """2つの位置が互いにつながっているか（時刻の前後は問わない）。"""
+    if a is b:
+        return True
+    first, second = (a, b) if a["timestamp_epoch"] <= b["timestamp_epoch"] else (b, a)
+    return is_continuous(first, second)
+
+
+class PositionFilter:
+    """壊れた位置を落とし、配信してよい位置だけを通す（機体ごとの状態を持つ）。
+
+    直前に採用した位置から見てありえない動きをした位置は落とす。比べる相手が
+    いない位置（初見・無受信明け・基準の取り直し）は保留し、互いにつながった
+    位置が CONFIRM_POSITIONS 件そろってから通す。電源投入直後の壊れた1点を
+    基準にしてしまうと、続く正常な位置のほうを跳びとして捨てることになる
+    （たきかわ 2026-09-13 実測: 正常な5点を捨て、壊れた1点は配信していた）。
+    """
+
+    def __init__(self):
+        self._last_good = {}       # device_id -> last position accepted as plausible
+        self._reject_counts = {}   # device_id -> consecutive rejections
+        self._rejected = {}        # device_id -> positions rejected since the last good one
+        self._pending = {}         # device_id -> positions waiting for confirmation
+
+    def last_good(self, dev_id):
+        """採用した最新の位置。裏付けが取れていない機体は None。"""
+        return self._last_good.get(dev_id)
+
+    def filter(self, dev_id, new_positions):
+        """時刻昇順の位置を受け取り、配信してよい位置を古い順に返す。"""
+        accepted = []
+        for pos in new_positions:
+            prev = self._last_good.get(dev_id)
+            if prev is not None and (pos["timestamp_epoch"] - prev["timestamp_epoch"]
+                                     > CONTINUITY_MAX_GAP_SEC):
+                # 無受信明け。前の位置と比べられないので裏付けからやり直す
+                self._forget(dev_id)
+                prev = None
+            if prev is not None:
+                if is_continuous(prev, pos):
+                    self._reject_counts[dev_id] = 0
+                    self._rejected.pop(dev_id, None)
+                    self._last_good[dev_id] = pos
+                    accepted.append(pos)
+                    continue
+                n = self._reject_counts.get(dev_id, 0) + 1
+                self._reject_counts[dev_id] = n
+                self._rejected.setdefault(dev_id, []).append(pos)
+                log.warning(
+                    "%s: implausible jump dropped (%.1fkm, %dm, %d consecutive)",
+                    dev_id,
+                    haversine_m(prev["latitude"], prev["longitude"],
+                                pos["latitude"], pos["longitude"]) / 1000.0,
+                    pos["altitude_m"] - prev["altitude_m"], n)
+                if n < MAX_CONSECUTIVE_REJECTS:
+                    continue
+                # 連続で弾き続けるのは基準側が壊れている可能性がある。基準を捨て、
+                # 弾いた位置どうしがつながるかで裏付けを取り直す。
+                log.warning("%s: resyncing position reference", dev_id)
+                rejected = self._rejected.pop(dev_id, [])
+                self._forget(dev_id)
+                self._pending[dev_id] = rejected[:-1]
+            accepted.extend(self._confirm(dev_id, pos))
+        return accepted
+
+    def _forget(self, dev_id):
+        self._last_good.pop(dev_id, None)
+        self._reject_counts.pop(dev_id, None)
+        self._rejected.pop(dev_id, None)
+
+    def _confirm(self, dev_id, pos):
+        """保留に pos を加え、互いにつながった位置がそろえばそれを返す。"""
+        pending = [p for p in self._pending.get(dev_id, [])
+                   if pos["timestamp_epoch"] - p["timestamp_epoch"] <= PENDING_MAX_AGE_SEC]
+        pending.append(pos)
+        # いちばん多くの位置とつながる位置を軸に、それとつながる位置を集める。
+        # 壊れた位置はほかのどれともつながらないので、ここで落ちる。
+        best = max(pending, key=lambda a: sum(1 for b in pending if _linked(a, b)))
+        group = [p for p in pending if _linked(best, p)]
+        if len(group) < CONFIRM_POSITIONS:
+            self._pending[dev_id] = pending
+            return []
+        if len(group) < len(pending):
+            log.warning("%s: dropped %d unconfirmed position(s)",
+                        dev_id, len(pending) - len(group))
+        self._pending.pop(dev_id, None)
+        self._last_good[dev_id] = group[-1]
+        self._reject_counts[dev_id] = 0
+        return group
+
+
 def parse_aircraft_list(text):
     """Parse full aircraft-list.txt into structured data."""
     aircraft = {}
@@ -528,8 +626,7 @@ class OgnMqttPublisher:
         )
         self._connected = False
         self._prev_positions = {}  # device_id -> last timestamp_epoch published
-        self._last_good = {}       # device_id -> last position accepted as plausible
-        self._reject_counts = {}   # device_id -> consecutive rejections
+        self._filter = PositionFilter()
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
@@ -624,66 +721,41 @@ class OgnMqttPublisher:
 
             now_epoch = time.time()
             for dev_id, ac in aircraft.items():
-                # Always publish status with latest position
+                positions = ac["positions"]          # 時刻昇順・重複除去済み
+                if positions:
+                    newest = positions[-1]["timestamp_epoch"]
+                    prev_ts = self._prev_positions.get(dev_id)
+
+                    if prev_ts is not None and newest < prev_ts - CLOCK_RESET_TOLERANCE_SEC:
+                        # 機体側の時計が巻き戻った。そのままだと以後ずっと配信が
+                        # 止まるので、この機体だけ初見として扱い直す。
+                        log.warning(
+                            "%s: position time went backwards (%.0fs), resyncing",
+                            dev_id, prev_ts - newest,
+                        )
+                        prev_ts = None
+
+                    if prev_ts is None:
+                        # 初見の機体（ogn-mqtt 再起動直後を含む）。60件を一気に流すと
+                        # ブラウザの航跡が一瞬で書き戻されるので末尾だけにする。
+                        new_positions = positions[-FIRST_SEEN_POSITIONS:]
+                    else:
+                        new_positions = [p for p in positions if p["timestamp_epoch"] > prev_ts]
+
+                    # 復号エラーや電源投入直後の壊れた位置を落とす。地図で機体が
+                    # とんでもない場所へ飛び、航跡も飛行記録も壊れるため。
+                    # 必ず古い順に流す。順序が崩れるとブラウザ側の航跡がジグザグになる。
+                    for pos in self._filter.filter(dev_id, new_positions):
+                        self.publish_aircraft_position(dev_id, pos)
+
+                    self._prev_positions[dev_id] = newest
+
+                # 機体一覧・ステータスの「最新位置」も、採用した位置に揃える。
+                # 裏付けの取れていない機体は位置を出さない。
+                ac["latest_position"] = self._filter.last_good(dev_id)
                 self.publish_aircraft_status(
                     dev_id, ac["summary"], ac["latest_position"]
                 )
-
-                positions = ac["positions"]          # 時刻昇順・重複除去済み
-                if not positions:
-                    continue
-                newest = positions[-1]["timestamp_epoch"]
-                prev_ts = self._prev_positions.get(dev_id)
-
-                if prev_ts is not None and newest < prev_ts - CLOCK_RESET_TOLERANCE_SEC:
-                    # 機体側の時計が巻き戻った。そのままだと以後ずっと配信が
-                    # 止まるので、この機体だけ初見として扱い直す。
-                    log.warning(
-                        "%s: position time went backwards (%.0fs), resyncing",
-                        dev_id, prev_ts - newest,
-                    )
-                    prev_ts = None
-
-                if prev_ts is None:
-                    # 初見の機体（ogn-mqtt 再起動直後を含む）。60件を一気に流すと
-                    # ブラウザの航跡が一瞬で書き戻されるので末尾だけにする。
-                    new_positions = positions[-FIRST_SEEN_POSITIONS:]
-                else:
-                    new_positions = [p for p in positions if p["timestamp_epoch"] > prev_ts]
-
-                # 復号エラーで座標や高度が壊れた位置を落とす。地図で機体が
-                # とんでもない場所へ飛び、航跡も飛行記録も壊れるため。
-                accepted = []
-                for pos in new_positions:
-                    prev = self._last_good.get(dev_id)
-                    if prev is not None and not is_continuous(prev, pos):
-                        n = self._reject_counts.get(dev_id, 0) + 1
-                        self._reject_counts[dev_id] = n
-                        log.warning(
-                            "%s: implausible jump dropped (%.1fkm, %dm, %d consecutive)",
-                            dev_id,
-                            haversine_m(prev["latitude"], prev["longitude"],
-                                        pos["latitude"], pos["longitude"]) / 1000.0,
-                            pos["altitude_m"] - prev["altitude_m"], n)
-                        if n < MAX_CONSECUTIVE_REJECTS:
-                            continue
-                        # 連続で弾き続けるのは基準側が壊れている可能性がある。
-                        # ここで基準を取り直して追従を戻す。
-                        log.warning("%s: resyncing position reference", dev_id)
-                    self._reject_counts[dev_id] = 0
-                    self._last_good[dev_id] = pos
-                    accepted.append(pos)
-
-                # 必ず古い順に流す。順序が崩れるとブラウザ側の航跡がジグザグになる。
-                for pos in accepted:
-                    self.publish_aircraft_position(dev_id, pos)
-
-                # 機体一覧・ステータスの「最新位置」も、採用した位置に揃える
-                good = self._last_good.get(dev_id)
-                if good is not None:
-                    ac["latest_position"] = good
-
-                self._prev_positions[dev_id] = newest
 
             # 長時間運転で _prev_positions が膨らまないよう、十分古い記録は捨てる
             if len(self._prev_positions) > 1000:
