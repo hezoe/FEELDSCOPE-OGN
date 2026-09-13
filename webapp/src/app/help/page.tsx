@@ -655,11 +655,52 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.3 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.3</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-13</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="電源を入れた直後の FLARM の位置で、飛行記録が壊れる問題を修正しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>電源を入れた直後の FLARM は、GPS が測位を終える前の位置を<strong>1回だけ</strong>出すことがあります。たきかわの実測では「対地3mで 539 km/h・238km 先」「対地8235m・102km 先」という位置が届きました。</li>
+          <li>これまではこの1点で機体の状態を決めていたため、<strong>駐機中の機体が「飛行中」になり、その日の1便目の離陸と離脱高度が記録されません</strong>でした（2026-09-13）。反対に、地上にいる機体に<strong>1分ほどの偽の飛行</strong>が記録されることもありました（2026-09-12 に2件）。</li>
+          <li>「前の位置と比べて跳んだ位置を捨てる」従来の仕組みは、比べる相手のいない1点目を判定できません。受信機側ではこの1点が基準になり、<strong>続く正常な位置のほうを捨てて</strong>いました。</li>
+          <li>初めて受信した機体と、5分以上受信が途切れた機体は、<strong>続けて届いた位置どうしがつながることを確かめてから</strong>使うようにしました（受信機と飛行記録の両方）。遅れるのは受信を始めた直後の数秒だけです。</li>
+          <li>離陸は、30 km/h 超と対地20m以上を<strong>それぞれ2回続けて</strong>受け、さらに滑走を始めてから<strong>実際に50m以上動いた</strong>ときに記録します。格納庫の近くで FLARM を入れると、止まったまま「33 km/h・対地31m」のような位置が続くことがあり、2026-09-13 の夕方に1分未満の偽の飛行が記録されていました。記録される離陸時刻は、これまでどおり滑走を始めた時刻です。</li>
+          <li>地上にいた機体が長く受信できず、<strong>次に曳航中の上空で見つかった</strong>場合（FLARM の電源を入れたのが離陸後だった等）は、見つかった時刻を離陸時刻にしていました。2026-09-13 には 13:47 の曳航が 13:52 と記録され、離脱高度も入りませんでした。並んで上がっている曳航機がいれば、<strong>その曳航機の離陸時刻を使い、離脱高度も引き継ぐ</strong>ようにしました。受信機を再起動した直後などで、<strong>その日初めて曳航中の上空で見つかった</strong>グライダーも同じように記録します（これまでは記録されませんでした）。並ぶ曳航機がいない上空の機体は、これまでどおり飛行として記録しません。</li>
+          <li>それでも状態を誤った場合に備えて、離陸を観測していない「飛行中」の機体が<strong>地上で30秒止まっていたら地上に戻します</strong>。</li>
+          <li>たきかわ2日分の実運用データで検証しました。取りこぼしていた便（10:11〜10:33・離脱964m）が記録され、13:52 と記録されていた曳航が 13:47・離脱960m に直り、偽の飛行2件が消え、<strong>ほかの便は1件も変わりません</strong>でした。</li>
+        </ul>
+      </Card>
+
+      <Card title="離脱の瞬間を受信できなかった曳航は、離脱高度を空欄にしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>曳航機の離脱は「受信できた最高高度から 50m 下がったら、その最高高度を離脱高度とする」方式です。上昇中に受信が途切れ、その間に離脱すると、<strong>途切れる直前の高度が離脱高度として記録</strong>されていました。</li>
+          <li>2026-09-13 の実測では、曳航機が 625m で上昇中のまま約5分受信が途切れ、次は降下中でした。グライダーは途切れ明けにすでに 929m にいて、実際の離脱は約930m でしたが、<strong>622m（2041ft）と記録</strong>されていました。</li>
+          <li>次の2つの形は、離脱が受信の途切れの中で起きていて観測できていないものとして、<strong>離脱高度を空欄</strong>にします。
+            <ul className="list-disc ml-5 mt-1 space-y-1">
+              <li>上昇を続けたまま（1.5 m/s 以上）20秒より長く受信が途切れ、明けたときには降下していた</li>
+              <li>上昇中に20秒より長く途切れ、明けた最初の位置で<strong>既にはっきり降下していた</strong>（-3 m/s 以下）。その位置は本当の最高点ではありません（2026-09-13 に 920m と記録された曳航は、実際には約960〜970m で離脱していました）</li>
+            </ul>
+          </li>
+          <li>索でつながっていたグライダーも、離脱高度を空欄のまま「離脱済み」にします。飛行中のまま残すと、あとでサーマルを抜けたときの減速を離脱と読み、実際より数百m 高い値が入ることがありました。必要なら手で入力してください。</li>
+          <li>上昇が止まりかけた最高点（離脱の瞬間）のあとで途切れた場合や、下がり始めたばかりの位置が最高点の場合は、離脱が見えているので、これまでどおり記録します。2日分の実運用データで、グライダー側の航跡と照らして振り分けが正しいことを確かめました。</li>
+        </ul>
+      </Card>
+
+      <Card title="飛行記録の判断をシステムログに残すようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>離陸・着陸・離脱・曳航ペアの確定・壊れた位置の破棄を、判断のたびに1行ずつ記録します。記録が実際と食い違ったときに、あとから原因を追えます。</li>
+          <li>保存先は Web アプリのシステムログです（<code>journalctl -u feeldscope-webapp</code>）。SD カードへの書き込みは増えません。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.2 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.2</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-12</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="電源を切った機体が地図に残り続ける問題を修正しました">

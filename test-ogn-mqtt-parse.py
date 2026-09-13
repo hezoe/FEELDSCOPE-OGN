@@ -188,6 +188,84 @@ def test_single_packet_is_a_ghost(m):
     assert r["packets_received"] >= m.MIN_PACKETS_TO_PUBLISH,         "本物の機体を幽霊とみなしている"
 
 
+def _fix(t, lat, lon, alt):
+    return {"timestamp_epoch": float(t), "latitude": lat, "longitude": lon,
+            "altitude_m": alt}
+
+
+def _parked(t0, n, step=1):
+    """たきかわの駐機位置に止まっている機体の位置を n 件。"""
+    return [_fix(t0 + i * step, 43.55298, 141.89295, 27) for i in range(n)]
+
+
+def test_power_on_garbage_first_position(m):
+    """電源投入直後の壊れた1点目を配信せず、続く正常な位置を捨てないこと。
+
+    たきかわ 2026-09-13 実測: T2 の1点目は 対地3m・238km 先。それを基準にした
+    ため、続く正常な駐機位置を5点「跳び」として捨て、壊れた1点目は配信していた。
+    """
+    f = m.PositionFilter()
+    garbage = _fix(1000, 45.6, 143.9, 26)             # 238km 先
+    out = f.filter("FLRDB0733", [garbage] + _parked(1005, 6))
+    assert garbage not in out, "壊れた1点目を配信している"
+    assert len(out) == 6, "正常な位置を捨てている: %d件" % len(out)
+    assert f.last_good("FLRDB0733")["latitude"] == 43.55298
+
+
+def test_garbage_after_silence(m):
+    """無受信明けの壊れた1点目を配信しないこと（前の位置が古くて比べられない）。
+
+    たきかわ 2026-09-12 実測: 駐機中の曳航機が 561秒ぶりに 対地8235m・102km 先の
+    1点を出し、偽の離陸が記録された。
+    """
+    f = m.PositionFilter()
+    f.filter("FLRDB0730", _parked(1000, 3))
+    garbage = _fix(1600, 44.4, 142.5, 8258)
+    out = f.filter("FLRDB0730", [garbage] + _parked(1605, 3))
+    assert garbage not in out, "無受信明けの壊れた位置を配信している"
+    assert len(out) == 3, "無受信明けの正常な位置を捨てている: %d件" % len(out)
+
+
+def test_airborne_arrival_is_published(m):
+    """上空から受信圏に入ってきた機体は、2点目で遅れなく配信されること。"""
+    f = m.PositionFilter()
+    first = [_fix(1000, 43.60, 141.90, 900)]
+    assert f.filter("FLRAAA111", first) == [], "裏付けの前に配信している"
+    out = f.filter("FLRAAA111", [_fix(1001, 43.60027, 141.90, 899)])
+    assert len(out) == 2, "つながった2点を配信していない: %d件" % len(out)
+
+
+def test_single_glitch_in_flight(m):
+    """飛行中の単発の壊れた位置だけを落とし、前後は通すこと。"""
+    f = m.PositionFilter()
+    track = [_fix(1000 + i, 43.60 + i * 0.00027, 141.90, 900) for i in range(5)]
+    f.filter("FLRAAA111", track)
+    glitch = _fix(1005, 44.60, 141.90, 900)
+    after = _fix(1006, 43.60 + 6 * 0.00027, 141.90, 900)
+    out = f.filter("FLRAAA111", [glitch, after])
+    assert out == [after], "単発の壊れた位置の扱いが違う: %r" % out
+
+
+def test_bad_reference_recovers(m):
+    """基準が壊れていた場合、弾いた正常な位置どうしで裏付けて復帰すること。"""
+    f = m.PositionFilter()
+    f._last_good["FLRBBB222"] = _fix(999, 45.6, 143.9, 26)   # 壊れた基準
+    good = _parked(1000, m.MAX_CONSECUTIVE_REJECTS)
+    out = f.filter("FLRBBB222", good)
+    assert out == good[:len(out)] and len(out) >= m.CONFIRM_POSITIONS, \
+        "基準の取り直し後に正常な位置を配信していない: %d件" % len(out)
+    assert f.last_good("FLRBBB222")["latitude"] == 43.55298
+
+
+def test_lone_position_expires(m):
+    """つながる相手が来なかった1点は、保留期限を過ぎたら配信されずに消えること。"""
+    f = m.PositionFilter()
+    f.filter("FLRCCC333", [_fix(1000, 45.6, 143.9, 26)])
+    out = f.filter("FLRCCC333", _parked(1000 + m.PENDING_MAX_AGE_SEC + 5, 2))
+    assert len(out) == 2 and all(p["latitude"] == 43.55298 for p in out), \
+        "期限切れの保留を配信している: %r" % out
+
+
 def main():
     m = load_ogn_mqtt()
     tests = [
@@ -199,6 +277,12 @@ def main():
         test_absurd_position_rejected,
         test_continuity_filter,
         test_single_packet_is_a_ghost,
+        test_power_on_garbage_first_position,
+        test_garbage_after_silence,
+        test_airborne_arrival_is_published,
+        test_single_glitch_in_flight,
+        test_bad_reference_recovers,
+        test_lone_position_expires,
     ]
     failed = 0
     for test in tests:
