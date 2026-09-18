@@ -18,7 +18,18 @@ async function isInitdActive(name: string): Promise<boolean> {
   if (!isSafeServiceName(name)) return false;
   // 状態表示は終了コードが 0 でないことがあるので、出力だけを見る
   const out = await runQuiet(`/etc/init.d/${name}`, ["status"]);
-  return /running/i.test(out);
+  if (/running/i.test(out)) return true;
+
+  // rtlsdr-ogn の init.d は shellbox なので "running" とは言わず、表を出す:
+  //   pid    port  user  dir                  command
+  //   16218  50000 pi    /home/pi/rtlsdr-ogn  ./ogn-rf     ../rtlsdr-ogn.conf
+  // 上がっていないポートは PID の代わりに STOPPED と出る。"running" だけを見ていると
+  // 動いていても必ず「停止中」と表示され、実態と食い違う（実際に食い違っていた）。
+  // ogn-rf と ogn-decode は片方だけでは意味が無いので、STOPPED が1つでもあれば停止扱い。
+  const hasPidRow = out.split("\n").some(l => /^\s*\d+\s+\d+\s/.test(l));
+  const hasStopped = /(^|\s)STOPPED(\s|$)/i.test(out);
+  // systemctl は autossh が残るだけで active を返すので、判断材料に使わない
+  return hasPidRow && !hasStopped;
 }
 
 async function getReceiverId(): Promise<string> {
