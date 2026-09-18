@@ -127,12 +127,19 @@ cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
 install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/feeldscope-reset-password
 
+# OGN受信機の監視（応答が無ければ停止→起動で自動復帰）
+cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/
+install -m 755 "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh" /usr/local/sbin/feeldscope-ogn-watchdog.sh
+
 chown -R pi:pi "$FEELDSCOPE_DIR"
 
 systemctl daemon-reload
 # リモートサポートの ON/OFF は wg-quick@wg0 の enable 状態が正本。
 # 更新で切り替えない（ON のまま更新しても接続は維持される）。
 systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
+# 受信機の監視は常に ON。止めたいときは /boot/feeldscope-ogn-watchdog.disabled を置く
+systemctl enable --now feeldscope-ogn-watchdog.timer >/dev/null 2>&1 || true
 log_info "Files updated"
 
 # =============================================================================

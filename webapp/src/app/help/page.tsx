@@ -288,7 +288,7 @@ function ManualContent() {
             <ManualRow label="adsb-poller" desc="tar1090からADS-Bデータを定期取得してMQTTに配信" />
             <ManualRow label="feeldscope-webapp" desc="本Webアプリケーション" />
             <ManualRow label="avahi-daemon" desc="mDNS（&lt;hostname&gt;.local 名前解決）デーモン" />
-            <ManualRow label="rtlsdr-ogn (init.d)" desc="OGNのRF受信・デコードプロセス（init.d管理）" />
+            <ManualRow label="rtlsdr-ogn (init.d)" desc="OGNのRF受信・デコードプロセス（init.d管理）。応答が無くなると2分ごとの見回りが自動で起動し直します" />
             <ManualRow label="稼働時間" desc="各サービスの起動からの経過時間" />
           </tbody></table>
         </Section>
@@ -589,6 +589,7 @@ function ManualContent() {
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>設定を保存して受信機を再起動</strong> — 設定変更を保存＋rtlsdr-ogn再起動。書き込んだ内容を読み戻して確認し、一致したときだけ成功と表示します</li>
             <li><strong>受信機のみ再起動</strong> — 設定は変更せずrtlsdr-ognだけ再起動</li>
+            <li>どちらも<strong>完了まで1〜2分かかります</strong>。受信機の起動は時刻合わせとOGN公式の設定マネージャ（疎通確認・自己更新）を済ませてから始まるためです。状態ページが実際に応答したことを確かめてから結果を出すので、画面が返るまで閉じずにお待ちください</li>
             <li><strong>保存内容を確認</strong> — 保存せずに、設定ファイル・再インストール用の設定・受信機が実際に使っている値を並べて比べます。食い違っていればその場所と理由（所有者・パーミッション・エラー内容）を表示します</li>
           </ul>
         </Section>
@@ -655,11 +656,33 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.5 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.5</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="受信機が止まったまま戻らなくなる不具合を直しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>症状</strong> — 「設定を保存して受信機を再起動」や「受信機のみ再起動」を押したあと、受信機が止まったまま戻らなくなることがありました。画面には「再起動しました」と出るのに状態は「停止中」のままで、もう一度押しても直りませんでした。実際に1台で4日半、受信とOGNへのアップロードが止まっていました。</li>
+          <li><strong>原因</strong> — 受信機の起動は、時刻合わせとOGN公式の設定マネージャ（疎通確認・自己更新）を済ませてから始まるため60秒前後かかります。画面側がそれを待ち切れずに打ち切ると、起動処理が最後の一歩の手前で道連れになって死んでいました。さらに受信機側の起動スクリプトは、いったんこの状態に落ちると「再起動」では二度と起動しない作りでした。</li>
+          <li><strong>対策</strong> — 再起動を「停止」と「起動」に分け、起動処理を画面側から切り離しました。そのうえで<strong>状態ページが実際に応答するまで見届けて</strong>から結果を表示します。止まっているのに「成功」と出ることはなくなります。</li>
+          <li><strong>自動復帰を追加</strong> — 受信機が応答しなくなったら、2分ごとの見回りで自動的に起動し直します。無人設置でも自力で戻ります（止めたいときは <code>/boot/feeldscope-ogn-watchdog.disabled</code> を置いてください）。</li>
+        </ul>
+      </Card>
+
+      <Card title="設定ファイルの改行の壊れを見つけて直せるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><code>/boot/OGN-receiver.conf</code> の改行にCRが混じると、受信機側はキーを1つも読めなくなります。受信機名が読めず、OGNバイナリのダウンロード先も日本向け（<code>?version=japan</code>）ではなく既定の欧州版に落ちるため、<strong>922.4MHzではなく868MHzを受信し続ける</strong>という分かりにくい壊れ方をします。Windowsから <code>/boot</code> を直接編集すると混入します。</li>
+          <li>設定画面が壊れに気づいて知らせるようにし、保存し直せば改行が直るようにしました。保存後は「受信機側から読める形で書けたか」を読み戻して確認します。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.4 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.4</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-13</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="ソースコードと検証データから機体の登録情報を除きました">

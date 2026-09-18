@@ -1,0 +1,9 @@
+[Unit]
+Description=FEELDSCOPE OGN receiver watchdog (restart rtlsdr-ogn if it stops responding)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feeldscope-ogn-watchdog.sh
+# 起動完了まで待ち切る作りなので、待ち上限(150秒)より十分長く取る
+TimeoutStartSec=300
