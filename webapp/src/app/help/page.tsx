@@ -656,11 +656,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.7 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.7</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="SkyLensモードの端末で自動復帰が誤作動していたのを直しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.2.5 で追加した受信機の自動復帰が、SkyLensモードの端末でも「受信機が止まっている」と判断して rtlsdr-ogn を起こしてしまっていました。SDRはSkyLensが使っているため、起こされた側はドングルを開けないまま居座り、<strong>状態タブに「稼働中なのに中心周波数もノイズも表示されない」</strong>という形で現れます。</li>
+          <li>受信方式の判断に <code>rtlsdr-ogn</code> の有効・無効を見るようにしました。SkyLensモードの端末では自動復帰は何もしません（リモートサポートの監視が wg0 の有効・無効を見ているのと同じ考え方です）。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.6 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.6</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="状態タブの「rtlsdr-ogn」が常に停止中と出ていたのを直しました">

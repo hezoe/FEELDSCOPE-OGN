@@ -28,6 +28,14 @@ START_WAIT_SEC="${FEELDSCOPE_OGN_START_WAIT_SEC:-150}"
 [ -e "$DISABLE_FLAG" ] && exit 0
 [ -x /etc/init.d/rtlsdr-ogn ] || exit 0
 
+# 受信方式の正本は rtlsdr-ogn の enable 状態（リモートサポート監視が wg-quick@wg0 の
+# enable 状態を正本にしているのと同じ考え方）。
+# SkyLens モードの端末では rtlsdr-ogn は disabled で、SDR は SkyLens が握っている。
+# ここを見ずに起こすと、ogn-rf がドングルを開けないまま居座り、SkyLens と取り合う。
+# 状態画面には「稼働中なのに中心周波数もノイズも出ない」という形で現れる（実際にやった）。
+enabled=$(systemctl is-enabled rtlsdr-ogn 2>/dev/null | tail -1)
+[ "$enabled" = "enabled" ] || exit 0
+
 # SDR が刺さっていない端末（VPSのデモ機、ADS-B専用機）では何もしない
 if command -v lsusb >/dev/null 2>&1; then
   lsusb 2>/dev/null | grep -qE 'RTL283[28]' || exit 0
