@@ -656,11 +656,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.6 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.6</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="状態タブの「rtlsdr-ogn」が常に停止中と出ていたのを直しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>状態タブのサービス一覧の <code>rtlsdr-ogn (init.d)</code> は、受信機が動いていても常に「停止中」と表示されていました。稼働判定が「running」という文字を探す作りで、受信機の起動スクリプトはそう言わないためです。</li>
+          <li>プロセス表を読んで判定するようにしました。ogn-rf と ogn-decode の片方だけが落ちている状態も「停止中」として出します。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.5 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.5</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="受信機が止まったまま戻らなくなる不具合を直しました">
