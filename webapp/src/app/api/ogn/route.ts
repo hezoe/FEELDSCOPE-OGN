@@ -8,13 +8,29 @@ const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.con
 const RTLSDR_OGN_CONF_AUTHORITY = "/boot/rtlsdr-ogn.conf";
 const OGN_RECEIVER_CONF_PATH = "/boot/OGN-receiver.conf";
 
-/** 受信機を再起動する手段。上から順に試す（イメージによって作りが違う）。
- *  シェルを通さないので、要素はそのまま実行ファイルと引数になる。 */
-const RESTART_COMMANDS: string[][] = [
-  ["sudo", "-n", "/etc/init.d/rtlsdr-ogn", "restart"],
-  ["sudo", "-n", "service", "rtlsdr-ogn", "restart"],
-  ["sudo", "-n", "systemctl", "restart", "rtlsdr-ogn"],
-];
+/** 受信機の再起動ログ。切り離して動かすので出力はここへ逃がす */
+const OGN_RESTART_LOG = "/tmp/feeldscope-ogn-restart.log";
+
+/** 起動を待つ上限。ntpdate + OGN-receiver-config-manager で 60 秒前後かかる */
+const OGN_START_WAIT_MS = 150_000;
+
+/** 受信機の起動・停止。値を埋め込まない固定文字列であること（sh -c に渡すため）。
+ *
+ *  init.d の `restart` は使わない。2026-09 に滝川で受信が4日半止まった原因が
+ *  この2つの罠だった:
+ *   1. `start` は procServ を上げる前に ntpdate と /root/OGN-receiver-config-manager
+ *      （疎通確認・自己更新・GeoidSepar取得）を走らせるので 60 秒前後かかる。
+ *      webapp のパイプに繋いだまま実行すると run() のタイムアウトで stdio を
+ *      切られ、起動途中のサブシェルが次の stdout 書き込みで SIGPIPE で死ぬ。
+ *      procServ が上がる直前で落ちるため、止まったまま戻らない。
+ *   2. init.d の stop() は $shells(/var/run/rtlsdr-ogn) が読めないと
+ *      「No shells started.」で `exit 0` し、スクリプトごと終了する。
+ *      `restart) stop; sleep 1; start` なので start に到達せず、しかも
+ *      終了コード 0 なので画面には「再起動しました」と出る。1 でこの状態に
+ *      落ちると、以後どれだけ押しても永久に起動しない。
+ *  そのため setsid で完全に切り離し、stop と start を別々に叩く。 */
+const OGN_RESTART_SH =
+  `/etc/init.d/rtlsdr-ogn stop; sleep 2; /etc/init.d/rtlsdr-ogn start`;
 
 /** 保存の各段階の結果。画面にそのまま出して、どこで失敗したか分かるようにする */
 export interface StepResult {
@@ -91,10 +107,27 @@ interface OgnStatus {
   positionsLastMinute?: string;
 }
 
+/**
+ * 改行を LF に揃える。
+ *
+ * /boot/OGN-receiver.conf は bash が source する。CR だけで区切られた行は
+ * bash から見ると1行なので、先頭が `#` なら後ろのキーごと全部コメント扱いになる。
+ * 実際に滝川で `### Mandatory ###\rReceiverName="TAKIKAWA1"\r…` という並びになり、
+ * ReceiverName も OGNBINARYURL も読めず、日本版(?version=japan)ではなく欧州版の
+ * バイナリが入って 868MHz を受信し続けた。画面側は JS 正規表現が CR も行末と
+ * みなすため、壊れているのに正常に見えてしまう。
+ *
+ * CR は Windows から /boot を編集すると簡単に混入する。読んだ時点で畳んでおけば、
+ * 次の保存でファイルごと LF に直る（＝勝手に直る）。
+ */
+function normalizeNewlines(text: string): string {
+  return text.replace(/\r\n?/g, "\n");
+}
+
 async function readRtlsdrConf(): Promise<string> {
   for (const p of RTLSDR_OGN_CONF_PATHS) {
     try {
-      return await readFile(p, "utf-8");
+      return normalizeNewlines(await readFile(p, "utf-8"));
     } catch { /* try next */ }
   }
   return "";
@@ -102,7 +135,7 @@ async function readRtlsdrConf(): Promise<string> {
 
 async function readReceiverConf(): Promise<string> {
   try {
-    return await readFile(OGN_RECEIVER_CONF_PATH, "utf-8");
+    return normalizeNewlines(await readFile(OGN_RECEIVER_CONF_PATH, "utf-8"));
   } catch {
     return "";
   }
@@ -127,6 +160,50 @@ async function fetchLocalPage(port: number): Promise<string> {
     { timeout: 8_000 },
   );
   return stdout;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 受信機を止めて起動し直し、実際に上がったところまで見届ける。
+ *
+ * 起動処理は setsid で切り離す（理由は OGN_RESTART_SH のコメント）。切り離すと
+ * 成否が戻ってこないので、状態ページが応答するまで待って結果を判断する。
+ * 「コマンドが 0 で返ったから成功」にはしない。止まっているのに成功と表示するのが
+ * いちばん困る。
+ */
+async function restartOgnReceiver(port: number): Promise<{ ok: boolean; detail: string }> {
+  // 受信機を持たない端末（VPSのデモ機など）で 150 秒待たされないよう先に見る
+  try {
+    await access("/etc/init.d/rtlsdr-ogn", constants.X_OK);
+  } catch {
+    return { ok: false, detail: "この端末に /etc/init.d/rtlsdr-ogn がありません（受信機なし）" };
+  }
+
+  await run(
+    "sudo",
+    ["-n", "setsid", "sh", "-c", `${OGN_RESTART_SH} > ${OGN_RESTART_LOG} 2>&1 < /dev/null &`],
+    { timeout: 20_000 },
+  );
+
+  const deadline = Date.now() + OGN_START_WAIT_MS;
+  await sleep(5_000);
+  while (Date.now() < deadline) {
+    const page = await fetchLocalPage(port).catch(() => "");
+    if (page.trim().length > 0) {
+      const sec = Math.round((OGN_START_WAIT_MS - (deadline - Date.now())) / 1000);
+      return { ok: true, detail: `${sec}秒で起動を確認しました` };
+    }
+    await sleep(5_000);
+  }
+  return {
+    ok: false,
+    detail:
+      `${Math.round(OGN_START_WAIT_MS / 1000)}秒待っても状態ページ(${rfPort(port)}番)が応答しません。` +
+      `${OGN_RESTART_LOG} を確認してください`,
+  };
 }
 
 function errMsg(e: unknown): string {
@@ -322,14 +399,21 @@ async function checkLivePosition(httpPort: number, expect?: OgnConfig): Promise<
 /** /boot/OGN-receiver.conf（再インストール時に引き継がれる元データ）を確認する */
 async function checkReceiverConf(expect?: OgnConfig): Promise<FileCheck> {
   const out: FileCheck = { path: OGN_RECEIVER_CONF_PATH, authority: false, exists: false };
-  let text = "";
+  let raw = "";
   try {
-    text = await readFile(OGN_RECEIVER_CONF_PATH, "utf-8");
+    raw = await readFile(OGN_RECEIVER_CONF_PATH, "utf-8");
     out.exists = true;
   } catch (e) {
     out.error = errMsg(e);
     return out;
   }
+  // CR が残っていると bash からは読めないのに画面上は正常に見える。ここで気づけるようにする
+  if (/\r/.test(raw)) {
+    out.error =
+      "改行に CR が混じっています。bash がキーを読めず、受信機名やバイナリURLが" +
+      "既定値に落ちます（保存し直すと LF に直ります）";
+  }
+  const text = normalizeNewlines(raw);
   out.latitude = parseFloat(extractField(text, /^Latitude\s*=\s*"([0-9.\-]+)"/m, "NaN"));
   out.longitude = parseFloat(extractField(text, /^Longitude\s*=\s*"([0-9.\-]+)"/m, "NaN"));
   out.altitude = parseFloat(extractField(text, /^#?\s*Altitude\s*=\s*"([0-9.\-]+)"/m, "NaN"));
@@ -423,6 +507,25 @@ async function saveOgnConfig(c: OgnConfig): Promise<SaveReport> {
     next = setConfLine(next, "EnableCoreOGNTeamRemoteAdmin", c.enableCoreOGNTeamRemoteAdmin ? "true" : "false");
     const method = await writeConfFile(OGN_RECEIVER_CONF_PATH, next);
     steps.push({ label: `書き込み ${OGN_RECEIVER_CONF_PATH}`, ok: true, detail: method });
+
+    // このファイルは bash が source する。書けたことではなく、bash から読める形で
+    // 書けたことを確かめる。受信機名が読めないと自己更新が既定URL（欧州版）に落ちる。
+    const back = await readFile(OGN_RECEIVER_CONF_PATH, "utf-8");
+    // bash は \n だけを行区切りとみなす。JS の /m は \r も行末扱いするので使わない
+    const lines = back.split("\n");
+    const shellReadable = (key: string) =>
+      lines.some(l => new RegExp(`^${key}\\s*=\\s*"[^"]*"`).test(l));
+    const problems: string[] = [];
+    if (/\r/.test(back)) problems.push("改行に CR が残っています");
+    if (!shellReadable("ReceiverName")) problems.push("ReceiverName が行頭に来ていません");
+    if (c.ognBinaryUrl && !shellReadable("OGNBINARYURL")) {
+      problems.push("OGNBINARYURL が行頭に来ていません");
+    }
+    if (problems.length) {
+      steps.push({ label: "書き戻し確認", ok: false, error: problems.join(" / ") });
+    } else {
+      steps.push({ label: "書き戻し確認", ok: true, detail: "bash から読める形で書けています" });
+    }
   } catch (e) {
     steps.push({ label: `書き込み ${OGN_RECEIVER_CONF_PATH}`, ok: false, error: errMsg(e) });
   }
@@ -430,19 +533,13 @@ async function saveOgnConfig(c: OgnConfig): Promise<SaveReport> {
   // ── 受信機を再起動して反映する ──
   // 正本に書けていないなら、再起動しても元の設定に戻るだけなので行わない。
   if (wroteAuthority) {
-    let restarted = false;
-    const errors: string[] = [];
-    for (const [cmd, ...args] of RESTART_COMMANDS) {
-      try {
-        await run(cmd, args);
-        steps.push({ label: "受信機の再起動", ok: true, detail: [cmd, ...args].join(" ") });
-        restarted = true;
-        break;
-      } catch (e) {
-        errors.push(`${[cmd, ...args].join(" ")}: ${errMsg(e)}`);
-      }
+    try {
+      const r = await restartOgnReceiver(c.httpPort);
+      if (r.ok) steps.push({ label: "受信機の再起動", ok: true, detail: r.detail });
+      else steps.push({ label: "受信機の再起動", ok: false, error: r.detail });
+    } catch (e) {
+      steps.push({ label: "受信機の再起動", ok: false, error: errMsg(e) });
     }
-    if (!restarted) steps.push({ label: "受信機の再起動", ok: false, error: errors.join(" / ") });
 
     // OGN 設定マネージャは起動のたびに wpa_supplicant.conf へ network ブロックを
     // 追記するため、restart 直後に重複を畳んでおく（詳細は feeldscope-wpa-dedupe.sh）
@@ -566,17 +663,10 @@ export async function POST(request: Request) {
         });
       }
       case "restart": {
-        const errors: string[] = [];
-        for (const [cmd, ...args] of RESTART_COMMANDS) {
-          const shown = [cmd, ...args].join(" ");
-          try {
-            await run(cmd, args);
-            return NextResponse.json({ ok: true, message: `OGN受信機を再起動しました（${shown}）。` });
-          } catch (e) {
-            errors.push(`${shown}: ${errMsg(e)}`);
-          }
-        }
-        throw new Error(`受信機を再起動できませんでした。${errors.join(" / ")}`);
+        const cur = await getOgnConfig();
+        const r = await restartOgnReceiver(cur.httpPort);
+        if (!r.ok) throw new Error(`受信機を再起動できませんでした。${r.detail}`);
+        return NextResponse.json({ ok: true, message: `OGN受信機を再起動しました（${r.detail}）。` });
       }
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });

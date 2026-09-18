@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically check that the OGN receiver is still running
+
+[Timer]
+# 起動3分後に一度（通常の起動に60秒前後かかるので、それを待ってから）。以後2分ごと。
+OnBootSec=180
+OnUnitActiveSec=120
+AccuracySec=30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

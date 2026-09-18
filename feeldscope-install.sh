@@ -399,6 +399,11 @@ cp "$SCRIPT_DIR/config/feeldscope-remote-support.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-remote-support-check.sh" /usr/local/sbin/feeldscope-remote-support-check.sh
 install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/feeldscope-reset-password
 
+# OGN受信機の監視（応答が無ければ停止→起動で自動復帰）
+cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/
+install -m 755 "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh" /usr/local/sbin/feeldscope-ogn-watchdog.sh
+
 # wpa_supplicant.conf の重複除去（OGN 設定マネージャが毎起動で追記するため）
 cp "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope-wpa-dedupe
@@ -410,6 +415,7 @@ systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
 
 systemctl daemon-reload
 systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
+systemctl enable --now feeldscope-ogn-watchdog.timer   >/dev/null 2>&1 || true
 
 # =============================================================================
 # Step 9: Enable and start services
