@@ -104,10 +104,21 @@ export default function SettingsPage() {
   const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
+  // 保存直後の取り直しが重なると、先に発射した古い応答が後から届く。
+  // それをそのまま反映すると、保存したはずの設定が画面上で元に戻る
+  // （自動再起動のトグルで実際に起きた。リロードすると正しい値が出る、という形）。
+  // 追い越された応答は捨てる。
+  const statusSeq = useRef(0);
+  const statusApplied = useRef(0);
+
   const fetchStatus = useCallback(async () => {
+    const seq = ++statusSeq.current;
     try {
-      const res = await fetch("/api/system");
+      const res = await fetch("/api/system", { cache: "no-store" });
       const data = await res.json();
+      if (seq < statusApplied.current) return;   // より新しい応答が既に反映済み
+      statusApplied.current = seq;
       setStatus(data);
     } catch {
       setError("ステータス取得に失敗しました");

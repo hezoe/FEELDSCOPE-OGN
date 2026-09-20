@@ -276,7 +276,26 @@ def parse_position_line(line):
     if distance_km > MAX_DISTANCE_KM:
         return None
 
+    # ogn-decode は位置行のこの3文字を "%c%c%X" で出す
+    # （0.3.3.ARM のバイナリ内の書式文字列 " %c%c%X %02dx%02dm" で確認）。
+    # 先頭2文字がフラグ、3文字目は 4bit の16進数。
+    #   1文字目: 立っているのを観測できていない。バイナリに "RELAY" の文字列が
+    #            あることから中継フラグと解釈するが、**実測による裏付けは無い**。
+    #   2文字目: ステルス。機体ごとに固定で 'S' が付く（滝川では FLRDB0731 のみ）。
+    #            設定項目 APRS.Stealth に対応する。
+    #   3文字目: OGN 側に文書化が見つからない 4bit 値。滝川の実測 26.5万点では
+    #            1 / 2 / 3 しか出ない。飛行状態に連動しており
+    #              1 = 地上、2 = 飛行中、3 = 飛行中（まれ・旋回時に多い）
+    #            着陸時は接地ではなく「停止してから約20秒後」に 2→1 に戻る。
+    #            意味が確定していないので state という素の値で出し、
+    #            解釈は利用側（flight-tracker）に委ねる。
+    #
+    # 以前は 1文字目を stealth、2文字目を relay、3文字目=='1' を no_tracking と
+    # していたが、実データと合っていなかった（ステルス機が relay 扱いになり、
+    # no_tracking は全位置の約68%で true になっていた）。
     flags_raw = m.group(9)
+    state_char = flags_raw[2]
+    state = int(state_char, 16) if state_char in "0123456789abcdefABCDEF" else None
     return {
         "timestamp_utc": ts.isoformat(),
         "timestamp_sod": timestamp_sod,
@@ -289,9 +308,9 @@ def parse_position_line(line):
         "ground_speed_ms": float(m.group(6)),
         "heading_deg": float(m.group(7)),
         "turn_rate_degs": float(m.group(8)),
-        "stealth": flags_raw[0] != "_",
-        "relay": flags_raw[1] != "_",
-        "no_tracking": flags_raw[2] == "1",
+        "relay": flags_raw[0] != "_",
+        "stealth": flags_raw[1] != "_",
+        "state": state,
         "flags_raw": flags_raw,
         "h_accuracy_m": int(m.group(10)),
         "v_accuracy_m": int(m.group(11)),

@@ -1,0 +1,7 @@
+# 機体の登録記号と機体IDの対応が分かる記録は GitHub で配布しない。手元にだけ置く。
+flight-log-*.json
+flight-tracker.log
+monitor-events.log
+# 受信機の状態スナップショット（1日ぶんで 1.4MB）。解析の結果は README に残す。
+status-snapshots.ndjson
+status-final.json

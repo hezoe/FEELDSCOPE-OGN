@@ -143,7 +143,48 @@ async function mqttClearRetained(topic: string): Promise<void> {
 
 // ── Version / Update helpers ──
 
-async function getVersionInfo(): Promise<{ current: string; latest: string | null; updateAvailable: boolean }> {
+/**
+ * 更新確認の結果を保つ時間。
+ *
+ * なぜ要るか:
+ * この関数は origin への `git fetch` を伴う。滝川の実測で 6秒前後かかり、
+ * /api/system の応答が約11秒になっていた。設定画面は数秒おきにこの API を
+ * 叩くので、画面を開いているあいだ外部通信が回り続け、さらに古い応答が
+ * 新しい応答を追い越して設定表示が巻き戻る事故まで起きていた。
+ * 更新の有無は分単位で変わるものではないので、結果を持ち回る。
+ */
+const VERSION_CACHE_MS = 10 * 60 * 1000;
+let versionCache: { at: number; value: VersionInfo } | null = null;
+/** fetch 中に来た同時リクエストは、同じ Promise に相乗りさせる */
+let versionInflight: Promise<VersionInfo> | null = null;
+
+interface VersionInfo { current: string; latest: string | null; updateAvailable: boolean }
+
+/** 更新確認を強制的にやり直す（システム更新の直後など）。
+ *  route.ts は GET/POST 等以外を export できないので、ここに閉じておく。 */
+function invalidateVersionCache(): void {
+  versionCache = null;
+}
+
+async function getVersionInfo(): Promise<VersionInfo> {
+  const now = Date.now();
+  if (versionCache && now - versionCache.at < VERSION_CACHE_MS) return versionCache.value;
+  if (versionInflight) return versionInflight;
+  versionInflight = fetchVersionInfo()
+    .then((value) => {
+      versionCache = { at: Date.now(), value };
+      return value;
+    })
+    .catch((err) => {
+      // 取れなかったときに古い値があるならそれを返す。無ければ最低限の形で返す。
+      if (versionCache) return versionCache.value;
+      throw err;
+    })
+    .finally(() => { versionInflight = null; });
+  return versionInflight;
+}
+
+async function fetchVersionInfo(): Promise<VersionInfo> {
   let current = "unknown";
   try {
     const pkg = await readFile(`${FEELDSCOPE_DIR}/webapp/package.json`, "utf-8");
@@ -756,6 +797,8 @@ export async function POST(request: Request) {
       }
 
       case "system-update": {
+        // 更新をかけたらバージョンの控えは当てにならない
+        invalidateVersionCache();
         // Run the update script in the background; it will restart the webapp
         const overlayActive = await isOverlayEnabled();
         if (overlayActive) {

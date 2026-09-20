@@ -656,11 +656,37 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.8 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.8</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="フライトログの離脱距離を手で直せるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまで離脱高度だけが編集できて、<strong>離脱距離は表示だけ</strong>でした。距離も同じように入力できます。単位の設定（km / nm）に合わせて表示と入力が切り替わり、小数も入れられます。空欄にすると未記録に戻せます。</li>
+        </ul>
+      </Card>
+
+      <Card title="設定画面で保存した内容が元に戻って見えることがあったのを直しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>自動再起動などを保存したあと、<strong>画面の表示だけが元の値に戻る</strong>ことがありました。設定そのものは正しく保存されていて、画面を再読み込みすると正しい値が出る、という症状です。保存した内容がそのまま画面に残るようにしました。</li>
+          <li>あわせて、設定画面を開いている間の応答が遅かったのを改善しました（実測で約11秒 → 0.3秒）。</li>
+        </ul>
+      </Card>
+
+      <Card title="受信した位置に付いている情報の読み取りを修正しました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信機が位置ごとに出している状態の読み取りがずれており、<strong>ステルス設定の機体が正しく区別できていませんでした</strong>。読み取りを実際の形式に合わせ直しました。</li>
+          <li>あわせて、離陸の判定で「受信機がまだ地上と言っている間は飛行を作らない」確認を追加しました。格納庫の近くなどで位置が乱れたときに、飛んでいない機体の飛行が記録されるのを防ぎます。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.7 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.7</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-18</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="SkyLensモードの端末で自動復帰が誤作動していたのを直しました">

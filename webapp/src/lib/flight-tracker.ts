@@ -45,6 +45,20 @@ const AIRBORNE_CONFIRM_AGL_M = 500 * 0.3048;
 /** 初めて受信した機体を「地上にいる」と判断できる高度 */
 const ON_GROUND_AGL_M = 50;
 /**
+ * 受信機が出す飛行状態（ogn-decode の位置行3文字目・4bit）の「飛行中」しきい値。
+ * 滝川の実測 26.5万点では 1=地上 / 2=飛行中 / 3=飛行中(まれ) しか出ない。
+ * 意味が OGN 側に文書化されていないので、判定の主役にはせず裏付けに使う。
+ * 値を出さない送信側（シミュレータ・旧版）では従来どおりの判定に落ちる。
+ */
+const RX_AIRBORNE_MIN_STATE = 2;
+/**
+ * 受信機の飛行状態を離陸の裏付けに使うときの対地速度の下限。
+ * 地上走行中に 1→2 が一瞬ちらつくことがあり（9/12 で6件、9/13 で3件。
+ * いずれも対地 1〜3 m/s）、本物の離陸の遷移は 16〜38 m/s だったので
+ * ここで切れば取りこぼしなく落とせる。
+ */
+const RX_TAKEOFF_MIN_SPEED_MS = 8;
+/**
  * 離陸は「30 km/h 超」と「対地20m以上」を、それぞれこれだけ続けて受けてから作る。
  * 1点だけの値で作ると、壊れた位置で偽の離陸ができる（たきかわ 2026-09-12 実測:
  * 駐機中の曳航機の電源投入直後に 対地8235m・236 km/h の1点が来て、1分の飛行が記録された）。
@@ -231,6 +245,8 @@ interface TrackingState {
   maxAltAgl: number;
   takeoffAgl: number;
   wasHigh: boolean;
+  /** この滑走中に受信機が「飛行中」と言ったか（偽の離陸を落とすために見る） */
+  rxAirborneSeen: boolean;
   /** 低空・低速が続き始めた時刻。接地の判断に使う */
   lowSlowSinceMs: number | null;
   /** 滑走を始めた時刻。浮いたらこの時刻を離陸時刻として飛行を作る */
@@ -418,6 +434,7 @@ function toGround(tr: TrackingState, agl: number): void {
   tr.maxAltAgl = agl;
   tr.takeoffAgl = agl;
   tr.wasHigh = false;
+  tr.rxAirborneSeen = false;
   tr.lowSlowSinceMs = null;
   tr.rollingSinceMs = null;
   tr.rollingFixes = 0;
@@ -812,6 +829,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       maxAltAgl: agl,
       takeoffAgl: agl,
       wasHigh: false,
+      rxAirborneSeen: false,
       lowSlowSinceMs: null,
       rollingSinceMs: null,
       rollingAgl: 0,
@@ -883,7 +901,16 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     }
     if (!tr.initialized) {
       // 裏付けの取れた位置で初めて状態を決める。地上にいると確認できたときだけ "ground" から始める。
-      const onGround = agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS;
+      // 電源投入直後の1点は GPS 測位前で速度も高度も壊れていることがある
+      // （たきかわ 2026-09-13: 対地3m・539km/h・238km先）。高度と速度だけで
+      // 決めると「飛行中」に固定され、その日の1便目をまるごと取りこぼす。
+      // 受信機が「地上」と言っているならそれを信じる。逆向き（飛行中と言っている）
+      // には使わない。着陸後も約20秒は飛行中のまま戻らないため。
+      const rxOnGround = typeof pos.state === "number"
+        ? pos.state < RX_AIRBORNE_MIN_STATE : null;
+      const onGround = rxOnGround === true
+        ? true
+        : agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS;
       tr.phase = onGround ? "ground" : "airborne";
       tr.maxAltAgl = agl;
       tr.takeoffAgl = agl;
@@ -927,6 +954,10 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     tr.lastFix = cur;
   }
 
+  // 受信機が出す飛行状態。null = この送信側は値を出していない（従来どおりの判定に落とす）
+  const rxState = typeof pos.state === "number" ? pos.state : null;
+  const rxAirborne = rxState === null ? null : rxState >= RX_AIRBORNE_MIN_STATE;
+
   tr.recent.push({ timeMs: nowMs, speedMs, climbMs });
   const windowStart = nowMs - RELEASE_WINDOW_SEC * 1000;
   while (tr.recent.length > 0 && tr.recent[0].timeMs < windowStart) tr.recent.shift();
@@ -958,6 +989,16 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       tr.rollingSinceMs = null;   // 走り続けているが浮かない＝地上滑走
     }
     if (tr.rollingSinceMs !== null) {
+      // 受信機の飛行中ビットを「浮いた」の代わりには使えない。
+      // このビットは着陸の滑走中も立ったままで、停止してから約20秒遅れて
+      // しか戻らない（9/13 の実測: 13.1m/s で接地→停止→20秒後に 2→1）。
+      // 代わりに使うと、着陸した曳航機が止まらずに次の索へ滑走する形を
+      // 離陸と誤判定し、1分未満の偽の便ができる（9/12 の再生で3件発生した。
+      // これは TAKEOFF_CONFIRM_AGL_M がもともと塞いでいた不具合そのもの）。
+      // 浮いた判定は従来どおり対地高度で行い、ビットは下の「拒否」だけに使う。
+      if (rxAirborne === true && speedMs >= RX_TAKEOFF_MIN_SPEED_MS) {
+        tr.rxAirborneSeen = true;
+      }
       tr.airborneFixes = agl >= TAKEOFF_CONFIRM_AGL_M ? tr.airborneFixes + 1 : 0;
     }
 
@@ -967,6 +1008,10 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       tr.rollingSinceMs !== null &&
       tr.rollingFixes >= TAKEOFF_CONFIRM_FIXES &&
       tr.airborneFixes >= TAKEOFF_CONFIRM_FIXES &&
+      // 受信機がまだ「地上」と言っているあいだは飛行を作らない。
+      // 格納庫付近の GPS ノイズで速度と高度だけが跳ねる形
+      // （たきかわ 2026-09-13 17:21 の偽の便）をこれで落とせる。
+      (rxState === null || tr.rxAirborneSeen) &&
       haversineM(tr.rollingLat, tr.rollingLon, pos.latitude, pos.longitude) >= TAKEOFF_CONFIRM_DIST_M
     ) {
       openFlight(deviceId, registration, tr, tr.rollingSinceMs, tr.rollingAgl, agl);
@@ -1132,7 +1177,11 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   } else {
     tr.lowSlowSinceMs = null;
   }
-  const stopped = agl < AIRBORNE_CONFIRM_AGL_M && speedMs < LANDING_SPEED_MS;
+  // 高度が壊れている機体でも、受信機が地上と言っていて止まっていれば接地とみなす。
+  // 受信機側は停止から約20秒遅れて戻るので、これだけを頼りにはしない。
+  const stopped =
+    (agl < AIRBORNE_CONFIRM_AGL_M || rxAirborne === false) &&
+    speedMs < LANDING_SPEED_MS;
   const rolledOut =
     tr.lowSlowSinceMs !== null &&
     nowMs - tr.lowSlowSinceMs >= LANDING_ROLL_CONFIRM_SEC * 1000;

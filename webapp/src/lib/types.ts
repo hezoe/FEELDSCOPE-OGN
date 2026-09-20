@@ -10,9 +10,17 @@ export interface AircraftPosition {
   ground_speed_ms: number;
   heading_deg: number;
   turn_rate_degs: number;
+  /** ogn-decode の位置行3文字 "%c%c%X" の2文字目。機体側のステルス設定 */
   stealth: boolean;
+  /** 同1文字目。中継フラグと解釈しているが実測での裏付けは無い */
   relay: boolean;
-  no_tracking: boolean;
+  /**
+   * 同3文字目(4bitの16進)。OGN側に文書化が無い値。
+   * 滝川の実測では 1=地上 / 2=飛行中 / 3=飛行中(まれ) のみ。
+   * 着陸時は停止から約20秒遅れて 2→1 に戻る（ヒステリシスあり）。
+   * 古い送信側には無いので optional。
+   */
+  state?: number | null;
   flags_raw: string;
   h_accuracy_m: number;
   v_accuracy_m: number;

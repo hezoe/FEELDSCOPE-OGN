@@ -9,7 +9,7 @@ import {
   topicFor,
 } from "@/lib/mqtt-config";
 import { useUnits } from "@/lib/UnitContext";
-import { formatAltitude, formatSpeed, formatClimbRate, formatDistance, type DisplayNameMode } from "@/lib/units";
+import { formatAltitude, formatSpeed, formatClimbRate, type DisplayNameMode, type DistanceUnit } from "@/lib/units";
 import type {
   AircraftPosition,
   AircraftList,
@@ -1198,7 +1198,18 @@ export default function FlightMap() {
                               />
                         </td>
                         <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
-                          {entry.releaseDist != null ? formatDistance(entry.releaseDist, units.distance) : "—"}
+                          <ReleaseDistInput
+                                releaseDist={entry.releaseDist}
+                                distUnit={units.distance}
+                                onChange={(newDist) => {
+                                  const updated = [...flightLog];
+                                  // releaseInferred は離脱高度が曳航機由来かを表す印なので、
+                                  // 距離だけを直したときは触らない（※の意味が変わってしまう）
+                                  updated[i] = { ...updated[i], releaseDist: newDist };
+                                  flightLogRef.current = updated;
+                                  setFlightLog(updated);
+                                }}
+                              />
                         </td>
                         <td className="px-0.5 py-0.5 whitespace-nowrap text-center" style={{ borderBottom: "1px solid var(--color-border)" }}>
                           <button
@@ -1679,6 +1690,56 @@ function ReleaseAltInput({
           ※
         </span>
       )}
+    </>
+  );
+}
+
+/**
+ * 離脱距離の手入力。値はメートルで持ち、表示と入力は units.distance に合わせる。
+ * 高度と同じく、打っている途中では保存せず blur で確定する
+ * （飛行ログの保存は配列ごとサーバへ送るので、1文字ごとに送らない）。
+ */
+function ReleaseDistInput({
+  releaseDist,
+  distUnit,
+  onChange,
+}: {
+  releaseDist: number | null;
+  distUnit: DistanceUnit;
+  onChange: (dist: number | null) => void;
+}) {
+  const perUnit = distUnit === "nm" ? 1852 : 1000;
+  const displayVal = releaseDist != null ? (releaseDist / perUnit).toFixed(1) : "";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(displayVal);
+
+  return (
+    <>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={editing ? draft : displayVal}
+        placeholder="..."
+        onFocus={() => { setEditing(true); setDraft(displayVal); }}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === "" || /^\d*\.?\d*$/.test(val)) setDraft(val);
+        }}
+        onBlur={() => {
+          setEditing(false);
+          if (draft === "" || draft === ".") {
+            onChange(null);
+          } else {
+            const num = parseFloat(draft);
+            if (!isNaN(num) && num >= 0) onChange(num * perUnit);
+          }
+        }}
+        className="tabular-nums bg-transparent border-b px-0 py-0 text-xs text-right w-[4em]"
+        style={{ borderColor: "var(--color-border)", outline: "none", color: "inherit" }}
+      />
+      <span className="text-[10px] ml-0.5" style={{ color: "var(--color-text-secondary)" }}>
+        {distUnit === "nm" ? "nm" : "km"}
+      </span>
     </>
   );
 }

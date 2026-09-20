@@ -115,6 +115,48 @@ def test_positions_sorted_and_deduped(m):
         "latest_position が最新でない"
 
 
+def test_position_flags(m):
+    """位置行の3文字フラグ "%c%c%X" を正しく分解すること。
+
+    滝川の実測(9/12・9/13 の 26.5万点)で出現するのは
+    __1 / __2 / _S1 / _S2 / __3 の5種のみ。
+    2文字目の S が機体ごとに固定で付くステルス、3文字目が 4bit の状態値。
+    """
+    def line(flags):
+        return ("073015: [ +43.55299,+141.89478]deg    28m  +0.0m/s   0.1m/s "
+                "180.0deg  +0.0deg/s %s 03x03m Fn:13___ +0.50kHz 44.5/58.0dB/0 "
+                " 0e     0.4km 090.0deg +28.3deg" % flags)
+
+    cases = {
+        "__1": (False, False, 1),
+        "__2": (False, False, 2),
+        "__3": (False, False, 3),
+        "_S1": (False, True, 1),
+        "_S2": (False, True, 2),
+    }
+    for flags, (relay, stealth, state) in cases.items():
+        pos = m.parse_position_line(line(flags))
+        assert pos is not None, "%s の位置行が落ちている" % flags
+        assert pos["flags_raw"] == flags, "flags_raw が壊れている: %r" % pos["flags_raw"]
+        assert pos["relay"] is relay, "%s: relay が %r" % (flags, pos["relay"])
+        assert pos["stealth"] is stealth, "%s: stealth が %r" % (flags, pos["stealth"])
+        assert pos["state"] == state, "%s: state が %r" % (flags, pos["state"])
+
+    # 旧実装の誤りが戻っていないこと
+    pos = m.parse_position_line(line("_S1"))
+    assert pos["stealth"] is True and pos["relay"] is False,         "ステルス機が relay 扱いになっている（1文字目と2文字目の取り違え）"
+    assert "no_tracking" not in pos,         "no_tracking が残っている（3文字目は真偽値ではない）"
+
+    # 中継フラグが立った形（実測は無いが構造として扱えること）
+    pos = m.parse_position_line(line("R_2"))
+    assert pos is not None and pos["relay"] is True and pos["stealth"] is False
+    assert pos["state"] == 2
+
+    # 4bit なので 3 より大きい値が来ても壊れないこと
+    pos = m.parse_position_line(line("__F"))
+    assert pos is not None and pos["state"] == 15, "16進の解釈ができていない"
+
+
 def test_hhmmss_timestamp(m):
     """位置の時刻 HHMMSS が秒数として誤解釈されないこと。"""
     line = ("073015: [ +43.55299,+141.89478]deg    28m  +0.0m/s   0.1m/s "
@@ -272,6 +314,7 @@ def main():
         test_weak_signal_header_parses,
         test_no_cross_contamination,
         test_positions_sorted_and_deduped,
+        test_position_flags,
         test_hhmmss_timestamp,
         test_negative_altitude,
         test_absurd_position_rejected,
