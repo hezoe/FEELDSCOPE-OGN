@@ -308,13 +308,22 @@ FLARMから受信した離着陸情報が自動的に記録されます。</p>
   <tr><td>着陸</td><td>着陸検出時刻（飛行中は「飛行中」と表示、手動編集可）</td></tr>
   <tr><td>飛行時間</td><td>離陸〜着陸の経過時間（自動計算）</td></tr>
   <tr><td>離脱高度</td><td>曳航離脱時の高度（手動編集可）。※印は曳航機の値から推定したもの</td></tr>
-  <tr><td>離脱距離</td><td>離脱時の滑空場からの距離</td></tr>
+  <tr><td>離脱距離</td><td>離脱時の滑空場からの距離（手動編集可）</td></tr>
 </table>
 
 <div class="info">
   <strong>データはサーバ側メモリに保存されます。</strong>
   複数のブラウザ・端末から同じフライトログを参照でき、ブラウザを閉じてもデータは保持されます。
   フライトログは毎日<strong>日本時間 AM 5:00</strong> に自動リセットされます。
+</div>
+
+<div class="info">
+  <strong>変更はシステムログに残ります。</strong>
+  フライトログと機体情報データベースの書き換え（追加・編集・削除・全消去）は、
+  いつ・どこから・何が変わったかが記録されます。
+  記録が思ったとおりになっていないときに、後から経緯を追えます。
+  確認は設定画面の「サポート情報」から、または
+  <code>journalctl -u feeldscope-webapp | grep -E 'flight-log|aircraft-db'</code> で行えます。
 </div>
 
 <!-- ============================================================ -->
@@ -490,7 +499,7 @@ sudo feeldscope-reset-password 新しいパスワード</code></pre>
 
 <!-- ============================================================ -->
 <footer>
-  FEELDSCOPE-OGN v1.2.11 &mdash;
+  FEELDSCOPE-OGN v1.2.12 &mdash;
   <a href="https://github.com/hezoe/FEELDSCOPE-OGN">GitHub</a>
 </footer>
 

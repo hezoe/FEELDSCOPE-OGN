@@ -3,6 +3,7 @@ import { readFile, unlink, writeFile } from "fs/promises";
 import { run } from "@/lib/run";
 import type { AircraftDatabase, AircraftRecord, AircraftTypeCode } from "@/lib/types";
 import { findKeyByAddress, hexAddress } from "@/lib/aircraft-id";
+import { clientIpFromRequest } from "@/lib/auth";
 
 const DB_PATH = process.env.FEELDSCOPE_AIRCRAFT_DB || "/home/pi/FEELDSCOPE/aircraft-db.json";
 
@@ -260,6 +261,15 @@ export async function PUT(req: Request) {
     if (!device_id) return NextResponse.json({ error: "device_id required" }, { status: 400 });
     const db = await readDb();
     const incoming = body as AircraftRecord;
+    // 機体情報も無認証で書き換えられる。飛行ログと同じく記録だけ残す
+    const prev = db[device_id];
+    const ip = clientIpFromRequest(req) || "不明";
+    const changed = (["registration", "glider_type", "competition_id", "pilot", "aircraft_type"] as const)
+      .filter((f) => (prev?.[f] ?? "") !== (incoming[f] ?? ""))
+      .map((f) => `${f}: ${prev?.[f] || "(空)"} -> ${incoming[f] || "(空)"}`);
+    console.log(prev
+      ? `[aircraft-db] edit from ${ip}: ${device_id}${changed.length ? " / " + changed.join(", ") : " / 変更なし"}`
+      : `[aircraft-db] add from ${ip}: ${device_id} ${incoming.registration || "(登録番号なし)"}`);
     // オンライン取得の控えは画面から編集しない。送られてこなければ既存を残す
     // （消してしまうと「手で直した」印が出せなくなる）
     if (incoming.online === undefined && db[device_id]?.online) {
@@ -279,6 +289,9 @@ export async function DELETE(req: Request) {
     const { device_id } = await req.json();
     if (!device_id) return NextResponse.json({ error: "device_id required" }, { status: 400 });
     const db = await readDb();
+    const gone = db[device_id];
+    console.log(`[aircraft-db] ★delete from ${clientIpFromRequest(req) || "不明"}: `
+      + `${device_id} ${gone?.registration || "(登録番号なし)"}`);
     delete db[device_id];
     await writeDb(db);
     return NextResponse.json({ ok: true });
@@ -307,6 +320,8 @@ export async function POST(req: Request) {
       // 作られないままになる（実機で踏んだ）。ボタンを押したときだけ動く
       // 手動操作なので、毎回書いても SD への負担は問題にならない。
       await writeDb(db);
+      console.log(`[aircraft-db] fetch-online from ${clientIpFromRequest(req) || "不明"}: `
+        + `新規${summary.added.length} 更新${summary.updated.length} 変更なし${summary.unchanged}`);
       return NextResponse.json(summary);
     }
 
@@ -328,7 +343,10 @@ export async function POST(req: Request) {
         added.push(id);
       }
     }
-    if (added.length > 0) await writeDb(db);
+    if (added.length > 0) {
+      await writeDb(db);
+      console.log(`[aircraft-db] auto-register: ${added.join(", ")}`);
+    }
     return NextResponse.json({ added });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

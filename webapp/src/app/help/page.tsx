@@ -677,11 +677,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.12 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.12</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="フライトログと機体情報の変更を記録に残すようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>フライトログと機体情報データベースの書き換え（追加・編集・削除・全消去）が、<strong>いつ・どこから・何が変わったか</strong>システムログに残ります。動作はこれまでと変わりません。</li>
+          <li>とくに<strong>行の削除・全消去・入っていた値が空になった</strong>ときは目立つ印を付けて記録します。「記録していたはずの値が無い」というときに、後から経緯をたどれます。</li>
+          <li>地図の時刻欄は1文字入力するたびに保存されるため、同じ内容の記録はまとめて1行にします。ただし値が消えた場合は必ず個別に記録します。</li>
+          <li>確認は設定画面の「サポート情報」から行えます。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.11 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.11</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="登録番号がオンラインDBと食い違う機体に印を付けるようにしました">
