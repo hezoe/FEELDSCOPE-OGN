@@ -19,6 +19,7 @@ import type {
 } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
+import { lookupByDeviceId } from "@/lib/aircraft-id";
 // 飛行記録の検知と保持はサーバ側 (src/lib/flight-tracker.ts)。ここは表示と手動編集のみ。
 import type { FlightLogEntry, FlightPhase } from "@/lib/flight-tracker";
 
@@ -369,7 +370,8 @@ function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayName
 
 /** Look up aircraft DB record by deviceId, falling back to registration match */
 function lookupDbRecord(db: AircraftDatabase, deviceId: string, gliderId?: string): AircraftRecord | undefined {
-  const rec = db[deviceId];
+  // 接頭辞違いでも同じアドレスなら同じ機体（flight-tracker と同じ扱い）
+  const rec = lookupByDeviceId(db, deviceId);
   if (rec && rec.registration) return rec;
   if (gliderId) {
     const regUpper = gliderId.toUpperCase();

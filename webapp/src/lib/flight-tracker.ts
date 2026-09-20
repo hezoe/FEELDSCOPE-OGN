@@ -12,6 +12,7 @@
 import { readFile } from "fs/promises";
 import mqtt from "mqtt";
 import type { AircraftDatabase, AircraftPosition } from "@/lib/types";
+import { lookupByDeviceId } from "@/lib/aircraft-id";
 
 const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
 const AIRFIELD_CONFIG_PATH =
@@ -798,7 +799,9 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   const s = S();
 
   const nowMs = Date.now();
-  const rec = s.aircraftDb[deviceId];
+  // 接頭辞(ICA/FLR/OGN)は同じ送信機でも受信内容と登録内容で食い違うことがある。
+  // 実体は後ろ6桁のアドレスなので、完全一致で外れたらアドレスで引き直す。
+  const rec = lookupByDeviceId(s.aircraftDb, deviceId);
   const registration =
     rec?.registration || pos.glider_id || rec?.competition_id || pos.competition_id || deviceId;
   const tow = isTowPlane(

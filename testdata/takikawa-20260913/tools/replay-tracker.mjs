@@ -32,7 +32,25 @@ fs.writeFileSync(path.join(work, "package.json"), JSON.stringify({ type: "module
 fs.writeFileSync(path.join(stubDir, "package.json"), JSON.stringify({ name: "mqtt", type: "module", main: "index.js" }));
 fs.writeFileSync(path.join(stubDir, "index.js"),
   "export default { connect() { return { on() {}, subscribe() {} }; } };\n");
-fs.copyFileSync(trackerSrc, path.join(work, "flight-tracker.ts"));
+// flight-tracker.ts は "@/lib/..." の別名で同じフォルダの他ファイルを読む。
+// ここは Next のビルドを通さず Node の型ストリップで直接読むので、別名は解けない。
+// 参照している lib のファイルを一緒に運び、指定を相対パスへ書き換える。
+function stageModule(srcPath, destName) {
+  const srcDir = path.dirname(srcPath);
+  let code = fs.readFileSync(srcPath, "utf8");
+  const deps = new Set();
+  code = code.replace(/(from\s+")@\/lib\/([A-Za-z0-9_.-]+)(")/g, (_m, a, name, b) => {
+    deps.add(name);
+    return `${a}./${name}.ts${b}`;
+  });
+  fs.writeFileSync(path.join(work, destName), code);
+  for (const name of deps) {
+    const dep = path.join(srcDir, `${name}.ts`);
+    const staged = path.join(work, `${name}.ts`);
+    if (fs.existsSync(dep) && !fs.existsSync(staged)) stageModule(dep, `${name}.ts`);
+  }
+}
+stageModule(trackerSrc, "flight-tracker.ts");
 let db = JSON.parse(fs.readFileSync(dbPath, "utf8"));
 if (db && db.aircraft) db = db.aircraft;
 fs.writeFileSync(path.join(work, "aircraft-db.json"), JSON.stringify(db));

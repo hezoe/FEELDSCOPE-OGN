@@ -614,11 +614,30 @@ function ManualContent() {
 
         <Section id="aircraft-db-ops" heading="操作">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>オンライン取得</strong>ボタン — OGN DDB と FlarmNet から JA 登録機の情報を取り込みます（下記）</li>
             <li><strong>+ 新規追加</strong>ボタン — 機体情報を手動追加</li>
             <li><strong>編集</strong>ボタン — 既存レコードを編集</li>
             <li><strong>削除</strong>ボタン — レコード削除（確認ダイアログ）</li>
             <li>未登録のFLARM機体がマップに出現すると、Device IDだけが自動登録されます（後から登録番号等を追記可能）</li>
           </ul>
+        </Section>
+
+        <Section id="aircraft-db-online" heading="オンライン取得">
+          <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+            OGN DDB（機体登録データベース）と FlarmNet から、<strong>JA 登録機</strong>の情報をまとめて取り込みます。
+            登録記号が空欄のまま残っている機体を埋めるのに使います。
+          </p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>取り込む項目は<strong>登録記号・機種・コンテストナンバー・操縦者名</strong>です。ネット側に値があれば、手で入力した値でも上書きされます</li>
+            <li>ネット側に値が無い項目は、<strong>手で入力した内容がそのまま残ります</strong></li>
+            <li><strong>機体種別（グライダー / 曳航機 など）は変更しません。</strong>どちらのサービスにも無い情報で、曳航の判定に使っているためです</li>
+            <li>本人が識別の公開を拒否している機体（DDB の設定）は取り込みません</li>
+            <li>ネットに出られない場合は失敗します。結果は実行後に画面へ表示されます</li>
+          </ul>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            機体IDの前3文字（ICA / FLR / OGN）は、同じ機体でも受信した電波の種別と登録内容で食い違うことがあります。
+            突き合わせは後ろ6桁のアドレスで行うため、前3文字が違っても同じ機体として扱われます。
+          </p>
         </Section>
 
         <div className="mt-3 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
@@ -656,11 +675,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.10 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.10</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="機体情報を OGN DDB と FlarmNet からまとめて取り込めるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報データベースの画面に<strong>「オンライン取得」ボタン</strong>を追加しました。押すと OGN DDB と FlarmNet から JA 登録機の<strong>登録記号・機種・コンテストナンバー・操縦者名</strong>を取り込みます。</li>
+          <li>ネット側に値がある項目は手入力でも上書きし、<strong>ネット側に無い項目は手入力のまま残します</strong>。<strong>機体種別（グライダー / 曳航機 など）は変更しません</strong>（曳航の判定に使っているため）。</li>
+          <li>機体IDの前3文字（ICA / FLR / OGN）は同じ機体でも食い違うことがあるため、後ろ6桁のアドレスで突き合わせます。これにより、これまで登録記号が空欄のまま残っていた機体も埋まるようになりました。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.9 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.9</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="システム更新で、不要になったファイルが端末に残らないようにしました">

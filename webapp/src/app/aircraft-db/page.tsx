@@ -5,6 +5,16 @@ import type { AircraftRecord, AircraftTypeCode, AircraftDatabase } from "@/lib/t
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
 
+/** オンライン取得の結果（/api/aircraft-db の fetch-online が返す形） */
+interface OnlineResult {
+  added: string[];
+  updated: { device_id: string; changes: string[] }[];
+  unchanged: number;
+  optedOut: number;
+  dupSkipped: number;
+  sources: { ddb: number; ddbJa: number; flarmnet: number; flarmnetJa: number };
+}
+
 const EMPTY_RECORD: Omit<AircraftRecord, "device_id"> = {
   glider_type: "",
   registration: "",
@@ -21,6 +31,9 @@ export default function AircraftDbPage() {
   const [draft, setDraft] = useState<AircraftRecord | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [newId, setNewId] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchResult, setFetchResult] = useState<OnlineResult | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchDb = useCallback(async () => {
     try {
@@ -35,6 +48,38 @@ export default function AircraftDbPage() {
     fetchDb();
     fetch("/api/system").then(r => r.json()).then(d => setOverlayEnabled(d.overlay_enabled === true)).catch(() => {});
   }, [fetchDb]);
+
+  /**
+   * OGN DDB と FlarmNet から JA 登録機を引いて、既存のDBに合流させる。
+   * ネット側に値がある項目は手入力でも上書きし、ネット側に無い項目は残す。
+   * 機体種別（グライダー/曳航機など）はどちらの源にも無いので触らない。
+   */
+  const fetchOnline = async () => {
+    if (!confirm(
+      "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます。\n\n" +
+      "・登録記号、機種、コンテストナンバー、操縦者名は、手で入れた値でもネット側の値で上書きされます\n" +
+      "・ネット側に無い項目はそのまま残ります\n" +
+      "・機体種別（グライダー/曳航機など）は変更されません\n\n" +
+      "実行しますか？"
+    )) return;
+    setFetching(true);
+    setFetchResult(null);
+    setFetchError(null);
+    try {
+      const res = await fetch("/api/aircraft-db", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fetch-online" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setFetchResult(data as OnlineResult);
+      await fetchDb();
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "オンライン取得に失敗しました");
+    }
+    setFetching(false);
+  };
 
   const saveRecord = async (record: AircraftRecord) => {
     await fetch("/api/aircraft-db", {
@@ -108,6 +153,23 @@ export default function AircraftDbPage() {
           <div className="flex items-center gap-3">
             {overlayEnabled && <span className="text-xs" style={{ color: "var(--color-warning)" }}>固定化中 — 変更は再起動時にリセット</span>}
             <button
+              onClick={fetchOnline}
+              disabled={fetching || overlayEnabled}
+              title={overlayEnabled
+                ? "固定化(OverlayFS)が有効なので、取り込んでも再起動で消えます"
+                : "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます"}
+              className="px-3 py-1 text-sm rounded font-semibold"
+              style={{
+                background: "var(--color-bg-tertiary)",
+                color: "var(--color-text-primary)",
+                border: "1px solid var(--color-border)",
+                opacity: fetching || overlayEnabled ? 0.5 : 1,
+                cursor: fetching || overlayEnabled ? "not-allowed" : "pointer",
+              }}
+            >
+              {fetching ? "取得中..." : "オンライン取得"}
+            </button>
+            <button
               onClick={startAdd}
               disabled={addingNew}
               className="px-3 py-1 text-sm rounded font-semibold"
@@ -118,6 +180,53 @@ export default function AircraftDbPage() {
             <HelpHint sectionId="aircraft-db-ops" title="操作の説明を表示" />
           </div>
         </div>
+
+        {fetchError && (
+          <div className="mb-3 px-3 py-2 rounded text-sm"
+               style={{ background: "var(--color-danger)", color: "#fff" }}>
+            オンライン取得に失敗しました: {fetchError}
+            <div className="text-xs mt-1" style={{ opacity: 0.9 }}>
+              受信機がインターネットに出られるか確認してください。
+            </div>
+          </div>
+        )}
+
+        {fetchResult && (
+          <div className="mb-3 px-3 py-2 rounded text-sm"
+               style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)" }}>
+            <div className="font-semibold mb-1">
+              オンライン取得: 新規 {fetchResult.added.length} 件 / 更新 {fetchResult.updated.length} 件 / 変更なし {fetchResult.unchanged} 件
+            </div>
+            <div className="text-xs mb-1" style={{ color: "var(--color-text-secondary)" }}>
+              OGN DDB {fetchResult.sources.ddb.toLocaleString()} 件中 JA {fetchResult.sources.ddbJa} 件 ／
+              FlarmNet {fetchResult.sources.flarmnet.toLocaleString()} 件中 JA {fetchResult.sources.flarmnetJa} 件
+              {fetchResult.optedOut > 0 && ` ／ 識別の公開を拒否している ${fetchResult.optedOut} 件は取り込みません`}
+              {fetchResult.dupSkipped > 0 && ` ／ 同じ登録記号が別アドレスで重複していた ${fetchResult.dupSkipped} 件は見送りました`}
+            </div>
+            {fetchResult.added.length > 0 && (
+              <div className="text-xs mt-1">
+                <span style={{ color: "var(--color-text-secondary)" }}>新規: </span>
+                {fetchResult.added.join(", ")}
+              </div>
+            )}
+            {fetchResult.updated.length > 0 && (
+              <ul className="text-xs mt-1 ml-4 list-disc">
+                {fetchResult.updated.map((u) => (
+                  <li key={u.device_id}>
+                    <span className="font-medium">{u.device_id}</span>
+                    <span style={{ color: "var(--color-text-secondary)" }}> — {u.changes.join(" / ")}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {fetchResult.added.length > 0 && (
+              <div className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+                ※ 新規の機体IDの接頭辞（ICA / FLR / OGN）は登録元の情報から推定しています。
+                受信時に別の接頭辞で届いても、同じアドレスであれば同じ機体として扱います。
+              </div>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center py-8" style={{ color: "var(--color-text-secondary)" }}>読み込み中...</div>
