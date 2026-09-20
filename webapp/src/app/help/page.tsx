@@ -656,11 +656,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.9 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.9</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="システム更新で、不要になったファイルが端末に残らないようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでのシステム更新は新しいファイルを上書きするだけで、<strong>使わなくなったファイルを端末から消していませんでした</strong>。そのため、以前の版で取りやめた機能が端末に残り、動き続けていることがありました。バージョン表示は新しくなるため、画面からは気づけません。</li>
+          <li>更新のたびに端末側を最新の構成に揃えるようにしました。<strong>次回のシステム更新で、残っていたファイルは自動的に片付きます</strong>。設定や機体データ、IGCファイルなど端末ごとの情報はこれまでどおり残ります。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.8 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.8</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="フライトログの離脱距離を手で直せるようにしました">

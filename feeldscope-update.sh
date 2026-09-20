@@ -98,7 +98,27 @@ cp "$SCRIPT_DIR/igc-simulator.py"  "$FEELDSCOPE_DIR/"
 
 # Update webapp source
 rm -rf "$FEELDSCOPE_DIR/webapp/.next"
-cp -r "$SCRIPT_DIR/webapp/src"         "$FEELDSCOPE_DIR/webapp/"
+
+# webapp/src は丸ごとリポジトリの中身で、端末固有のものは何も入っていない。
+# そのため「消えたファイルは端末からも消す」でよい。
+#
+# なぜ要るか:
+# 以前は cp -r で重ねていたので、上流で削除したファイルが端末に残り続けた。
+# 2026-09-20 に滝川で、v1.2.1「利用状況の記録(UX分析)を削除」で消したはずの
+#   webapp/src/app/api/analytics/pointer/route.ts
+#   webapp/src/lib/PointerTracker.tsx
+# が残っており、ビルドに載って /api/analytics/pointer が実際に応答していた。
+# 版番号は上がるので画面からは新しい版に見えており、気づけなかった。
+# （v1.2.1 は記録先ディレクトリ $FEELDSCOPE_DIR/analytics の片付けだけ入れていて、
+#   ソース側の残骸は想定していなかった。)
+#
+# set -e で動いているので、途中で失敗して src を失わないよう、
+# 別名で作り切ってから入れ替える。mv は同一ファイルシステム内なので瞬時。
+src_new="$FEELDSCOPE_DIR/webapp/.src.new"
+rm -rf "$src_new"
+cp -r "$SCRIPT_DIR/webapp/src" "$src_new"
+rm -rf "$FEELDSCOPE_DIR/webapp/src"
+mv "$src_new" "$FEELDSCOPE_DIR/webapp/src"
 cp "$SCRIPT_DIR/webapp/server.js"      "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/package.json"   "$FEELDSCOPE_DIR/webapp/"
 cp "$SCRIPT_DIR/webapp/package-lock.json" "$FEELDSCOPE_DIR/webapp/" 2>/dev/null || true
