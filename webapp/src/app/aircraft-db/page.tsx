@@ -15,6 +15,35 @@ interface OnlineResult {
   sources: { ddb: number; ddbJa: number; flarmnet: number; flarmnetJa: number };
 }
 
+/**
+ * オンラインDBの値と、この機体情報DBの値が食い違っているときに出す印。
+ *
+ * OGN DDB / FlarmNet は登録の正本にあたるので、食い違っていれば
+ * **こちらのDB側が誤っている可能性が高い**。その旨をはっきり出す。
+ * （オンライン取得の直後は両者が一致するので印は出ない。手で直したあとに出る）
+ */
+function OnlineMismatchMark({ online, current, fetchedAt }: {
+  online?: string; current: string; fetchedAt?: string;
+}) {
+  if (!online || online === current) return null;
+  const when = fetchedAt ? new Date(fetchedAt).toLocaleString("ja-JP") : null;
+  return (
+    <span
+      className="ml-1 text-xs cursor-help whitespace-nowrap"
+      style={{ color: "var(--color-warning)" }}
+      title={
+        `オンラインDB（OGN DDB / FlarmNet）では「${online}」です。
+` +
+        `機体情報データベースの値${current ? `「${current}」` : "（空欄）"}は誤っている可能性があります。` +
+        (when ? `
+最後のオンライン取得: ${when}` : "")
+      }
+    >
+      <span className="font-bold">⚠</span> オンライン: {online}
+    </span>
+  );
+}
+
 const EMPTY_RECORD: Omit<AircraftRecord, "device_id"> = {
   glider_type: "",
   registration: "",
@@ -59,8 +88,11 @@ export default function AircraftDbPage() {
       "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます。\n\n" +
       "・登録記号、機種、コンテストナンバー、操縦者名は、手で入れた値でもネット側の値で上書きされます\n" +
       "・ネット側に無い項目はそのまま残ります\n" +
-      "・機体種別（グライダー/曳航機など）は変更されません\n\n" +
-      "実行しますか？"
+      "・機体種別（グライダー/曳航機など）は変更されません\n" +
+      (overlayEnabled
+        ? "\n※ 固定化(OverlayFS)が有効です。取り込んだ内容はメモリ上にだけ残り、再起動で元に戻ります\n"
+        : "") +
+      "\n実行しますか？"
     )) return;
     setFetching(true);
     setFetchResult(null);
@@ -154,17 +186,17 @@ export default function AircraftDbPage() {
             {overlayEnabled && <span className="text-xs" style={{ color: "var(--color-warning)" }}>固定化中 — 変更は再起動時にリセット</span>}
             <button
               onClick={fetchOnline}
-              disabled={fetching || overlayEnabled}
+              disabled={fetching}
               title={overlayEnabled
-                ? "固定化(OverlayFS)が有効なので、取り込んでも再起動で消えます"
+                ? "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます（固定化中なので再起動で元に戻ります）"
                 : "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます"}
               className="px-3 py-1 text-sm rounded font-semibold"
               style={{
                 background: "var(--color-bg-tertiary)",
                 color: "var(--color-text-primary)",
                 border: "1px solid var(--color-border)",
-                opacity: fetching || overlayEnabled ? 0.5 : 1,
-                cursor: fetching || overlayEnabled ? "not-allowed" : "pointer",
+                opacity: fetching ? 0.5 : 1,
+                cursor: fetching ? "wait" : "pointer",
               }}
             >
               {fetching ? "取得中..." : "オンライン取得"}
@@ -219,6 +251,11 @@ export default function AircraftDbPage() {
                 ))}
               </ul>
             )}
+            {overlayEnabled && (
+              <div className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+                ※ 固定化中のため、取り込んだ内容はメモリ上にだけあります。再起動すると元に戻ります。
+              </div>
+            )}
             {fetchResult.added.length > 0 && (
               <div className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
                 ※ 新規の機体IDの接頭辞（ICA / FLR / OGN）は登録元の情報から推定しています。
@@ -228,6 +265,10 @@ export default function AircraftDbPage() {
           </div>
         )}
 
+        <p className="mb-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          登録番号の <span style={{ color: "var(--color-warning)" }}>⚠</span> は、オンラインDB（OGN DDB / FlarmNet）の値と食い違っているという印です。
+          オンライン側が登録の正本なので、<strong>この機体情報データベースの値が誤っている可能性があります</strong>。
+        </p>
         {loading ? (
           <div className="text-center py-8" style={{ color: "var(--color-text-secondary)" }}>読み込み中...</div>
         ) : (
@@ -301,7 +342,12 @@ export default function AircraftDbPage() {
                         {isEditing ? <input style={inputStyle} value={d.glider_type} onChange={e => setDraft({ ...d, glider_type: e.target.value })} /> : rec.glider_type || "—"}
                       </td>
                       <td className="px-3 py-1.5 whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
-                        {isEditing ? <input style={inputStyle} value={d.registration} onChange={e => setDraft({ ...d, registration: e.target.value })} /> : rec.registration || "—"}
+                        {isEditing
+                          ? <input style={inputStyle} value={d.registration} onChange={e => setDraft({ ...d, registration: e.target.value })} />
+                          : <>
+                              {rec.registration || "—"}
+                              <OnlineMismatchMark online={rec.online?.registration} current={rec.registration} fetchedAt={rec.online?.fetched_at} />
+                            </>}
                       </td>
                       <td className="px-3 py-1.5 whitespace-nowrap" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                         {isEditing ? <input style={inputStyle} value={d.competition_id} onChange={e => setDraft({ ...d, competition_id: e.target.value })} /> : rec.competition_id || "—"}

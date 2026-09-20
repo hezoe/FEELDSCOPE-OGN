@@ -189,12 +189,21 @@ interface MergeSummary {
  * 受信機が実際に使う接頭辞は2割ほど食い違うため。
  */
 function mergeOnline(db: AircraftDatabase, net: Map<string, NetRecord>): MergeSummary {
+  const fetchedAt = new Date().toISOString();
   const added: string[] = [];
   const updated: { device_id: string; changes: string[] }[] = [];
   let unchanged = 0;
 
   for (const [hex, n] of net) {
     const proposed = n.prefix + hex;
+    // 取り込んだ値そのものを控える。あとで手で直されたかを見分けるため
+    const snapshot = {
+      registration: n.registration || undefined,
+      glider_type: n.glider_type || undefined,
+      competition_id: n.competition_id || undefined,
+      pilot: n.pilot || undefined,
+      fetched_at: fetchedAt,
+    };
     const key = findKeyByAddress(db, proposed);
     if (!key) {
       db[proposed] = {
@@ -204,6 +213,7 @@ function mergeOnline(db: AircraftDatabase, net: Map<string, NetRecord>): MergeSu
         competition_id: n.competition_id,
         pilot: n.pilot,
         aircraft_type: "glider" as AircraftTypeCode,
+        online: snapshot,
       };
       added.push(proposed);
       continue;
@@ -220,6 +230,8 @@ function mergeOnline(db: AircraftDatabase, net: Map<string, NetRecord>): MergeSu
     apply("glider_type", n.glider_type);
     apply("competition_id", n.competition_id);
     apply("pilot", n.pilot);
+    // ネット側が値を持たない項目は控えにも残さない（比較対象にしない）
+    rec.online = { ...rec.online, ...snapshot };
     if (changes.length > 0) updated.push({ device_id: key, changes });
     else unchanged += 1;
   }
@@ -247,7 +259,13 @@ export async function PUT(req: Request) {
     const { device_id } = body as AircraftRecord;
     if (!device_id) return NextResponse.json({ error: "device_id required" }, { status: 400 });
     const db = await readDb();
-    db[device_id] = body as AircraftRecord;
+    const incoming = body as AircraftRecord;
+    // オンライン取得の控えは画面から編集しない。送られてこなければ既存を残す
+    // （消してしまうと「手で直した」印が出せなくなる）
+    if (incoming.online === undefined && db[device_id]?.online) {
+      incoming.online = db[device_id].online;
+    }
+    db[device_id] = incoming;
     await writeDb(db);
     return NextResponse.json(db[device_id]);
   } catch (err) {
@@ -284,7 +302,11 @@ export async function POST(req: Request) {
         ddb: net.ddbTotal, ddbJa: net.ddbJa,
         flarmnet: net.flarmnetTotal, flarmnetJa: net.flarmnetJa,
       };
-      if (summary.added.length > 0 || summary.updated.length > 0) await writeDb(db);
+      // 追加も更新も無くても、控え(online)と取得日時は毎回書き直す。
+      // ここを「変更があったときだけ」にすると、2回目以降の取得で控えが
+      // 作られないままになる（実機で踏んだ）。ボタンを押したときだけ動く
+      // 手動操作なので、毎回書いても SD への負担は問題にならない。
+      await writeDb(db);
       return NextResponse.json(summary);
     }
 

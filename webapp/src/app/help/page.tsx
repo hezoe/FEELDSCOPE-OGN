@@ -633,6 +633,8 @@ function ManualContent() {
             <li><strong>機体種別（グライダー / 曳航機 など）は変更しません。</strong>どちらのサービスにも無い情報で、曳航の判定に使っているためです</li>
             <li>本人が識別の公開を拒否している機体（DDB の設定）は取り込みません</li>
             <li>ネットに出られない場合は失敗します。結果は実行後に画面へ表示されます</li>
+            <li><strong>固定化(OverlayFS)がONでも実行できます。</strong>ただし取り込んだ内容はメモリ上にだけ残り、再起動すると元に戻ります（追加・編集・削除と同じ扱いです）</li>
+            <li>取り込んだあとに手で直すと、登録番号に <span style={{ color: "var(--color-warning)" }}>⚠</span> が付きます。オンライン側が登録の正本なので、こちらの値が誤っている可能性があるという印です。次にオンライン取得すると正本の値へ戻ります</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
             機体IDの前3文字（ICA / FLR / OGN）は、同じ機体でも受信した電波の種別と登録内容で食い違うことがあります。
@@ -675,11 +677,32 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.2.11 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.11</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="登録番号がオンラインDBと食い違う機体に印を付けるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報データベースで、登録番号が<strong>オンラインDB（OGN DDB / FlarmNet）の値と違う</strong>場合に <span style={{ color: "var(--color-warning)" }}>⚠</span> とオンライン側の値を並べて表示します。オンライン側が登録の正本なので、<strong>こちらの値が誤っている可能性がある</strong>という印です。</li>
+          <li>印にマウスを乗せると、オンライン側の値・こちらの値・最後にオンライン取得した日時が出ます。</li>
+          <li>オンライン取得を実行すると正本の値に揃うので、印は消えます。</li>
+        </ul>
+      </Card>
+
+      <Card title="固定化中でもオンライン取得を使えるようにしました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>固定化(OverlayFS)がONのときに<strong>オンライン取得ボタンが押せなくなっていた</strong>のを直しました。追加・編集・削除と同じように使えます。</li>
+          <li>固定化中は、取り込んだ内容が<strong>メモリ上にだけ残り再起動で元に戻る</strong>旨を、実行前の確認と実行結果の両方に表示します。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.10 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.10</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="機体情報を OGN DDB と FlarmNet からまとめて取り込めるようにしました">

@@ -105,6 +105,20 @@ export type AircraftTypeCode =
   | "uav"
   | "jet";
 
+/**
+ * オンライン取得で入った値の控え。
+ * 取り込んだあとに手で直したかどうかを見分けるために残す。
+ * 画面では、いまの値がこれと違っていれば「直した」印を出す。
+ */
+export interface AircraftOnlineSnapshot {
+  registration?: string;
+  glider_type?: string;
+  competition_id?: string;
+  pilot?: string;
+  /** 最後に取り込んだ日時 (ISO8601) */
+  fetched_at?: string;
+}
+
 export interface AircraftRecord {
   device_id: string;
   glider_type: string;
@@ -112,6 +126,8 @@ export interface AircraftRecord {
   competition_id: string;
   pilot: string;
   aircraft_type: AircraftTypeCode;
+  /** オンライン取得で入った値。手で直したかの判定に使う */
+  online?: AircraftOnlineSnapshot;
 }
 
 export type AircraftDatabase = Record<string, AircraftRecord>;
