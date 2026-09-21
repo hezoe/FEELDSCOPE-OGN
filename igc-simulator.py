@@ -78,7 +78,7 @@ class IGCFlight:
         self.filepath = filepath
         self.pilot = ""
         self.glider_type = ""
-        self.glider_id = ""          # JA registration (e.g. JA0000)
+        self.glider_id = ""          # JA registration (e.g. JA12AB)
         self.competition_id = ""     # Contest number (e.g. E1)
         self.date = None             # Flight date from HFDTE
         self.device_id = ""          # Generated MQTT device ID

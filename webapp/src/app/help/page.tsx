@@ -698,11 +698,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.5 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.5</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="リポジトリの履歴整理に備えた更新処理">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>配布元（GitHub）の過去の履歴から、公開すべきでない情報を取り除く作業を予定しています。</li>
+          <li>履歴を整理すると、これまでの更新処理では<strong>アップデートが失敗して止まってしまいます</strong>。この版から、履歴が整理されていても自動で追従して更新できるようにしました。</li>
+          <li>各端末の設定・機体情報・記録は Git で管理していないため、影響はありません。画面と動作にも変わりはありません。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.4 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.4</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="ソースの整理">

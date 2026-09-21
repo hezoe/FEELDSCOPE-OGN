@@ -28,7 +28,7 @@ async function writeDb(db: AircraftDatabase): Promise<void> {
 const DDB_URL = "http://ddb.glidernet.org/download/?j=1";
 /** FlarmNet 公式(LXNAV形式)。全バイト +1 の難読化がかかっている */
 const FLARMNET_URL = "https://www.flarmnet.org/files/lxnav.fln";
-/** 日本の登録記号: JA + 数字1桁 + 英数3桁（JA0000 / JA0000 など） */
+/** 日本の登録記号: JA + 数字1桁 + 英数3桁（JA1234 / JA12AB など） */
 const JA_RE = /^JA[0-9][0-9A-Z]{3}$/;
 /** DDB の device_type から機体IDの接頭辞へ。新規に作るときだけ使う */
 const DEVICE_TYPE_PREFIX: Record<string, string> = { I: "ICA", F: "FLR", O: "OGN" };
@@ -143,8 +143,8 @@ async function fetchOnlineRecords(): Promise<OnlineFetch> {
   }
 
   // DDB に載っている登録記号は、そのアドレスが正。
-  // FlarmNet には桁の入れ替わった登録があり（2026-09 実測: JA0000 が
-  // DDB=DB0730 / FlarmNet=DB7030 の2つで載っている。受信機が実際に聞くのは
+  // FlarmNet には桁の入れ替わった登録があり（2026-09 実測: ある機体が
+  // DDB と FlarmNet で桁の入れ替わった2つのアドレスで載っている。受信機が実際に聞くのは
   // DB0730 のほう）、そのまま取り込むと同じ登録記号の行が二重にできる。
   const ddbRegs = new Set(Array.from(records.values()).map((r) => r.registration));
 

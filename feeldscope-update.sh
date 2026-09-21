@@ -53,7 +53,18 @@ echo ""
 log_info "[1/6] Pulling latest code..."
 cd "$SCRIPT_DIR"
 SELF_HASH_BEFORE=$(sha256sum "$0" | awk '{print $1}')
-sudo -u pi git pull --ff-only
+if ! sudo -u pi git pull --ff-only; then
+    # 上流の履歴が書き換えられた（force push）場合だけ、origin/master に合わせ直す。
+    # 端末はコミットを持たないので失うものは無い。設定・記録は追跡外なので残る。
+    # ネットワーク不通や、早送りできるのに失敗した場合（手元の変更と衝突など）は従来どおり止める。
+    sudo -u pi git fetch origin
+    if sudo -u pi git merge-base --is-ancestor HEAD origin/master; then
+        log_error "git pull failed"
+        exit 1
+    fi
+    log_warn "Upstream history was rewritten; resetting to origin/master"
+    sudo -u pi git reset --hard origin/master
+fi
 SELF_HASH_AFTER=$(sha256sum "$0" | awk '{print $1}')
 # 自己更新検知: スクリプト本体が git pull で書き換わった場合は新版で再exec する。
 # bash は実行中ファイルを位置オフセットで読み続けるため、書き換わった後の新ステップ
