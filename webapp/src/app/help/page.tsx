@@ -177,7 +177,7 @@ function ManualContent() {
         </Section>
         <Section id="map-icon-colors" heading="機体アイコンの色分け">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><span style={{ color: "#4caf50", fontWeight: 600 }}>緑</span> — 通常飛行中</li>
+            <li><span style={{ color: "#4caf50", fontWeight: 600 }}>緑</span> — 通常飛行中（Open OGN で補った圏外の機体も同じ緑で、見た目では区別しません。ただし航跡は描きません）</li>
             <li><span style={{ color: "#ff9800", fontWeight: 600 }}>橙</span> — 低高度・着陸進入中（着陸確定後に緑へ復帰）</li>
             <li><span style={{ color: "#f44336", fontWeight: 600 }}>赤・点滅</span> — パス不足（滑空場に安全に帰還できない高度）</li>
             <li><span style={{ color: "#1565c0", fontWeight: 600 }}>青</span> — ADS-B受信機体（ローカル受信機／Open ADS-B＝adsb.lol の両方）</li>
@@ -353,6 +353,26 @@ function ManualContent() {
             <li><strong>ADS-B 受信を有効にする</strong>チェックボックス（ブラウザ + サーバ） — adsb-pollerサービスのON/OFF</li>
             <li><strong>tar1090 / dump1090 URL</strong>（ブラウザ + サーバ） — aircraft.jsonエンドポイント。デフォルト: <code>http://fr24.local/tar1090/data/aircraft.json</code>。<code>http://</code> か <code>https://</code> で始まる必要があり、空白・引用符・改行などを含むURLは保存できません</li>
             <li><strong>ポーリング間隔（秒）</strong>（ブラウザ + サーバ） — 1〜30秒</li>
+          </ul>
+
+          <p className="text-sm mt-3 mb-1" style={{ color: "var(--color-text-secondary)" }}>
+            以下の2つは<strong>受信機を持たない端末でも使える追加表示</strong>です。インターネット接続が必要で、どちらも<strong>フライトログには記録しません</strong>（地図の表示だけに使います）。管理者ログインなしで切り替えられます。
+          </p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>OpenなADS-Bを追加（adsb.lol）</strong>（ブラウザ） — 公開データ <code>adsb.lol</code> から<strong>滑空場中心・半径20海里</strong>の ADS-B / Mode-S 機を取得して<span style={{ color: "#1565c0", fontWeight: 600 }}>青</span>で表示します。ADS-B受信機や tar1090 は不要です。5秒ごとに更新し、過去10分の航跡も描きます。
+              <ul className="list-[circle] ml-5 mt-1 space-y-1">
+                <li>ローカル受信（上の「ADS-B 受信を有効にする」）と<strong>同じ機体は二重に表示しません</strong>。ローカル受信側を優先します。</li>
+                <li>ONにした時点で取得を開始します。OFFにすると表示中の機体も消えます。</li>
+              </ul>
+            </li>
+            <li><strong>OpenなOGNを追加（OGNネットワーク）</strong>（ブラウザ） — OGNネットワーク（<code>aprs.glidernet.org</code>）へ直接接続し、<strong>滑空場中心・半径50海里</strong>の OGN 機を取得して表示します。<strong>自局の受信圏外にいる機体</strong>を広く把握できます。
+              <ul className="list-[circle] ml-5 mt-1 space-y-1">
+                <li><strong>同じ機体はローカル受信を優先</strong>します（アドレス6桁で判定）。直接受信できている機体はローカル側だけを表示し、圏外の機体だけをネットワークから補います。</li>
+                <li>プライバシー設定を尊重します。ノートラッキング機はネットワーク側から配信されず、匿名機（ランダムID）は取り込み時に除外します。</li>
+                <li>表示は通常の受信機体と<strong>同じ緑のアイコン</strong>で、見た目では区別しません。登録番号は端末の機体データベース（OGN DDB／FlarmNet）で補い、分からなければアドレス6桁を出します。<strong>航跡は描きません</strong>（位置のみ）。</li>
+                <li>自局の受信品質の確認にも使えます。ネットワークには出ているのに自局で拾えていない機体があれば、アンテナや設置場所を見直す手がかりになります。</li>
+              </ul>
+            </li>
           </ul>
         </Section>
 
@@ -678,11 +698,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.3 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.3</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OpenなADS-B・OpenなOGN の説明をマニュアルに追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定画面に追加した <strong>「OpenなADS-Bを追加（adsb.lol）」</strong> と <strong>「OpenなOGNを追加（OGNネットワーク）」</strong> が、マニュアルに載っていませんでした。<strong>3-4. ADS-B 受信設定</strong> に追記しました。</li>
+          <li>取得範囲・更新間隔・ローカル受信との重複回避・プライバシーの扱い・フライトログに記録しないことを記載しました。</li>
+          <li>OpenなOGN で補った機体は<strong>通常の受信機体と同じ緑のアイコン</strong>で表示され、<strong>航跡は描きません</strong>。見分けがつかず迷いやすい点なので、マニュアルと地図の凡例の両方に明記しました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.2 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.2</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="運用中に地図と飛行ログの更新が止まる問題を改修">
