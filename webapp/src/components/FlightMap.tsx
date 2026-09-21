@@ -19,7 +19,7 @@ import type {
 } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
-import { lookupByDeviceId } from "@/lib/aircraft-id";
+import { lookupByDeviceId, hexAddress } from "@/lib/aircraft-id";
 // 飛行記録の検知と保持はサーバ側 (src/lib/flight-tracker.ts)。ここは表示と手動編集のみ。
 import type { FlightLogEntry, FlightPhase } from "@/lib/flight-tracker";
 
@@ -284,6 +284,21 @@ interface OpenAdsbAircraft {
   trail: [number, number][];
 }
 
+/** /api/open-ogn (ogn.ezoe.net) が返す1機ぶん */
+interface OpenOgnAircraft {
+  device_id: string;
+  hex: string;
+  registration: string | null;
+  cn: string | null;
+  model: string | null;
+  latitude: number;
+  longitude: number;
+  altitude_m: number | null;
+  heading_deg: number;
+  ground_speed_ms: number;
+  aircraft_type: number | null;
+}
+
 const TRAIL_DURATION_MS = 60_000; // 1 minute trail
 const ANON_TTL_MS = 90_000; // RND(匿名)マーカーの保持。この間 無受信なら消す
 
@@ -459,6 +474,9 @@ export default function FlightMap() {
 
   // RND(ランダムID)機の匿名クラスタ。device_id ではなく場所(小数3桁≒100m)キーで集約。
   const anonRef = useRef<Map<string, { marker: L.Marker; lastMs: number }>>(new Map());
+
+  // Open OGN (ogn.ezoe.net) の独立レイヤ。hex キー。ローカル OGN とは別管理。
+  const openOgnRef = useRef<Map<string, { marker: L.Marker }>>(new Map());
 
   // Home view state
   const [homeView, setHomeView] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 0, lng: 0, zoom: 11 });
@@ -1040,6 +1058,73 @@ export default function FlightMap() {
     const iv = setInterval(pollOpenAdsb, 5000);
     return () => { stopped = true; clearInterval(iv); clearOpenAdsb(); };
   }, [units.openAdsb, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenAdsb]);
+
+  // ── Open OGN (ogn.ezoe.net) レイヤ ──
+  // 設定「OpenなOGNを追加」ON のとき /api/open-ogn を5秒ごとにポーリングし、空港中心
+  // 50海里の OGN 機を緑グライダーで表示。ローカル受信(aircraftRef)に同一機(hex一致)が
+  // 居れば表示しない(=ローカル優先マージ)。表示のみでフライトログ/DB登録には不関与。
+  const clearOpenOgn = useCallback(() => {
+    const map = mapRef.current;
+    for (const [, e] of openOgnRef.current) map?.removeLayer(e.marker);
+    openOgnRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (!units.openOgn) { clearOpenOgn(); return; }
+    let stopped = false;
+    const lat = units.airfield.latitude;
+    const lon = units.airfield.longitude;
+
+    async function pollOpenOgn() {
+      const map = mapRef.current;
+      if (!map || stopped) return;
+      let data: { aircraft?: OpenOgnAircraft[] } = {};
+      try {
+        const res = await fetch(`/api/open-ogn?lat=${lat}&lon=${lon}`);
+        data = await res.json();
+      } catch { return; }
+      if (stopped) return;
+      const list = data.aircraft || [];
+      // ローカル(直接受信)の hex 集合。ローカル優先で同一機は出さない。
+      const localHexes = new Set<string>();
+      for (const key of aircraftRef.current.keys()) {
+        const h = hexAddress(key);
+        if (h) localHexes.add(h);
+      }
+      const seen = new Set<string>();
+      for (const a of list) {
+        if (a.latitude == null || a.longitude == null) continue;
+        const hex = hexAddress(a.device_id);
+        if (!hex || localHexes.has(hex)) continue; // ローカルにあれば出さない(優先)
+        seen.add(hex);
+        const latlng = L.latLng(a.latitude, a.longitude);
+        const label = a.registration || a.cn || hex;
+        const tipPos = { altitude_m: a.altitude_m ?? 0, ground_speed_ms: a.ground_speed_ms } as unknown as AircraftPosition;
+        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, undefined, false, a.registration || a.cn || undefined, undefined, undefined);
+        let e = openOgnRef.current.get(hex);
+        if (!e) {
+          const marker = L.marker(latlng, { icon }).addTo(map);
+          marker.bindTooltip(buildTooltip(label, tipPos, unitsRef.current, false), {
+            permanent: true, direction: "right", offset: [12, 0], className: "aircraft-tooltip",
+          });
+          e = { marker };
+          openOgnRef.current.set(hex, e);
+        } else {
+          e.marker.setLatLng(latlng);
+          e.marker.setIcon(icon);
+          e.marker.setTooltipContent(buildTooltip(label, tipPos, unitsRef.current, false));
+        }
+      }
+      for (const [hex, e] of openOgnRef.current) {
+        if (!seen.has(hex)) { map.removeLayer(e.marker); openOgnRef.current.delete(hex); }
+      }
+    }
+
+    pollOpenOgn();
+    const iv = setInterval(pollOpenOgn, 5000);
+    return () => { stopped = true; clearInterval(iv); clearOpenOgn(); };
+  }, [units.openOgn, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenOgn]);
 
   // RND(匿名)マーカーの掃除。一定時間 受信の無いクラスタを消す(非永続)。
   useEffect(() => {

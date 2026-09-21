@@ -101,7 +101,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -609,6 +609,22 @@ export default function SettingsPage() {
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                   受信機がなくても、公開の adsb.lol から空港周辺（半径20海里）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。
+                </p>
+              </div>
+
+              {/* Open OGN (ogn.ezoe.net) — ローカル受信の圏外を OGN ネットワークで補完。ローカル優先マージ */}
+              <div className="pt-3" style={{ borderTop: "1px solid var(--color-border)" }}>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.openOgn}
+                    onChange={(e) => setOpenOgn(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">OpenなOGNを追加（ogn.ezoe.net）</span>
+                </label>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  ローカル受信に加えて、OGNネットワーク（ogn.ezoe.net）から空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。
                 </p>
               </div>
             </div>

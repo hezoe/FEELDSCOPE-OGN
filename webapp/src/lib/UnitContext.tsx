@@ -28,6 +28,7 @@ interface UnitContextType {
   setAirfield: (a: AirfieldConfig) => void;
   setAdsb: (a: AdsbConfig) => void;
   setOpenAdsb: (v: boolean) => void;
+  setOpenOgn: (v: boolean) => void;
   setMapSource: (m: MapSource) => void;
 }
 
@@ -43,6 +44,7 @@ const UnitContext = createContext<UnitContextType>({
   setAirfield: () => {},
   setAdsb: () => {},
   setOpenAdsb: () => {},
+  setOpenOgn: () => {},
   setMapSource: () => {},
 });
 
@@ -115,6 +117,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setAirfield: (airfield: AirfieldConfig) => updateAirfield(airfield),
         setAdsb: (adsb: AdsbConfig) => update({ adsb }),
         setOpenAdsb: (openAdsb: boolean) => update({ openAdsb }),
+        setOpenOgn: (openOgn: boolean) => update({ openOgn }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >
