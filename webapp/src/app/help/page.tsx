@@ -698,11 +698,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.6 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.6</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OpenなOGNで一部の機体（Naviter系）が表示されない不具合を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Naviter系（OGNAVI）経由で中継される機体は、OGNの識別子(id)の桁数が標準と異なるため、<strong>「OpenなOGN」の地図に表示されないこと</strong>がありました（登録済みの機体でも欠落）。</li>
+          <li>桁数の異なる識別子にも対応し、これらの機体も表示されるようにしました。アドレス種別は発信元コールサイン（FLR/ICA/OGN）で判定します。自局で直接受信・記録する機体には影響ありません。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.5 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.5</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="リポジトリの履歴整理に備えた更新処理">

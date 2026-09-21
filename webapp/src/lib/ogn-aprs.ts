@@ -60,13 +60,17 @@ function parseBeacon(line: string): OgnAircraft | null {
   // 高度 /A=NNNNNN (feet)
   const am = rest.match(/\/A=(\d{6})/);
   const altFt = am ? parseInt(am[1], 10) : null;
-  // OGN id: idXXYYYYYY (XX=状態バイト, YYYYYY=アドレス)
-  const idm = rest.match(/\bid([0-9A-Fa-f]{2})([0-9A-Fa-f]{6})\b/);
+  // OGN id: 標準 idXXYYYYYY(8桁) と Naviter系(OGNAVI) の id+4桁+6桁(10桁, 例 id042084D1D3) の両対応。
+  // 末尾6桁をアドレス、先頭バイトを種別/状態バイトとして扱う。
+  const idm = rest.match(/\bid([0-9A-Fa-f]{2,4})([0-9A-Fa-f]{6})\b/);
   if (!idm) return null;
-  const idByte = parseInt(idm[1], 16);
+  const typeByte = parseInt(idm[1].slice(0, 2), 16); // 先頭バイト(種別/状態)
   const addr = idm[2].toUpperCase();
-  const addrType = idByte & 0x03;          // 0=random 1=ICAO 2=FLARM 3=OGN
-  const acftType = (idByte >> 2) & 0x0f;
+  // アドレス種別はソースコールサイン接頭辞(FLR/ICA/OGN/RND)を優先。無ければ種別バイト下位2bit。
+  const sp = src.slice(0, 3);
+  const addrType =
+    sp === "RND" ? 0 : sp === "ICA" ? 1 : sp === "FLR" ? 2 : sp === "OGN" ? 3 : (typeByte & 0x03);
+  const acftType = (typeByte >> 2) & 0x0f;
   if (addrType === 0) return null;          // RND(匿名) は除外
   const prefix = addrType === 1 ? "ICA" : addrType === 2 ? "FLR" : "OGN";
   return {
