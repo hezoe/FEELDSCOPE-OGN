@@ -12,7 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const RADIUS_NM = 250;
+// 空港からの表示半径。マイル=海里で運用するため 20マイル = 20海里(adsb.lol の point 半径単位=海里)。
+const RADIUS_NM = 20;
 const CACHE_MS = 8_000;      // adsb.lol 再取得の最短間隔(サーバ側共有キャッシュ)
 const TRAIL_MS = 600_000;    // 航跡保持 = 過去10分
 const STALE_MS = 60_000;     // 直近60秒 受信の無い機体は返さない
@@ -160,6 +161,7 @@ export async function GET(req: NextRequest) {
     last_poll: lastPoll ? new Date(lastPoll).toISOString() : null,
     center: { lat, lon },
     radius_nm: RADIUS_NM,
+    radius_miles: RADIUS_NM, // マイル=海里で運用
     count: aircraft.length,
     aircraft,
   });

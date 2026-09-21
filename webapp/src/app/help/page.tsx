@@ -678,16 +678,28 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.3.0 */}
+      {/* v1.3.1 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
+      <Card title="Open ADS-B の表示範囲を空港中心 20海里 に設定">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Open ADS-B（adsb.lol）の取得・表示範囲を<strong>空港中心 半径20海里</strong>に絞りました（従来は約250海里）。周辺の近距離トラフィックに集中でき、通信・描画の負荷も軽くなります。</li>
+        </ul>
+      </Card>
+
+      {/* v1.3.0 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+      </div>
+
       <Card title="Open ADS-B（受信機なしで ADS-B 表示）と、匿名機（ランダムID）の扱いを追加">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li><strong>OpenなADS-Bを追加</strong> — 設定画面の「ADS-B 受信設定」にチェックボックスを追加しました。ONにすると、<strong>ADS-B受信機やローカルの tar1090 が無くても</strong>、公開データ（adsb.lol）から<strong>空港周辺（半径約250nm）の ADS-B 機</strong>を取得して青色で表示します。5秒ごとに更新し、過去10分の航跡も表示します（フライトログには記録しません）。データ元: adsb.lol。</li>
+          <li><strong>OpenなADS-Bを追加</strong> — 設定画面の「ADS-B 受信設定」にチェックボックスを追加しました。ONにすると、<strong>ADS-B受信機やローカルの tar1090 が無くても</strong>、公開データ（adsb.lol）から<strong>空港周辺の ADS-B 機</strong>を取得して青色で表示します（当初は約250海里、v1.3.1で20海里に変更）。5秒ごとに更新し、過去10分の航跡も表示します（フライトログには記録しません）。データ元: adsb.lol。</li>
           <li><strong>匿名機（ランダムID）の扱い</strong> — <code>RND</code> で始まる機体は、追跡されないために送信のたびIDが変わる privacy 機（FLARM の random/EPRA）です。これまでは送信のたびに別機として大量に表示され地図が混雑していました。今後は<strong>個体として追跡・識別せず、位置だけをまとめて灰色の「?」1個</strong>で表示します（登録番号の解決・航跡・機体DB登録は行いません）。OGN/FLARM のプライバシー方針に沿った表示です。</li>
         </ul>
       </Card>

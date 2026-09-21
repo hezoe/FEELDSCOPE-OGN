@@ -608,7 +608,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium">OpenなADS-Bを追加（adsb.lol）</span>
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  受信機がなくても、公開の adsb.lol から空港周辺（半径250nm）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。
+                  受信機がなくても、公開の adsb.lol から空港周辺（半径20海里）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。
                 </p>
               </div>
             </div>
