@@ -65,6 +65,29 @@ PENDING_MAX_AGE_SEC = 60
 MIN_PACKETS_TO_PUBLISH = 2
 STATUS_RETAIN = True
 
+# ── ランダムID(RND)機の扱い ────────────────────────────────────────────
+# アドレス種別0の機体は、ビーコンごとに別IDを名乗る（プライバシー/EPRA）ため
+# 追跡できない。加えて、至近距離の強信号が飽和して復号が割れると、実在しない
+# RND が大量に湧く（たきかわ 2026-09-21: 実機16機に対し幽霊789件）。
+#
+# これを機体ごとの retain 付きトピックで配信すると、ブローカーが消えない
+# トピックを抱え込む。同日 mosquitto が retain 2,449件を抱えて CPU 100% で
+# 応答しなくなり、地図と飛行ログが約1時間止まった。
+#
+# 位置は「そこに追跡不能な機体が居る」ことを示すため配信する（地図側は
+# FlightMap.tsx で匿名マーカーに集約する）。retain の付く機体ステータスと
+# 機体一覧には載せない。
+RANDOM_ID_PREFIX = "RND"
+
+# 起動直後に既存 retain を採録する窓。ブローカーは購読した瞬間に retain を
+# まとめて送るので短くてよい。長くすると通常の配信開始が遅れる。
+RETAIN_ADOPT_SEC = 5
+
+
+def is_random_id(device_id):
+    """ランダムID(アドレス種別0)の機体か。"""
+    return device_id.startswith(RANDOM_ID_PREFIX)
+
 
 def detect_receiver_id():
     """Auto-detect receiver ID from OGN configuration files."""
@@ -637,6 +660,7 @@ class OgnMqttPublisher:
         )
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
+        self.client.on_message = self._on_message
         self.client.will_set(
             f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/status",
             payload=json.dumps({"online": False}),
@@ -646,13 +670,34 @@ class OgnMqttPublisher:
         self._connected = False
         self._prev_positions = {}  # device_id -> last timestamp_epoch published
         self._filter = PositionFilter()
+        # retain を付けて配信した機体ステータスの device_id。ここから消えた機体は
+        # トゥームストーン（空ペイロード）を送って retain を消す。
+        self._retained_status_ids = set()
+        # 起動直後、ブローカーに既に残っている retain を拾い上げる期間の終了時刻。
+        # 前回の稼働で残した retain は、この採録をしないと誰にも消されず残り続ける。
+        self._adopt_until = 0.0
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
             log.info("Connected to MQTT broker")
             self._connected = True
+            # 既存の retain を採録する。購読した瞬間にブローカーが retain を
+            # まとめて送ってくるので、短い窓で受けるだけでよい。
+            self._adopt_until = time.time() + RETAIN_ADOPT_SEC
+            client.subscribe(f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft/+/status", qos=0)
         else:
             log.error("MQTT connection failed: rc=%s", rc)
+
+    def _on_message(self, client, userdata, msg):
+        """既存 retain の採録。採録窓を過ぎたら購読をやめる。"""
+        if time.time() > self._adopt_until:
+            client.unsubscribe(f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft/+/status")
+            return
+        if not msg.payload:
+            return                      # トゥームストーン。retain は既に無い
+        parts = msg.topic.split("/")
+        if len(parts) >= 5 and parts[-1] == "status":
+            self._retained_status_ids.add(parts[-2])
 
     def _on_disconnect(self, client, userdata, flags, rc, properties=None):
         log.warning("Disconnected from MQTT broker: rc=%s", rc)
@@ -675,13 +720,26 @@ class OgnMqttPublisher:
         topic = f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft/{device_id}/position"
         self._publish(topic, position, retain=POSITION_RETAIN, qos=0)
 
+    def _status_topic(self, device_id):
+        return f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft/{device_id}/status"
+
     def publish_aircraft_status(self, device_id, summary, latest_position):
         """Publish aircraft summary with latest position."""
-        topic = f"{MQTT_BASE_TOPIC}/{RECEIVER_ID}/aircraft/{device_id}/status"
         payload = {**summary}
         if latest_position:
             payload["latest_position"] = latest_position
-        self._publish(topic, payload, retain=True, qos=1)
+        self._publish(self._status_topic(device_id), payload, retain=True, qos=1)
+        self._retained_status_ids.add(device_id)
+
+    def clear_retained_status(self, device_id):
+        """機体ステータスの retain を消す。
+
+        空ペイロードの retain 送信がブローカーへの削除指示になる。JSON を
+        載せると「空の機体情報」という retain が残ってしまうので、ここは
+        _publish を通さず payload=None で送る。
+        """
+        self.client.publish(self._status_topic(device_id), payload=None, qos=1, retain=True)
+        self._retained_status_ids.discard(device_id)
 
     def publish_aircraft_list(self, aircraft_dict):
         """Publish aggregated list of all tracked aircraft.
@@ -695,6 +753,8 @@ class OgnMqttPublisher:
         cutoff = logbook_start_utc()
         summary_list = []
         for dev_id, ac in aircraft_dict.items():
+            if is_random_id(dev_id):
+                continue              # 追跡不能。個体として一覧に載せない
             entry = {**ac["summary"]}
             pos = ac["latest_position"]
             if pos:
@@ -739,6 +799,10 @@ class OgnMqttPublisher:
                 del aircraft[dev_id]
 
             now_epoch = time.time()
+            # 下の _prev_positions の掃除で cutoff(エポック秒) を使い回しているので、
+            # 日界(datetime)はここだけの名前にしておく
+            logbook_cutoff = logbook_start_utc()
+            active_status_ids = set()
             for dev_id, ac in aircraft.items():
                 positions = ac["positions"]          # 時刻昇順・重複除去済み
                 if positions:
@@ -772,9 +836,27 @@ class OgnMqttPublisher:
                 # 機体一覧・ステータスの「最新位置」も、採用した位置に揃える。
                 # 裏付けの取れていない機体は位置を出さない。
                 ac["latest_position"] = self._filter.last_good(dev_id)
+
+                # retain の付く機体ステータスは、当日運用中の追跡できる機体だけ。
+                # RND(追跡不能)と前日以前の機体を載せると、消えないトピックが
+                # 際限なく積み上がる（2026-09-21 のブローカー停止の原因）。
+                pos = ac["latest_position"]
+                if is_random_id(dev_id) or (pos and _position_before(pos, logbook_cutoff)):
+                    continue
                 self.publish_aircraft_status(
                     dev_id, ac["summary"], ac["latest_position"]
                 )
+                active_status_ids.add(dev_id)
+
+            # 配信をやめた機体の retain を消す。消さないとブローカーが永久に
+            # 抱え続け、購読側(地図・飛行ログ)は再接続のたびに読み込んでしまう。
+            # 採録窓の間は、既存 retain を拾い切る前なので消さない。
+            if time.time() > self._adopt_until:
+                stale = self._retained_status_ids - active_status_ids
+                for dev_id in stale:
+                    self.clear_retained_status(dev_id)
+                if stale:
+                    log.info("cleared %d retained aircraft status topic(s)", len(stale))
 
             # 長時間運転で _prev_positions が膨らまないよう、十分古い記録は捨てる
             if len(self._prev_positions) > 1000:

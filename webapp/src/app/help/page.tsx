@@ -678,11 +678,33 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.2 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.2</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="運用中に地図と飛行ログの更新が止まる問題を改修">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>匿名機（ランダムID）を個体として扱わない対策は、v1.4.1 では<strong>画面側だけ</strong>に入っていました。受信側は1機ずつ配信し続けていたため機体情報が内部に溜まり続け、<strong>運用中に地図と飛行ログの更新が止まる</strong>ことがありました（受信とOGNへのアップロードは継続します）。</li>
+          <li>受信側でも匿名機を個体として扱わないようにしました。位置は引き続き配信するので、<strong>地図の灰色「?」表示は変わりません</strong>。</li>
+          <li>前日以前の機体情報を抱え続けないようにしました。運用日が変わると自動で片付きます。</li>
+          <li>受信しなくなった機体の情報を内部から確実に消すようにしました。長時間の連続運転でも溜まりません。</li>
+        </ul>
+      </Card>
+
+      <Card title="配信の仕組みを再起動したあと受信データが戻らない問題を改修">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>メッセージ配信の仕組みを再起動すると、受信データを送り出す処理が道連れで停止し、<strong>そのまま復帰しません</strong>でした。地図と飛行ログが更新されなくなります。</li>
+          <li>道連れで止まらないようにし、万一止まっても自動で復帰するようにしました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.1 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="OpenなOGN を OGNネットワークへ直接接続する方式に変更">

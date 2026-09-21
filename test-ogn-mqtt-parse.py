@@ -26,7 +26,36 @@ def load_ogn_mqtt():
     client_mod = types.ModuleType("paho.mqtt.client")
 
     class _Client:
-        pass
+        """配信内容を記録するだけのダミー。publish の中身をテストから覗く。"""
+
+        def __init__(self, *args, **kwargs):
+            self.published = []      # (topic, payload, qos, retain)
+            self.subscribed = []
+            self.unsubscribed = []
+
+        def will_set(self, *args, **kwargs):
+            pass
+
+        def publish(self, topic, payload=None, qos=0, retain=False):
+            self.published.append((topic, payload, qos, retain))
+
+        def subscribe(self, topic, qos=0):
+            self.subscribed.append(topic)
+
+        def unsubscribe(self, topic):
+            self.unsubscribed.append(topic)
+
+        def connect(self, *args, **kwargs):
+            pass
+
+        def loop_start(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+        def disconnect(self):
+            pass
 
     client_mod.Client = _Client
     client_mod.CallbackAPIVersion = types.SimpleNamespace(VERSION2=2)
@@ -308,6 +337,53 @@ def test_lone_position_expires(m):
         "期限切れの保留を配信している: %r" % out
 
 
+def test_is_random_id(m):
+    assert m.is_random_id("RND0BC7BD")
+    assert not m.is_random_id("FLRDB0730")
+    assert not m.is_random_id("ICA84B52E")
+
+
+def test_random_id_not_in_aircraft_list(m):
+    """RND は機体一覧に載せない。
+
+    2026-09-21 たきかわ: 至近の強信号が割れて RND が785件湧き、機体ごとの
+    retain 付きトピックがブローカーに溜まって mosquitto が CPU 100% で停止した。
+    """
+    pub = m.OgnMqttPublisher()
+    aircraft = {
+        "FLRDB0730": {"summary": {"device_id": "FLRDB0730"}, "latest_position": None},
+        "RND0BC7BD": {"summary": {"device_id": "RND0BC7BD"}, "latest_position": None},
+        "RNDE8775D": {"summary": {"device_id": "RNDE8775D"}, "latest_position": None},
+    }
+    pub.publish_aircraft_list(aircraft)
+
+    topic, payload, _qos, retain = pub.client.published[-1]
+    assert topic.endswith("/aircraft"), topic
+    assert retain is True
+    import json as _json
+    ids = [a["device_id"] for a in _json.loads(payload)["aircraft"]]
+    assert ids == ["FLRDB0730"], ids
+
+
+def test_retained_status_tracked_and_cleared(m):
+    """retain を付けた機体は覚えておき、消すときは空ペイロードを送る。"""
+    pub = m.OgnMqttPublisher()
+    pub.publish_aircraft_status("FLRDB0730", {"device_id": "FLRDB0730"}, None)
+    assert "FLRDB0730" in pub._retained_status_ids
+
+    topic, payload, _qos, retain = pub.client.published[-1]
+    assert topic.endswith("/aircraft/FLRDB0730/status"), topic
+    assert retain is True and payload, "retain 付きで中身のある配信であること"
+
+    pub.clear_retained_status("FLRDB0730")
+    topic, payload, _qos, retain = pub.client.published[-1]
+    assert topic.endswith("/aircraft/FLRDB0730/status"), topic
+    # 空ペイロード + retain がブローカーへの削除指示。JSON を載せてはいけない
+    assert payload is None, payload
+    assert retain is True
+    assert "FLRDB0730" not in pub._retained_status_ids
+
+
 def main():
     m = load_ogn_mqtt()
     tests = [
@@ -326,6 +402,9 @@ def main():
         test_single_glitch_in_flight,
         test_bad_reference_recovers,
         test_lone_position_expires,
+        test_is_random_id,
+        test_random_id_not_in_aircraft_list,
+        test_retained_status_tracked_and_cleared,
     ]
     failed = 0
     for test in tests:

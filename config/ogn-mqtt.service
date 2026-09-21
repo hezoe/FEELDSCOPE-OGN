@@ -2,14 +2,20 @@
 Description=OGN FLARM MQTT Publisher for FEELDSCOPE
 After=network-online.target mosquitto.service rtlsdr-ogn.service
 Wants=network-online.target
-Requires=mosquitto.service
+# mosquitto は Wants にとどめる。Requires にすると mosquitto を止めた瞬間に
+# この service も道連れで停止し、mosquitto を起動し直しても戻ってこない
+# (2026-09-21、ブローカーの復旧作業中に受信の配信が止まった)。
+# ブローカーが落ちている間は paho が再接続を試み続けるので、待たせてよい。
+Wants=mosquitto.service
 
 [Service]
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/FEELDSCOPE
 ExecStart=/usr/bin/python3 /home/pi/FEELDSCOPE/ogn-mqtt.py
-Restart=on-failure
+# on-failure では、起動時にブローカーへ繋がらず exit 1 した場合しか戻らない。
+# 正常終了(exit 0)でも起こし直すよう always にする。
+Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal

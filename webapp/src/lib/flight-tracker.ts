@@ -792,6 +792,11 @@ function wasClimbingInWindow(recent: Sample[], nowMs: number): boolean {
  */
 export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   if (pos.adsb) return;
+  // RND(ランダムID)はビーコンごとに別IDを名乗るので、同じ機体として追えない。
+  // 追跡状態を作ると、飛ぶたびに使い捨ての ID が積み上がるだけで飛行も作れない
+  // (たきかわ 2026-09-21: 1日で 789 件)。地図は FlightMap.tsx が匿名マーカーで
+  // 別に表示するので、ここでは何も持たない。
+  if (deviceId.startsWith("RND")) return;
   if (!Number.isFinite(pos.latitude) || !Number.isFinite(pos.longitude)) return;
   if (!Number.isFinite(pos.altitude_m) || !Number.isFinite(pos.ground_speed_ms)) return;
 
