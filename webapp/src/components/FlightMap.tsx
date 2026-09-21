@@ -1099,9 +1099,11 @@ export default function FlightMap() {
         if (!hex || localHexes.has(hex)) continue; // ローカルにあれば出さない(優先)
         seen.add(hex);
         const latlng = L.latLng(a.latitude, a.longitude);
-        const label = a.registration || a.cn || hex;
+        // APRS単体では登録番号が無いので、端末の機体DB(OGN DDB/FlarmNet)で補完する
+        const dbRec = lookupDbRecord(aircraftDbRef.current, a.device_id);
+        const label = dbRec?.registration || dbRec?.competition_id || hex;
         const tipPos = { altitude_m: a.altitude_m ?? 0, ground_speed_ms: a.ground_speed_ms } as unknown as AircraftPosition;
-        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, undefined, false, a.registration || a.cn || undefined, undefined, undefined);
+        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type);
         let e = openOgnRef.current.get(hex);
         if (!e) {
           const marker = L.marker(latlng, { icon }).addTo(map);

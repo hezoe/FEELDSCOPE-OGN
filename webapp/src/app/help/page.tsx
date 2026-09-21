@@ -678,18 +678,31 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.0 */}
+      {/* v1.4.1 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.1</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
+      <Card title="OpenなOGN を OGNネットワークへ直接接続する方式に変更">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OpenなOGN（OGNネットワーク）の取得を、外部サイト経由ではなく <strong>OGNネットワーク（aprs.glidernet.org）へ直接接続</strong>して行う方式にしました。特定サイトに依存せず取得できます（範囲は空港中心50海里のまま）。</li>
+          <li>設定画面・ヘルプの表記を「OGNネットワーク」に更新しました。動作（ローカル優先マージ・プライバシー除外）は変わりません。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.0 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+      </div>
+
       <Card title="Open OGN（OGNネットワークの機体をローカル受信とマージ）">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>設定画面に <strong>「OpenなOGNを追加（ogn.ezoe.net）」</strong> チェックボックスを追加しました。ONにすると、ローカル受信に加えて <strong>OGNネットワーク（ogn.ezoe.net）から空港周辺（半径50海里）の OGN 機</strong>を取得して表示します。受信機の圏外にいる機体を広く把握できます。</li>
+          <li>設定画面に <strong>「OpenなOGNを追加（OGNネットワーク）」</strong> チェックボックスを追加しました。ONにすると、ローカル受信に加えて <strong>OGNネットワークの機体（空港周辺・半径50海里）</strong>を取得して表示します。受信機の圏外にいる機体を広く把握できます。</li>
           <li><strong>同じ機体はローカル受信を優先</strong>します（6桁hexで判定し、直接受信している機はローカル側だけを表示、圏外の機だけをネットワークから補完）。二重には表示されません。</li>
-          <li>プライバシー配慮（DDBの追跡拒否・匿名ランダムID）は ogn.ezoe.net 側で除外済みです。フライトログには記録しません。</li>
+          <li>プライバシー配慮（no-tracking は APRS-IS 側で配信されず、匿名ランダムID は取り込み時に除外）。フライトログには記録しません。</li>
         </ul>
       </Card>
 

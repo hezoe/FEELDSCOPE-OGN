@@ -621,10 +621,10 @@ export default function SettingsPage() {
                     onChange={(e) => setOpenOgn(e.target.checked)}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm font-medium">OpenなOGNを追加（ogn.ezoe.net）</span>
+                  <span className="text-sm font-medium">OpenなOGNを追加（OGNネットワーク）</span>
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  ローカル受信に加えて、OGNネットワーク（ogn.ezoe.net）から空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。
+                  ローカル受信に加えて、OGNネットワーク（aprs.glidernet.org）へ直接接続し、空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。
                 </p>
               </div>
             </div>
