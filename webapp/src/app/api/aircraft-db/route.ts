@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile, unlink, writeFile } from "fs/promises";
+import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { run } from "@/lib/run";
 import type { AircraftDatabase, AircraftRecord, AircraftTypeCode } from "@/lib/types";
 import { findKeyByAddress, hexAddress } from "@/lib/aircraft-id";
@@ -8,17 +8,45 @@ import { clientIpFromRequest } from "@/lib/auth";
 const DB_PATH = process.env.FEELDSCOPE_AIRCRAFT_DB || "/home/pi/FEELDSCOPE/aircraft-db.json";
 
 async function readDb(): Promise<AircraftDatabase> {
+  let raw: string;
   try {
-    const raw = await readFile(DB_PATH, "utf-8");
-    return JSON.parse(raw);
+    raw = await readFile(DB_PATH, "utf-8");
   } catch (e: unknown) {
     if (e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw e;
   }
+  try {
+    return JSON.parse(raw);
+  } catch (e: unknown) {
+    // 破損時は機能全体を止めない。まず末尾に余分な文字が付いた等の軽微な破損を救出、
+    // 無理なら破損版を退避して空DBで継続する(次の writeDb で正規化される)。
+    const bak = `${DB_PATH}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    const msg = e instanceof Error ? e.message : String(e);
+    const m = e instanceof Error ? e.message.match(/position (\d+)/) : null;
+    if (m) {
+      try {
+        const salvaged = JSON.parse(raw.slice(0, Number(m[1]))) as AircraftDatabase;
+        await writeFile(bak, raw, "utf-8").catch(() => { /* 退避失敗は無視 */ });
+        console.warn(`[aircraft-db] ${DB_PATH} 末尾の破損を救出しました(退避: ${bak}): ${msg}`);
+        return salvaged;
+      } catch { /* 救出不可 → 下の空DB継続へ */ }
+    }
+    await writeFile(bak, raw, "utf-8").catch(() => { /* 退避失敗は無視 */ });
+    console.error(`[aircraft-db] ${DB_PATH} が壊れていたため退避(${bak})し、空DBで継続します: ${msg}`);
+    return {};
+  }
 }
 
 async function writeDb(db: AircraftDatabase): Promise<void> {
-  await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  // 原子的置換: 一時ファイルへ全量書き込み→rename。書込み途中の再起動でも本体が壊れない。
+  const tmp = `${DB_PATH}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    await writeFile(tmp, JSON.stringify(db, null, 2), "utf-8");
+    await rename(tmp, DB_PATH);
+  } catch (e) {
+    await unlink(tmp).catch(() => { /* 後始末失敗は無視 */ });
+    throw e;
+  }
 }
 
 
