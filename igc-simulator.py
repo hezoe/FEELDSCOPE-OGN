@@ -19,7 +19,7 @@ import signal
 import sys
 import time
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 

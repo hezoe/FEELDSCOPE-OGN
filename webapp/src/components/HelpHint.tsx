@@ -1,7 +1,5 @@
 "use client";
 
-import React from "react";
-
 const HELP_WINDOW_NAME = "feeldscope-help";
 const HELP_WINDOW_FEATURES = "width=900,height=800,resizable=yes,scrollbars=yes";
 

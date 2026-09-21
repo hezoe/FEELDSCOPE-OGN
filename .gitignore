@@ -21,8 +21,5 @@ remote-support.json
 *.bak
 *.bak.*
 
-# QEMU 検証環境: 手順のスクリプトだけ残し、イメージ・カーネル・鍵は追跡しない
-# (イメージは巨大、カーネル/dtb は再取得可能、qemu-key は秘密鍵)
-qemu-test/*
-!qemu-test/boot-rpi.sh
-!qemu-test/Dockerfile
+# QEMU 検証環境は開発用。リポジトリでは追跡しない
+qemu-test/

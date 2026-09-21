@@ -488,7 +488,6 @@ export default function FlightMap() {
   // Resizable panels
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [logHeight, setLogHeight] = useState(160);
-  const mainRef = useRef<HTMLDivElement>(null);
 
   /**
    * 地上で受信が途絶えた機体を地図から下ろす。

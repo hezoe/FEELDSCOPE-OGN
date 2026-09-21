@@ -84,13 +84,6 @@ export interface ReceiverStatus {
   };
 }
 
-export interface SystemStatus {
-  mode: "realtime" | "history";
-  ogn_mqtt_active: boolean;
-  igc_simulator_active: boolean;
-  mosquitto_active: boolean;
-}
-
 // ── Aircraft Database ──
 
 export type AircraftTypeCode =

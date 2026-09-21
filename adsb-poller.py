@@ -5,8 +5,8 @@ Fetches aircraft data from a tar1090/dump1090 aircraft.json endpoint
 and publishes to MQTT in the same format as ogn-mqtt.py.
 
 Usage:
-    python3 adsb-poller.py --url http://192.168.190.148/tar1090/data/aircraft.json
-    python3 adsb-poller.py --url http://192.168.190.148/tar1090/data/aircraft.json --interval 3
+    python3 adsb-poller.py --url http://<tar1090-host>/tar1090/data/aircraft.json
+    python3 adsb-poller.py --url http://<tar1090-host>/tar1090/data/aircraft.json --interval 3
 """
 
 import argparse

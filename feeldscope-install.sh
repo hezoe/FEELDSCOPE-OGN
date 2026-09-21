@@ -186,10 +186,10 @@ elif [ ! -f "$FEELDSCOPE_DIR/adsb-config.json" ]; then
 ADSBEOF
 fi
 
-# Copy testdata (optional, may only contain .gitkeep after fresh clone)
+# Copy IGC files for the simulator (optional). testdata/ の解析ツールや記録は開発用なので端末へは送らない
 mkdir -p "$FEELDSCOPE_DIR/testdata"
 if [ -d "$SCRIPT_DIR/testdata" ]; then
-    cp -r "$SCRIPT_DIR/testdata/." "$FEELDSCOPE_DIR/testdata/" 2>/dev/null || true
+    find "$SCRIPT_DIR/testdata" -maxdepth 1 -type f -iname '*.igc' -exec cp {} "$FEELDSCOPE_DIR/testdata/" \; 2>/dev/null || true
 fi
 
 # Copy webapp source

@@ -104,10 +104,3 @@ export function formatClimbRate(ms: number, unit: ClimbRateUnit): string {
   }
   return `${sign}${ms.toFixed(1)} m/s`;
 }
-
-export function formatDistance(meters: number, unit: DistanceUnit): string {
-  if (unit === "nm") {
-    return `${(meters / 1852).toFixed(1)} nm`;
-  }
-  return `${(meters / 1000).toFixed(1)} km`;
-}

@@ -24,7 +24,6 @@ import paho.mqtt.client as mqtt
 # ---------------------------------------------------------------------------
 OGN_DECODE_HOST = "localhost"
 OGN_DECODE_PORT = 8083
-OGN_RF_PORT = 8082
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 MQTT_BASE_TOPIC = "ogn"

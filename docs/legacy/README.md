@@ -9,7 +9,6 @@ FEELDSCOPE を FEELDSCOPE-OGN と FEELDSCOPE-SKYLENS の2本に整理した際�
 | 元 | 内容 |
 |---|---|
 | 旧 FEELDSCOPE（GitHub: hezoe/FEELDSCOPE、現在はアーカイブ） | 仕様書、OGN受信機の調査記録、オフライン地図の手順 |
-| FLARM FS Monitor モックアップ | `mockup/` の HTML 3案 |
 
 ## 中身
 
@@ -21,6 +20,5 @@ FEELDSCOPE を FEELDSCOPE-OGN と FEELDSCOPE-SKYLENS の2本に整理した際�
 - `Changelog` … 旧世代の変更履歴
 - `DISTRIBUTION_PLAN.md` … 配布方法の検討メモ
 - `offline-tiles-setup.md` と `tools/download_tiles.py` … オフライン地図タイルの用意
-- `mockup/` … 画面デザインの初期案（index-rev1〜3）
 
 現行の手順は [setup-guide.html](../../setup-guide.html) と Web UI のマニュアルを参照してください。

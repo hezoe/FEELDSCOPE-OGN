@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """受信機の /api/flight-log を GET だけで定期取得し、変化を1行ずつ出力する（受信機には書き込まない）。
-使い方: python tools/poll_flightlog.py [間隔秒]
+使い方: FEELDSCOPE_URL=http://<受信機> python tools/poll_flightlog.py [間隔秒]
 出力: 変化があった行だけ stdout と ../flightlog-changes.log に追記。最新の全体は ../flight-log-latest.json。
 """
 import json, os, sys, time, urllib.request
 
-URL = "http://10.66.20.11/api/flight-log"
+URL = os.environ.get("FEELDSCOPE_URL", "http://feeldscope.local") + "/api/flight-log"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..")
 INTERVAL = int(sys.argv[1]) if len(sys.argv) > 1 else 60

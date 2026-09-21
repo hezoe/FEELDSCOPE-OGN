@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import { useTab, type TabId } from "@/lib/TabContext";
 import { openHelpTab, type HelpTab } from "./HelpHint";
