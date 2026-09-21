@@ -101,7 +101,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -595,6 +595,22 @@ export default function SettingsPage() {
               <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 同一ネットワーク上の FlightRadar24 フィーダー等から ADS-B データを取得し、マップに表示します。フライトログには記録されません。
               </p>
+
+              {/* Open ADS-B (public adsb.lol) — 受信機不要のクライアント側取得。認証不要の表示設定 */}
+              <div className="pt-3" style={{ borderTop: "1px solid var(--color-border)" }}>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.openAdsb}
+                    onChange={(e) => setOpenAdsb(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">OpenなADS-Bを追加（adsb.lol）</span>
+                </label>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  受信機がなくても、公開の adsb.lol から空港周辺（半径250nm）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。
+                </p>
+              </div>
             </div>
           </Card>
 

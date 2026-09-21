@@ -92,6 +92,16 @@ function svgByType(typeCode: string | undefined, color: string, heading: number)
   }
 }
 
+// RND(ランダムID/EPRA)機の匿名マーカー。追跡不可なので個体表示はせず、これ1個で「?」を出す。
+function makeAnonIcon() {
+  return L.divIcon({
+    html: '<div title="匿名機(追跡不可)" style="width:16px;height:16px;border-radius:50%;background:rgba(120,120,120,.35);border:1px solid rgba(90,90,90,.6);color:#444;font-size:11px;font-weight:700;line-height:14px;text-align:center">?</div>',
+    className: "",
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
 function makeAircraftIcon(heading: number, color: string, blink: boolean, gliderType?: string, isAdsb?: boolean, registration?: string, aircraftType?: string, dbType?: string) {
   let svg: string;
   if (dbType) {
@@ -258,7 +268,24 @@ interface TrackedAircraft {
   adsb?: boolean;
 }
 
+/** /api/open-adsb (公開 adsb.lol) が返す1機ぶん */
+interface OpenAdsbAircraft {
+  device_id: string;
+  hex: string;
+  flight: string | null;
+  reg: string | null;
+  type: string | null;
+  latitude: number;
+  longitude: number;
+  altitude_m: number;
+  heading_deg: number;
+  ground_speed_ms: number;
+  adsb_mode: "adsb" | "modes";
+  trail: [number, number][];
+}
+
 const TRAIL_DURATION_MS = 60_000; // 1 minute trail
+const ANON_TTL_MS = 90_000; // RND(匿名)マーカーの保持。この間 無受信なら消す
 
 // 航跡として受け付ける最大の見かけ速度。これを超える点は、別機体の位置が
 // 混入した／座標が壊れた、と判断して航跡には足さない（マーカーは動かす）。
@@ -426,6 +453,12 @@ export default function FlightMap() {
   // Aircraft database
   const aircraftDbRef = useRef<AircraftDatabase>({});
   const pendingAutoRegister = useRef<Set<string>>(new Set());
+
+  // Open ADS-B (公開 adsb.lol) の独立レイヤ。MQTT の aircraft_adsb とは別管理。
+  const openAdsbRef = useRef<Map<string, { marker: L.Marker; trail: L.Polyline }>>(new Map());
+
+  // RND(ランダムID)機の匿名クラスタ。device_id ではなく場所(小数3桁≒100m)キーで集約。
+  const anonRef = useRef<Map<string, { marker: L.Marker; lastMs: number }>>(new Map());
 
   // Home view state
   const [homeView, setHomeView] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 0, lng: 0, zoom: 11 });
@@ -760,6 +793,24 @@ export default function FlightMap() {
       ) {
         return;
       }
+
+      // RND(ランダムID/EPRA)は毎ビーコンで別IDになり追跡不能なプライバシー機。
+      // 個体マーカー/航跡/DB自動登録は作らず、場所クラスタに匿名「?」を1個だけ非永続表示する。
+      // (OGN/FLARM の opt-in/opt-out 原則に準拠。ogn.ezoe.net と同じ扱い)
+      if (deviceId.startsWith("RND")) {
+        const key = `${pos.latitude.toFixed(3)},${pos.longitude.toFixed(3)}`;
+        const anonLatLng = L.latLng(pos.latitude, pos.longitude);
+        const cell = anonRef.current.get(key);
+        if (cell) {
+          cell.marker.setLatLng(anonLatLng);
+          cell.lastMs = Date.now();
+        } else {
+          const marker = L.marker(anonLatLng, { icon: makeAnonIcon(), interactive: false, keyboard: false, zIndexOffset: -1000 }).addTo(map);
+          anonRef.current.set(key, { marker, lastMs: Date.now() });
+        }
+        return;
+      }
+
       const nowMsIn = Date.now();
       if (existing) {
         const rejects = rejectCountsRef.current[deviceId] || 0;
@@ -924,6 +975,83 @@ export default function FlightMap() {
     clientRef.current = client;
     return () => { client.end(); clientRef.current = null; };
   }, [handlePosition, handleAircraftList]);
+
+  // ── Open ADS-B (公開 adsb.lol) レイヤ ──
+  // 設定「OpenなADS-Bを追加」ON のとき /api/open-adsb を5秒ごとにポーリングし、
+  // 受信機不要で空港周辺(半径250nm)の ADS-B 機を青色で表示する。MQTT の
+  // ローカル ADS-B(aircraft_adsb) とは独立管理で、同一機(device_id)が MQTT 側に
+  // 居れば重複表示しない(MQTT を優先)。フライトログには関与しない(表示のみ)。
+  const clearOpenAdsb = useCallback(() => {
+    const map = mapRef.current;
+    for (const [, e] of openAdsbRef.current) { map?.removeLayer(e.marker); map?.removeLayer(e.trail); }
+    openAdsbRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (!units.openAdsb) { clearOpenAdsb(); return; }
+    let stopped = false;
+    const lat = units.airfield.latitude;
+    const lon = units.airfield.longitude;
+
+    async function pollOpenAdsb() {
+      const map = mapRef.current;
+      if (!map || stopped) return;
+      let data: { aircraft?: OpenAdsbAircraft[] } = {};
+      try {
+        const res = await fetch(`/api/open-adsb?lat=${lat}&lon=${lon}`);
+        data = await res.json();
+      } catch { return; }
+      if (stopped) return;
+      const list = data.aircraft || [];
+      const seen = new Set<string>();
+      for (const a of list) {
+        if (a.latitude == null || a.longitude == null) continue;
+        // ローカル ADS-B(MQTT) に同一機が居れば表示しない(二重回避)
+        if (aircraftRef.current.has(a.device_id)) continue;
+        seen.add(a.device_id);
+        const latlng = L.latLng(a.latitude, a.longitude);
+        const label = a.flight || a.reg || (a.hex ? a.hex.toUpperCase() : a.device_id);
+        const tipPos = { altitude_m: a.altitude_m, ground_speed_ms: a.ground_speed_ms, adsb_mode: a.adsb_mode } as unknown as AircraftPosition;
+        const icon = makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined);
+        let e = openAdsbRef.current.get(a.device_id);
+        if (!e) {
+          const marker = L.marker(latlng, { icon }).addTo(map);
+          marker.bindTooltip(buildTooltip(label, tipPos, unitsRef.current, true), {
+            permanent: true, direction: "right", offset: [12, 0], className: "aircraft-tooltip",
+          });
+          const trail = L.polyline([], { color: COLOR_ADSB, weight: 2, opacity: 0.5, dashArray: "4,3" }).addTo(map);
+          e = { marker, trail };
+          openAdsbRef.current.set(a.device_id, e);
+        } else {
+          e.marker.setLatLng(latlng);
+          e.marker.setIcon(icon);
+          e.marker.setTooltipContent(buildTooltip(label, tipPos, unitsRef.current, true));
+        }
+        e.trail.setLatLngs((a.trail || []).map((p) => L.latLng(p[0], p[1])));
+      }
+      // 一覧から消えた機体を除去
+      for (const [id, e] of openAdsbRef.current) {
+        if (!seen.has(id)) { map.removeLayer(e.marker); map.removeLayer(e.trail); openAdsbRef.current.delete(id); }
+      }
+    }
+
+    pollOpenAdsb();
+    const iv = setInterval(pollOpenAdsb, 5000);
+    return () => { stopped = true; clearInterval(iv); clearOpenAdsb(); };
+  }, [units.openAdsb, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenAdsb]);
+
+  // RND(匿名)マーカーの掃除。一定時間 受信の無いクラスタを消す(非永続)。
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const map = mapRef.current;
+      const now = Date.now();
+      for (const [key, cell] of anonRef.current) {
+        if (now - cell.lastMs > ANON_TTL_MS) { map?.removeLayer(cell.marker); anonRef.current.delete(key); }
+      }
+    }, 5000);
+    return () => clearInterval(iv);
+  }, []);
 
   // フライトログの自動スクロール。
   // 記録は3秒ごとに取り直すため、無条件に末尾へ送ると、過去を遡っている最中に

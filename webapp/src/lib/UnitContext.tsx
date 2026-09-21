@@ -27,6 +27,7 @@ interface UnitContextType {
   setSafeGlideRatio: (v: number) => void;
   setAirfield: (a: AirfieldConfig) => void;
   setAdsb: (a: AdsbConfig) => void;
+  setOpenAdsb: (v: boolean) => void;
   setMapSource: (m: MapSource) => void;
 }
 
@@ -41,6 +42,7 @@ const UnitContext = createContext<UnitContextType>({
   setSafeGlideRatio: () => {},
   setAirfield: () => {},
   setAdsb: () => {},
+  setOpenAdsb: () => {},
   setMapSource: () => {},
 });
 
@@ -112,6 +114,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setSafeGlideRatio: (safeGlideRatio: number) => update({ safeGlideRatio }),
         setAirfield: (airfield: AirfieldConfig) => updateAirfield(airfield),
         setAdsb: (adsb: AdsbConfig) => update({ adsb }),
+        setOpenAdsb: (openAdsb: boolean) => update({ openAdsb }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >

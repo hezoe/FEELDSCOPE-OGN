@@ -41,6 +41,8 @@ export interface UnitPreferences {
   mapSource: MapSource;
   airfield: AirfieldConfig;
   adsb: AdsbConfig;
+  /** Open ADS-B: 公開の adsb.lol から空港周辺(半径250nm)の ADS-B を取得して表示する(既定OFF) */
+  openAdsb: boolean;
 }
 
 export const DEFAULT_UNITS: UnitPreferences = {
@@ -53,6 +55,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
   mapSource: "internet",
   airfield: DEFAULT_AIRFIELD,
   adsb: DEFAULT_ADSB,
+  openAdsb: false,
 };
 
 const STORAGE_KEY = "ogn-unit-preferences";

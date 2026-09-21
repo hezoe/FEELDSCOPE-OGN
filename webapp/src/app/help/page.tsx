@@ -180,8 +180,9 @@ function ManualContent() {
             <li><span style={{ color: "#4caf50", fontWeight: 600 }}>緑</span> — 通常飛行中</li>
             <li><span style={{ color: "#ff9800", fontWeight: 600 }}>橙</span> — 低高度・着陸進入中（着陸確定後に緑へ復帰）</li>
             <li><span style={{ color: "#f44336", fontWeight: 600 }}>赤・点滅</span> — パス不足（滑空場に安全に帰還できない高度）</li>
-            <li><span style={{ color: "#1565c0", fontWeight: 600 }}>青</span> — ADS-B受信機体</li>
+            <li><span style={{ color: "#1565c0", fontWeight: 600 }}>青</span> — ADS-B受信機体（ローカル受信機／Open ADS-B＝adsb.lol の両方）</li>
             <li><span style={{ color: "#222", fontWeight: 600 }}>黒</span> — Mode-S/Mode-C機体</li>
+            <li><span style={{ color: "#777", fontWeight: 600 }}>灰「?」</span> — 匿名機（ランダムID／EPRA。追跡不可のため位置のみを集約表示）</li>
           </ul>
         </Section>
         <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
@@ -677,11 +678,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.3.0 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.3.0</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-21</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="Open ADS-B（受信機なしで ADS-B 表示）と、匿名機（ランダムID）の扱いを追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>OpenなADS-Bを追加</strong> — 設定画面の「ADS-B 受信設定」にチェックボックスを追加しました。ONにすると、<strong>ADS-B受信機やローカルの tar1090 が無くても</strong>、公開データ（adsb.lol）から<strong>空港周辺（半径約250nm）の ADS-B 機</strong>を取得して青色で表示します。5秒ごとに更新し、過去10分の航跡も表示します（フライトログには記録しません）。データ元: adsb.lol。</li>
+          <li><strong>匿名機（ランダムID）の扱い</strong> — <code>RND</code> で始まる機体は、追跡されないために送信のたびIDが変わる privacy 機（FLARM の random/EPRA）です。これまでは送信のたびに別機として大量に表示され地図が混雑していました。今後は<strong>個体として追跡・識別せず、位置だけをまとめて灰色の「?」1個</strong>で表示します（登録番号の解決・航跡・機体DB登録は行いません）。OGN/FLARM のプライバシー方針に沿った表示です。</li>
+        </ul>
+      </Card>
+
       {/* v1.2.12 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.2.12</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="フライトログと機体情報の変更を記録に残すようにしました">
