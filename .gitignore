@@ -23,3 +23,7 @@ remote-support.json
 
 # QEMU 検証環境は開発用。リポジトリでは追跡しない
 qemu-test/
+
+# aircraft-db 破損退避(データ・共有しない)
+aircraft-db.json
+aircraft-db.json.corrupt-*

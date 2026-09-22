@@ -102,7 +102,7 @@ function makeAnonIcon() {
   });
 }
 
-function makeAircraftIcon(heading: number, color: string, blink: boolean, gliderType?: string, isAdsb?: boolean, registration?: string, aircraftType?: string, dbType?: string) {
+function makeAircraftIcon(heading: number, color: string, blink: boolean, gliderType?: string, isAdsb?: boolean, registration?: string, aircraftType?: string, dbType?: string, labels?: { top?: string; bot?: string }) {
   let svg: string;
   if (dbType) {
     svg = svgByType(dbType, color, heading);
@@ -116,8 +116,11 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
   const blinkClass = blink ? " aircraft-blink" : "";
   const size = isAdsb ? 24 : 30;
   const anchor = isAdsb ? 12 : 15;
+  // ラベルは機体アイコンの上(表示名)・下(高度+速度)に配置(ogn.ezoe.net と同様)。
+  const top = labels?.top ? `<span class="ac-top">${labels.top}</span>` : "";
+  const bot = labels?.bot ? `<span class="ac-bot">${labels.bot}</span>` : "";
   return L.divIcon({
-    html: `<div class="aircraft-icon${blinkClass}">${svg}</div>`,
+    html: `<div class="ac-mk">${top}<div class="aircraft-icon${blinkClass}">${svg}</div>${bot}</div>`,
     className: "",
     iconSize: [size, size],
     iconAnchor: [anchor, anchor],
@@ -773,7 +776,7 @@ export default function FlightMap() {
     for (const [id, ac] of aircraftRef.current) {
       if (ac.adsb) {
         ac.label = ac.position.flight || ac.position.hex || id;
-        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, adsbColor(ac.position), false, undefined, true));
+        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, adsbColor(ac.position), false, undefined, true, undefined, undefined, undefined, iconLabels(ac.label, ac.position, units)));
       } else {
         ac.label = resolveLabel(ac.position, id, units.displayName);
         const { airfield: af } = units;
@@ -785,10 +788,8 @@ export default function FlightMap() {
           color = COLOR_LOW;
         }
         const dbRec = lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id);
-        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, color, blink, ac.position.glider_type, false, dbRec?.registration || ac.position.glider_id || ac.position.competition_id, ac.position.aircraft_type, dbRec?.aircraft_type));
+        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, color, blink, ac.position.glider_type, false, dbRec?.registration || ac.position.glider_id || ac.position.competition_id, ac.position.aircraft_type, dbRec?.aircraft_type, iconLabels(ac.label, ac.position, units)));
       }
-      const tooltip = buildTooltip(ac.label, ac.position, unitsRef.current, ac.adsb);
-      ac.marker.setTooltipContent(tooltip);
     }
   }, [units]);
 
@@ -892,22 +893,14 @@ export default function FlightMap() {
         existing.lastUpdateMs = Date.now();
         existing.adsb = isAdsb;
         existing.marker.setLatLng(latlng);
-        existing.marker.setIcon(makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType));
-        existing.marker.setTooltipContent(buildTooltip(label, pos, unitsRef.current, isAdsb));
+        existing.marker.setIcon(makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, iconLabels(label, pos, unitsRef.current)));
         const nowMs = Date.now();
         addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
         existing.trail.setStyle({ color });
       } else {
         const marker = L.marker(latlng, {
-          icon: makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType),
+          icon: makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, iconLabels(label, pos, unitsRef.current)),
         }).addTo(map);
-
-        marker.bindTooltip(buildTooltip(label, pos, unitsRef.current, isAdsb), {
-          permanent: true,
-          direction: "right",
-          offset: [12, 0],
-          className: "aircraft-tooltip",
-        });
 
         marker.on("click", () => setSelectedAircraft(deviceId));
 
@@ -1030,20 +1023,16 @@ export default function FlightMap() {
         const latlng = L.latLng(a.latitude, a.longitude);
         const label = a.flight || a.reg || (a.hex ? a.hex.toUpperCase() : a.device_id);
         const tipPos = { altitude_m: a.altitude_m, ground_speed_ms: a.ground_speed_ms, adsb_mode: a.adsb_mode } as unknown as AircraftPosition;
-        const icon = makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined);
+        const icon = makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined, iconLabels(label, tipPos, unitsRef.current));
         let e = openAdsbRef.current.get(a.device_id);
         if (!e) {
           const marker = L.marker(latlng, { icon }).addTo(map);
-          marker.bindTooltip(buildTooltip(label, tipPos, unitsRef.current, true), {
-            permanent: true, direction: "right", offset: [12, 0], className: "aircraft-tooltip",
-          });
           const trail = L.polyline([], { color: COLOR_ADSB, weight: 2, opacity: 0.5, dashArray: "4,3" }).addTo(map);
           e = { marker, trail };
           openAdsbRef.current.set(a.device_id, e);
         } else {
           e.marker.setLatLng(latlng);
           e.marker.setIcon(icon);
-          e.marker.setTooltipContent(buildTooltip(label, tipPos, unitsRef.current, true));
         }
         e.trail.setLatLngs((a.trail || []).map((p) => L.latLng(p[0], p[1])));
       }
@@ -1102,19 +1091,15 @@ export default function FlightMap() {
         const dbRec = lookupDbRecord(aircraftDbRef.current, a.device_id);
         const label = dbRec?.registration || dbRec?.competition_id || hex;
         const tipPos = { altitude_m: a.altitude_m ?? 0, ground_speed_ms: a.ground_speed_ms } as unknown as AircraftPosition;
-        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type);
+        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type, iconLabels(label, tipPos, unitsRef.current));
         let e = openOgnRef.current.get(hex);
         if (!e) {
           const marker = L.marker(latlng, { icon }).addTo(map);
-          marker.bindTooltip(buildTooltip(label, tipPos, unitsRef.current, false), {
-            permanent: true, direction: "right", offset: [12, 0], className: "aircraft-tooltip",
-          });
           e = { marker };
           openOgnRef.current.set(hex, e);
         } else {
           e.marker.setLatLng(latlng);
           e.marker.setIcon(icon);
-          e.marker.setTooltipContent(buildTooltip(label, tipPos, unitsRef.current, false));
         }
       }
       for (const [hex, e] of openOgnRef.current) {
@@ -1783,19 +1768,17 @@ export default function FlightMap() {
   );
 }
 
-function buildTooltip(
+// 機体アイコンに添えるラベル。上=表示名(機番/CN/pilot)、下=高度+速度。
+// ogn.ezoe.net と同様に、アイコンの上下へ配置する(描画は makeAircraftIcon)。
+function iconLabels(
   label: string,
   pos: AircraftPosition,
   units: { altitude: "m" | "ft"; speed: "km/h" | "knot" },
-  isAdsb?: boolean,
-): string {
-  const alt = formatAltitude(pos.altitude_m, units.altitude);
-  const spd = formatSpeed(pos.ground_speed_ms, units.speed);
-  if (isAdsb) {
-    const c = pos.adsb_mode === "adsb" ? COLOR_ADSB : COLOR_MODES;
-    return `<strong style="color:${c}">${label}</strong><br/>${alt} ${spd}`;
-  }
-  return `<strong>${label}</strong><br/>${alt} ${spd}`;
+): { top: string; bot: string } {
+  return {
+    top: label,
+    bot: `${formatAltitude(pos.altitude_m, units.altitude)} ${formatSpeed(pos.ground_speed_ms, units.speed)}`,
+  };
 }
 
 function StatusItem({

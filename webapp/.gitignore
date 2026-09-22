@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# aircraft-db 破損時の退避バックアップ(データ・共有しない)
+aircraft-db.json.corrupt-*

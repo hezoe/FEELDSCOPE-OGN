@@ -8,7 +8,7 @@ import { openHelpTab, type HelpTab } from "./HelpHint";
 export default function Navigation() {
   const { activeTab, setActiveTab } = useTab();
   const [clock, setClock] = useState("--:--:--");
-  const { units } = useUnits();
+  const { units, unitsLoaded } = useUnits();
 
   useEffect(() => {
     const update = () => {
@@ -53,7 +53,8 @@ export default function Navigation() {
         style={{ paddingLeft: "1em", paddingRight: "1em", borderRight: "1px solid var(--color-border)" }}
       >
         <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>
-          {units.airfield.name}
+          {/* SSR/初期HTMLでは空欄。サーバ設定(airfield_config)を取得後にJSで表示名を入れる。 */}
+          {unitsLoaded ? units.airfield.name : ""}
         </span>
       </div>
 

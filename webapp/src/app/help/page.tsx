@@ -185,6 +185,12 @@ function ManualContent() {
             <li><span style={{ color: "#777", fontWeight: 600 }}>灰「?」</span> — 匿名機（ランダムID／EPRA。追跡不可のため位置のみを集約表示）</li>
           </ul>
         </Section>
+        <Section id="map-icon-labels" heading="機体アイコンのラベル（機番・高度・速度）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>各機体アイコンの<strong>上に表示名</strong>（設定「表示名」に応じて 機番／コンテストナンバー／パイロット）、<strong>下に高度・速度</strong>を常時表示します。</li>
+            <li>高度・速度の単位は設定「表示単位」に従います（m／ft、km/h／kt）。ラベルは縁取り付きで、ライト／ダークどちらのテーマでも読めます。</li>
+          </ul>
+        </Section>
         <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             各機体の現在地から滑空場までの距離 ÷（現在高度 − 滑空場標高）で滑空比を計算し、設定値（デフォルト15:1）を超えると赤点滅で警告します。
@@ -698,11 +704,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.8 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.8</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="地図の機体アイコンに機番・高度・速度のラベルを追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>各機体アイコンの<strong>上に表示名（機番／コンテストナンバー／パイロット）</strong>、<strong>下に高度・速度</strong>を常時表示するようにしました（従来はアイコンの右側に表示）。</li>
+          <li>ラベルは背景に応じた縁取り付きで、ライト／ダークどちらのテーマでも読みやすくしています。</li>
+          <li>ナビゲーションバーの<strong>滑空場名</strong>が読み込み直後に一瞬別名で表示されることがあった問題を修正（初期表示は空欄にし、サーバ設定の取得後に正しい名前を表示）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.7 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.7</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="機体データベースの破損に強くしました">
