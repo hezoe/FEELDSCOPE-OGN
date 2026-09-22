@@ -704,11 +704,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.9 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.9</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="OGN受信機の自動復帰（ウォッチドッグ）を各機へ確実に配布">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>再起動後などに<strong>OGN受信機が上がらなくても、ウォッチドッグが自動で復帰</strong>させる仕組みを、更新のたびに確実に導入するようにしました（<code>feeldscope-converge.sh</code> に集約）。</li>
+          <li>受信方式（rtlsdr-ogn／SkyLens／ADS-B専用）は端末ごとの設定を尊重し<strong>勝手に切り替えません</strong>。受信機の無い端末では何もしません（無害）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.8 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.8</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="地図の機体アイコンに機番・高度・速度のラベルを追加">
