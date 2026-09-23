@@ -101,7 +101,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -625,6 +625,20 @@ export default function SettingsPage() {
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                   ローカル受信に加えて、OGNネットワーク（aprs.glidernet.org）へ直接接続し、空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。
+                </p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.rangeRings}
+                    onChange={(e) => setRangeRings(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">同心円表示（滑空場中心・5km毎・30kmまで）</span>
+                </label>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  滑空場を中心に半径5km・10km・15km・20km・25km・30kmの距離円（点線・距離ラベル付き）を地図に表示します。機体までの距離の目視把握に使えます。
                 </p>
               </div>
             </div>

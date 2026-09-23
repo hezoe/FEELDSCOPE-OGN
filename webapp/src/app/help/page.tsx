@@ -136,7 +136,7 @@ function ManualContent() {
             <li><strong>ドラッグ</strong> — 地図を平行移動</li>
             <li><strong>マウスホイール / ピンチ</strong> — 拡大縮小</li>
             <li><strong>右下の +/− ボタン</strong> — ズーム</li>
-            <li><strong>機体クリック</strong> — その機体を選択し、サイドバーで詳細表示</li>
+            <li><strong>機体クリック</strong> — その機体を選択し、<strong>右上に詳細パネル</strong>と<strong>「このフライト」の航跡（青の実線）</strong>を表示。<strong>地図の余白クリックで自動的に閉じます</strong></li>
           </ul>
         </Section>
         <Section id="map-home-save" heading="HOMEボタン・保存ボタン（マップ右上）">
@@ -145,7 +145,7 @@ function ManualContent() {
             <li><strong>保存</strong> — 現在表示中の地図の中心位置とズームを「HOMEビュー」として保存（ブラウザに保存）。次回起動時もこの位置から開始</li>
           </ul>
         </Section>
-        <Section id="map-sidebar" heading="サイドバー（左）">
+        <Section id="map-sidebar" heading="サイドバー（右）">
           <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>機体を4カテゴリで一覧表示：</p>
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>警告</strong> — パス不足（赤）または着陸進入中（橙）の機体</li>
@@ -189,6 +189,20 @@ function ManualContent() {
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li>各機体アイコンの<strong>上に表示名</strong>（設定「表示名」に応じて 機番／コンテストナンバー／パイロット）、<strong>下に高度・速度</strong>を常時表示します。</li>
             <li>高度・速度の単位は設定「表示単位」に従います（m／ft、km/h／kt）。ラベルは縁取り付きで、ライト／ダークどちらのテーマでも読めます。</li>
+            <li>アイコンは検知ごとに瞬間移動せず、<strong>位置も機首の向きも滑らかにアニメーション</strong>します。ブラウザを背後にして戻したときに溜まった動きを一気に再生することはありません（受信ギャップ時は即時表示）。</li>
+          </ul>
+        </Section>
+        <Section id="map-aircraft-click" heading="機体クリック（このフライトの航跡・詳細パネル）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>機体アイコンをクリックすると、<strong>右上に詳細パネル</strong>（機種・登録番号・CN・高度・速度・上昇率・方位・パス等）と、<strong>その機体が「このフライトで飛んだ」航跡（青の実線）</strong>を表示します。</li>
+            <li>航跡は飛行中なら伸びていきます（約5秒ごとに追随）。着陸して地上に戻ると約90秒で消え、次のフライトから新しく始まります。</li>
+            <li><strong>地図上の機体以外（余白）をクリックすると自動的に閉じます</strong>。パネルの「閉じる」でも閉じられます。</li>
+          </ul>
+        </Section>
+        <Section id="map-range-rings" heading="同心円表示（距離リング）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>滑空場を中心に<strong>半径5km・10km・15km・20km・25km・30kmの同心円（点線・距離ラベル付き）</strong>を表示します。機体までの距離の目視把握に使えます。</li>
+            <li>既定は表示です。消したい場合は設定 → マップ表示の<strong>「同心円表示」のチェックを外して</strong>ください。</li>
           </ul>
         </Section>
         <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
@@ -201,8 +215,8 @@ function ManualContent() {
           <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>FLARM受信機の自動検知でフライトを記録：</p>
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>#</strong> — 行番号</li>
-            <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）</li>
-            <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）</li>
+            <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）。コンテストナンバーが登録されていれば <strong>JA03KH (KH)</strong> のように括弧で併記します</li>
+            <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）。<strong>空欄</strong>は「離陸を観測できなかった」場合（外来機の飛来や、離陸後に FLARM の電源を入れた等）で、着陸を検知した時点で<strong>着陸のみの記録</strong>が作られます</li>
             <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
@@ -287,6 +301,14 @@ function ManualContent() {
           </tbody></table>
         </Section>
 
+        <Section id="status-open-sources" heading="Open データ源（外部API受信状態）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>設定でONにした外部データ源が<strong>実際に受信できているか</strong>を表示します。「設定したつもりでも受信できていない」状態の発見用です。</li>
+            <li><strong>Open ADS-B（adsb.lol）</strong> — 最終取得成功の時刻と表示機数。取得できていない場合は<strong>直近の失敗理由</strong>（接続タイムアウト・レート制限等）を表示します。</li>
+            <li><strong>Open OGN（aprs.glidernet.org）</strong> — APRS-IS への接続状態と受信機数。マップを表示している間に自動接続されます（この画面からは接続を開始しません）。</li>
+            <li>OFFのデータ源はグレーで「無効」と表示します。</li>
+          </ul>
+        </Section>
         <Section id="status-services" heading="サービス稼働状況">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="mosquitto" desc="MQTTブローカー（FEELDSCOPE全体の通信ハブ）" />
@@ -704,11 +726,50 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.11 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.11</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="マップの操作性・表示を大幅強化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>機体クリックで「このフライト」の航跡（青の実線）と右上の詳細パネル</strong>を表示。<strong>地図の余白クリックで自動的に閉じます</strong>（詳細パネルはサイドバー上部から地図右上へ移動）。</li>
+          <li><strong>機体アイコンのスムーズ表示</strong> — 位置は補間アニメーションで滑らかに移動し、機首の向きも最短方向へ滑らかに回転します。ブラウザを背後にして戻したときに溜まった動きを一気に再生して「くるくる回る」現象も防止しました。</li>
+          <li><strong>同心円表示</strong> — 滑空場を中心に5km毎・30kmまでの距離円（点線・距離ラベル付き）を表示（既定ON。設定でOFF可）。</li>
+        </ul>
+      </Card>
+
+      <Card title="フライトログの改善">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>着陸のみの記録</strong> — 離陸を観測できなかった機体（外来機の飛来、離陸後に FLARM の電源を入れた等）も、着陸を検知した時点で<strong>離陸欄を空欄にした記録</strong>を残すようにしました。</li>
+          <li><strong>登録番号欄にコンテストナンバーを併記</strong> — 例: <code>JA03KH (KH)</code>（CN未登録の機体は従来どおり）。</li>
+        </ul>
+      </Card>
+
+      <Card title="ステータス画面に「Open データ源」の実受信状態を追加">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Open ADS-B（adsb.lol）と Open OGN（aprs.glidernet.org）が<strong>実際に受信できているか</strong>を表示。<strong>設定ONでも受信できていない場合は失敗理由まで</strong>分かります。</li>
+        </ul>
+      </Card>
+
+      <Card title="Open ADS-B の接続方式を変更（v1.4.10の追加修正）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.4.10 の接続タイムアウト対策が <strong>Next.js の fetch 実装では効かない</strong>ことが実機で判明したため、adsb.lol への取得を <strong>IPv4 直行の HTTPS 接続</strong>に変更しました（実機で接続成功を実証済み）。</li>
+        </ul>
+      </Card>
+
+      <Card title="マニュアル修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>「サイドバー（左）」の表記を実際のレイアウトに合わせて<strong>「サイドバー（右）」</strong>に修正。新機能の説明を追加。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.10 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.10</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="Open ADS-B が表示されない問題を修正（全サイト共通）">

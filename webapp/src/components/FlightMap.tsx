@@ -127,6 +127,94 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
   });
 }
 
+// ── アイコンのスムーズ表示（移動・機首回転） ──
+// 位置は rAF の線形補間で滑らかに動かす（等速直線移動の機体には等速が最も自然）。
+// 機首はアイコンDOMを保ったまま CSS transition で回す（DOM再生成すると瞬間ジャンプする）。
+// タブ非表示中はスナップし、復帰時に溜まった動きを一気に再生しない（くるくる回転防止）。
+const MOVE_ANIM_MS = 1600;   // 位置補間時間。ビーコン間隔より少し短くして遅延蓄積を防ぐ
+const MOVE_SNAP_M = 5000;    // これ以上のジャンプは受信ギャップとみなしスナップ
+
+interface SmoothMarkerRec {
+  marker: L.Marker;
+  animId?: number;
+  animTarget?: L.LatLng;
+  dispHeading?: number;
+  iconKey?: string;
+}
+
+function cancelMoveAnim(rec: SmoothMarkerRec): void {
+  if (rec.animId !== undefined) { cancelAnimationFrame(rec.animId); rec.animId = undefined; }
+  rec.animTarget = undefined;
+}
+
+function moveMarkerSmooth(rec: SmoothMarkerRec, to: L.LatLng): void {
+  cancelMoveAnim(rec);
+  const from = rec.marker.getLatLng();
+  if ((typeof document !== "undefined" && document.hidden) || from.equals(to) || from.distanceTo(to) > MOVE_SNAP_M) {
+    rec.marker.setLatLng(to);
+    return;
+  }
+  rec.animTarget = to;
+  const t0 = performance.now();
+  const step = (t: number) => {
+    const k = Math.min(1, (t - t0) / MOVE_ANIM_MS);
+    rec.marker.setLatLng([from.lat + (to.lat - from.lat) * k, from.lng + (to.lng - from.lng) * k]);
+    if (k < 1) rec.animId = requestAnimationFrame(step);
+    else { rec.animId = undefined; rec.animTarget = undefined; }
+  };
+  rec.animId = requestAnimationFrame(step);
+}
+
+/** 進行中の位置アニメを目的地へ即時確定させる（タブ復帰時など） */
+function snapMarker(rec: SmoothMarkerRec): void {
+  if (rec.animTarget) {
+    const to = rec.animTarget;
+    cancelMoveAnim(rec);
+    rec.marker.setLatLng(to);
+  }
+}
+
+/** 機首を最短弧で回す。350°→10° は +20° になり長回りしない。instant はタブ復帰時のスナップ用 */
+function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: boolean): void {
+  const el = rec.marker.getElement();
+  const svg = el?.querySelector(".aircraft-icon svg") as SVGElement | null;
+  if (!svg) return;
+  if (rec.dispHeading == null) rec.dispHeading = heading;
+  const cur = ((rec.dispHeading % 360) + 360) % 360;
+  const delta = ((heading - cur + 540) % 360) - 180;
+  rec.dispHeading += delta;
+  const deg = rec.dispHeading;
+  if (instant || (typeof document !== "undefined" && document.hidden)) {
+    svg.style.transition = "none";
+    svg.style.transform = `rotate(${deg}deg)`;
+    requestAnimationFrame(() => { svg.style.transition = ""; });
+  } else {
+    svg.style.transform = `rotate(${deg}deg)`;
+  }
+}
+
+/**
+ * アイコンDOMを保ったままラベル・機首だけ更新する。形（色/種別/点滅/ラベル有無）が
+ * 変わったとき（iconKey 不一致）だけ作り直す。
+ */
+function applyIconSmooth(
+  rec: SmoothMarkerRec, iconKey: string, heading: number,
+  top: string | undefined, bot: string | undefined, build: () => L.DivIcon,
+): void {
+  const el = rec.marker.getElement();
+  if (!el || rec.iconKey !== iconKey) {
+    rec.marker.setIcon(build());
+    rec.iconKey = iconKey;
+    rec.dispHeading = heading;
+    return;
+  }
+  const topEl = el.querySelector(".ac-top");
+  if (topEl && top !== undefined && topEl.textContent !== top) topEl.textContent = top;
+  const botEl = el.querySelector(".ac-bot");
+  if (botEl && bot !== undefined && botEl.textContent !== bot) botEl.textContent = bot;
+  rotateMarkerSmooth(rec, heading, false);
+}
+
 // ── Thresholds ──
 const GROUND_ALT_M = 100;
 const LOW_ALT_FT = 1500;
@@ -261,7 +349,7 @@ interface TrailPoint {
   posMs: number;
 }
 
-interface TrackedAircraft {
+interface TrackedAircraft extends SmoothMarkerRec {
   position: AircraftPosition;
   marker: L.Marker;
   trail: L.Polyline;
@@ -473,13 +561,16 @@ export default function FlightMap() {
   const pendingAutoRegister = useRef<Set<string>>(new Set());
 
   // Open ADS-B (公開 adsb.lol) の独立レイヤ。MQTT の aircraft_adsb とは別管理。
-  const openAdsbRef = useRef<Map<string, { marker: L.Marker; trail: L.Polyline }>>(new Map());
+  const openAdsbRef = useRef<Map<string, SmoothMarkerRec & { trail: L.Polyline }>>(new Map());
 
   // RND(ランダムID)機の匿名クラスタ。device_id ではなく場所(小数3桁≒100m)キーで集約。
   const anonRef = useRef<Map<string, { marker: L.Marker; lastMs: number }>>(new Map());
 
+  // 選択機体の「このフライト」航跡(実線)。選択解除で消す。
+  const trackLineRef = useRef<L.Polyline | null>(null);
+
   // Open OGN (ogn.ezoe.net) の独立レイヤ。hex キー。ローカル OGN とは別管理。
-  const openOgnRef = useRef<Map<string, { marker: L.Marker }>>(new Map());
+  const openOgnRef = useRef<Map<string, SmoothMarkerRec>>(new Map());
 
   // Home view state
   const [homeView, setHomeView] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 0, lng: 0, zoom: 11 });
@@ -652,6 +743,8 @@ export default function FlightMap() {
       });
 
     fieldMarkerRef.current = marker;
+    // 機体以外(地図の余白)をクリックしたら選択解除(詳細パネル・航跡を自動で閉じる)
+    map.on("click", () => setSelectedAircraft(null));
     mapRef.current = map;
     setMapReady(true);
     return () => {
@@ -776,7 +869,11 @@ export default function FlightMap() {
     for (const [id, ac] of aircraftRef.current) {
       if (ac.adsb) {
         ac.label = ac.position.flight || ac.position.hex || id;
-        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, adsbColor(ac.position), false, undefined, true, undefined, undefined, undefined, iconLabels(ac.label, ac.position, units)));
+        const color = adsbColor(ac.position);
+        const lbls = iconLabels(ac.label, ac.position, units);
+        const key = [color, 0, 1, "", "", "", ""].join("|");
+        applyIconSmooth(ac, key, ac.position.heading_deg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(ac.position.heading_deg, color, false, undefined, true, undefined, undefined, undefined, lbls));
       } else {
         ac.label = resolveLabel(ac.position, id, units.displayName);
         const { airfield: af } = units;
@@ -788,7 +885,11 @@ export default function FlightMap() {
           color = COLOR_LOW;
         }
         const dbRec = lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id);
-        ac.marker.setIcon(makeAircraftIcon(ac.position.heading_deg, color, blink, ac.position.glider_type, false, dbRec?.registration || ac.position.glider_id || ac.position.competition_id, ac.position.aircraft_type, dbRec?.aircraft_type, iconLabels(ac.label, ac.position, units)));
+        const reg = dbRec?.registration || ac.position.glider_id || ac.position.competition_id;
+        const lbls = iconLabels(ac.label, ac.position, units);
+        const key = [color, blink ? 1 : 0, 0, dbRec?.aircraft_type || "", ac.position.glider_type || "", reg || "", ac.position.aircraft_type || ""].join("|");
+        applyIconSmooth(ac, key, ac.position.heading_deg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(ac.position.heading_deg, color, blink, ac.position.glider_type, false, reg, ac.position.aircraft_type, dbRec?.aircraft_type, lbls));
       }
     }
   }, [units]);
@@ -887,19 +988,22 @@ export default function FlightMap() {
         }
       }
 
+      const lbls = iconLabels(label, pos, unitsRef.current);
+      const iconKey = [color, blink ? 1 : 0, isAdsb ? 1 : 0, dbType || "", pos.glider_type || "", effectiveRegistration || "", pos.aircraft_type || ""].join("|");
       if (existing) {
         existing.position = pos;
         existing.label = label;
         existing.lastUpdateMs = Date.now();
         existing.adsb = isAdsb;
-        existing.marker.setLatLng(latlng);
-        existing.marker.setIcon(makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, iconLabels(label, pos, unitsRef.current)));
+        moveMarkerSmooth(existing, latlng);
+        applyIconSmooth(existing, iconKey, pos.heading_deg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls));
         const nowMs = Date.now();
         addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
         existing.trail.setStyle({ color });
       } else {
         const marker = L.marker(latlng, {
-          icon: makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, iconLabels(label, pos, unitsRef.current)),
+          icon: makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls),
         }).addTo(map);
 
         marker.on("click", () => setSelectedAircraft(deviceId));
@@ -915,6 +1019,8 @@ export default function FlightMap() {
           label,
           lastUpdateMs: createdMs,
           adsb: isAdsb,
+          dispHeading: pos.heading_deg,
+          iconKey,
         });
       }
 
@@ -936,6 +1042,7 @@ export default function FlightMap() {
       // Only remove aircraft of the same type (FLARM list removes FLARM, ADS-B list removes ADS-B)
       if (isAdsbList !== !!ac.adsb) continue;
       if (!activeIds.has(id)) {
+        cancelMoveAnim(ac);
         map?.removeLayer(ac.marker);
         map?.removeLayer(ac.trail);
         aircraft.delete(id);
@@ -993,7 +1100,7 @@ export default function FlightMap() {
   // 居れば重複表示しない(MQTT を優先)。フライトログには関与しない(表示のみ)。
   const clearOpenAdsb = useCallback(() => {
     const map = mapRef.current;
-    for (const [, e] of openAdsbRef.current) { map?.removeLayer(e.marker); map?.removeLayer(e.trail); }
+    for (const [, e] of openAdsbRef.current) { cancelMoveAnim(e); map?.removeLayer(e.marker); map?.removeLayer(e.trail); }
     openAdsbRef.current.clear();
   }, []);
 
@@ -1023,22 +1130,24 @@ export default function FlightMap() {
         const latlng = L.latLng(a.latitude, a.longitude);
         const label = a.flight || a.reg || (a.hex ? a.hex.toUpperCase() : a.device_id);
         const tipPos = { altitude_m: a.altitude_m, ground_speed_ms: a.ground_speed_ms, adsb_mode: a.adsb_mode } as unknown as AircraftPosition;
-        const icon = makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined, iconLabels(label, tipPos, unitsRef.current));
+        const lbls = iconLabels(label, tipPos, unitsRef.current);
+        const key = ["openadsb", a.reg || ""].join("|");
+        const build = () => makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined, lbls);
         let e = openAdsbRef.current.get(a.device_id);
         if (!e) {
-          const marker = L.marker(latlng, { icon }).addTo(map);
+          const marker = L.marker(latlng, { icon: build() }).addTo(map);
           const trail = L.polyline([], { color: COLOR_ADSB, weight: 2, opacity: 0.5, dashArray: "4,3" }).addTo(map);
-          e = { marker, trail };
+          e = { marker, trail, dispHeading: a.heading_deg, iconKey: key };
           openAdsbRef.current.set(a.device_id, e);
         } else {
-          e.marker.setLatLng(latlng);
-          e.marker.setIcon(icon);
+          moveMarkerSmooth(e, latlng);
+          applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
         }
         e.trail.setLatLngs((a.trail || []).map((p) => L.latLng(p[0], p[1])));
       }
       // 一覧から消えた機体を除去
       for (const [id, e] of openAdsbRef.current) {
-        if (!seen.has(id)) { map.removeLayer(e.marker); map.removeLayer(e.trail); openAdsbRef.current.delete(id); }
+        if (!seen.has(id)) { cancelMoveAnim(e); map.removeLayer(e.marker); map.removeLayer(e.trail); openAdsbRef.current.delete(id); }
       }
     }
 
@@ -1053,7 +1162,7 @@ export default function FlightMap() {
   // 居れば表示しない(=ローカル優先マージ)。表示のみでフライトログ/DB登録には不関与。
   const clearOpenOgn = useCallback(() => {
     const map = mapRef.current;
-    for (const [, e] of openOgnRef.current) map?.removeLayer(e.marker);
+    for (const [, e] of openOgnRef.current) { cancelMoveAnim(e); map?.removeLayer(e.marker); }
     openOgnRef.current.clear();
   }, []);
 
@@ -1091,19 +1200,21 @@ export default function FlightMap() {
         const dbRec = lookupDbRecord(aircraftDbRef.current, a.device_id);
         const label = dbRec?.registration || dbRec?.competition_id || hex;
         const tipPos = { altitude_m: a.altitude_m ?? 0, ground_speed_ms: a.ground_speed_ms } as unknown as AircraftPosition;
-        const icon = makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type, iconLabels(label, tipPos, unitsRef.current));
+        const lbls = iconLabels(label, tipPos, unitsRef.current);
+        const key = ["openogn", dbRec?.aircraft_type || "", dbRec?.glider_type || "", dbRec?.registration || ""].join("|");
+        const build = () => makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type, lbls);
         let e = openOgnRef.current.get(hex);
         if (!e) {
-          const marker = L.marker(latlng, { icon }).addTo(map);
-          e = { marker };
+          const marker = L.marker(latlng, { icon: build() }).addTo(map);
+          e = { marker, dispHeading: a.heading_deg, iconKey: key };
           openOgnRef.current.set(hex, e);
         } else {
-          e.marker.setLatLng(latlng);
-          e.marker.setIcon(icon);
+          moveMarkerSmooth(e, latlng);
+          applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
         }
       }
       for (const [hex, e] of openOgnRef.current) {
-        if (!seen.has(hex)) { map.removeLayer(e.marker); openOgnRef.current.delete(hex); }
+        if (!seen.has(hex)) { cancelMoveAnim(e); map.removeLayer(e.marker); openOgnRef.current.delete(hex); }
       }
     }
 
@@ -1111,6 +1222,76 @@ export default function FlightMap() {
     const iv = setInterval(pollOpenOgn, 5000);
     return () => { stopped = true; clearInterval(iv); clearOpenOgn(); };
   }, [units.openOgn, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenOgn]);
+
+  // ── タブ復帰時のスナップ(非表示中に溜まった移動・回転を復帰時に一気に再生しない) ──
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) return;
+      const recs: SmoothMarkerRec[] = [
+        ...aircraftRef.current.values(),
+        ...openAdsbRef.current.values(),
+        ...openOgnRef.current.values(),
+      ];
+      for (const rec of recs) {
+        snapMarker(rec);
+        if (rec.dispHeading != null) rotateMarkerSmooth(rec, ((rec.dispHeading % 360) + 360) % 360, true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // ── 同心円(滑空場中心・5km毎・30kmまで・点線)。設定「同心円表示」でON/OFF ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !units.rangeRings) return;
+    const lat = units.airfield.latitude;
+    const lon = units.airfield.longitude;
+    const group = L.layerGroup();
+    for (let km = 5; km <= 30; km += 5) {
+      L.circle([lat, lon], {
+        radius: km * 1000,
+        color: "#607d8b", weight: 1.2, opacity: 0.55,
+        fill: false, dashArray: "6,6", interactive: false,
+        pane: "airfieldPane",
+      }).addTo(group);
+      // 距離ラベル(円の真北)
+      L.marker([lat + km / 111.195, lon], {
+        icon: L.divIcon({ html: `<div class="ring-label">${km}km</div>`, className: "", iconSize: [40, 14], iconAnchor: [20, 7] }),
+        interactive: false, keyboard: false, pane: "airfieldPane",
+      }).addTo(group);
+    }
+    group.addTo(map);
+    return () => { map.removeLayer(group); };
+  }, [mapReady, units.rangeRings, units.airfield.latitude, units.airfield.longitude]);
+
+  // ── 選択機体の「このフライト」の航跡(実線)。地図の余白クリックで選択解除→消える ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !selectedAircraft) return;
+    const device = selectedAircraft;
+    const m: L.Map = map;
+    let stopped = false;
+    async function draw() {
+      try {
+        const r = await fetch(`/api/flight-track?device=${encodeURIComponent(device)}`);
+        const d = await r.json();
+        if (stopped) return;
+        const pts = (d.points || []) as [number, number][];
+        if (pts.length > 1) {
+          if (trackLineRef.current) trackLineRef.current.setLatLngs(pts);
+          else trackLineRef.current = L.polyline(pts, { color: "#1565c0", weight: 3, opacity: 0.85, interactive: false }).addTo(m);
+        }
+      } catch { /* noop */ }
+    }
+    draw();
+    const iv = setInterval(draw, 5000);   // 飛行中は航跡が伸びるので追随
+    return () => {
+      stopped = true;
+      clearInterval(iv);
+      if (trackLineRef.current) { map.removeLayer(trackLineRef.current); trackLineRef.current = null; }
+    };
+  }, [selectedAircraft, mapReady]);
 
   // RND(匿名)マーカーの掃除。一定時間 受信の無いクラスタを消す(非永続)。
   useEffect(() => {
@@ -1281,6 +1462,79 @@ export default function FlightMap() {
                 保存
               </button>
             </div>
+
+            {/* 機体の詳細パネル(地図右上)。地図の余白クリックで自動的に閉じる */}
+            {selectedDetail && (() => {
+              const selDb = selectedAircraft ? lookupDbRecord(aircraftDbRef.current, selectedAircraft, selectedDetail.position.glider_id) : undefined;
+              const selGliderType = selDb?.glider_type || selectedDetail.position.glider_type;
+              const selRegistration = selDb?.registration || selectedDetail.position.glider_id;
+              const selCompId = selDb?.competition_id || selectedDetail.position.competition_id;
+              const selPilot = selDb?.pilot || selectedDetail.position.pilot;
+              const selAircraftType = selDb?.aircraft_type;
+              const typeLabel = selAircraftType ? (AIRCRAFT_TYPE_OPTIONS.find(o => o.value === selAircraftType)?.label) : undefined;
+              return (
+              <div
+                className="absolute z-[1000] rounded-md p-3"
+                style={{
+                  top: 84,
+                  right: 10,
+                  width: 236,
+                  maxHeight: "calc(100% - 100px)",
+                  overflowY: "auto",
+                  background: "var(--color-bg-secondary)",
+                  border: "1px solid var(--color-border)",
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.25)",
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>
+                    {selCompId || selRegistration || selectedAircraft}
+                  </span>
+                  <button
+                    onClick={() => setSelectedAircraft(null)}
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{
+                      background: "var(--color-bg-tertiary)",
+                      color: "var(--color-text-secondary)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    閉じる
+                  </button>
+                </div>
+                {selGliderType && (
+                  <DetailRow label="機種名" value={selGliderType} />
+                )}
+                {selRegistration && (
+                  <DetailRow label="登録番号" value={selRegistration} />
+                )}
+                {selCompId && (
+                  <DetailRow label="CN" value={selCompId} />
+                )}
+                {typeLabel && (
+                  <DetailRow label="航空機タイプ" value={typeLabel} />
+                )}
+                {selPilot && (
+                  <DetailRow label="パイロット" value={selPilot} />
+                )}
+                <DetailRow label="高度" value={formatAltitude(selectedDetail.position.altitude_m, units.altitude)} />
+                <DetailRow label="速度" value={formatSpeed(selectedDetail.position.ground_speed_ms, units.speed)} />
+                <DetailRow label="上昇率" value={formatClimbRate(selectedDetail.position.climb_rate_ms, units.climbRate)} />
+                <DetailRow label="方位" value={`${selectedDetail.position.heading_deg.toFixed(0)}°`} />
+                <DetailRow label="旋回" value={`${selectedDetail.position.turn_rate_degs.toFixed(1)}°/s`} />
+                <DetailRow
+                  label="パス(L/D)"
+                  value={(() => {
+                    const h = selectedDetail.position.altitude_m - fElev;
+                    if (h <= 0) return "—";
+                    const d = haversineM(fLat, fLon,
+                      selectedDetail.position.latitude, selectedDetail.position.longitude);
+                    return `${(d / h).toFixed(1)} (必要 ≤${units.safeGlideRatio})`;
+                  })()}
+                />
+              </div>
+              );
+            })()}
           </div>
 
           {/* Resize handle: Map ↔ Flight Log */}
@@ -1343,7 +1597,11 @@ export default function FlightMap() {
                         key={`${entry.deviceId}-${i}`}
                       >
                         <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{i + 1}</td>
-                        <td className="px-1 py-0.5 font-semibold whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{entry.registration}</td>
+                        <td className="px-1 py-0.5 font-semibold whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>{(() => {
+                          // 登録番号の後ろにコンテストナンバーを括弧で併記(例: JA03KH (KH))。CN未登録は従来表示
+                          const cn = lookupDbRecord(aircraftDbRef.current, entry.deviceId, entry.registration)?.competition_id;
+                          return cn && cn !== entry.registration ? `${entry.registration} (${cn})` : entry.registration;
+                        })()}</td>
                         <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           <input
                             type="text"
@@ -1457,67 +1715,6 @@ export default function FlightMap() {
             background: "var(--color-bg-secondary)",
           }}
         >
-          {/* Selected detail */}
-          {selectedDetail && (() => {
-            const selDb = selectedAircraft ? lookupDbRecord(aircraftDbRef.current, selectedAircraft, selectedDetail.position.glider_id) : undefined;
-            const selGliderType = selDb?.glider_type || selectedDetail.position.glider_type;
-            const selRegistration = selDb?.registration || selectedDetail.position.glider_id;
-            const selCompId = selDb?.competition_id || selectedDetail.position.competition_id;
-            const selPilot = selDb?.pilot || selectedDetail.position.pilot;
-            const selAircraftType = selDb?.aircraft_type;
-            const typeLabel = selAircraftType ? (AIRCRAFT_TYPE_OPTIONS.find(o => o.value === selAircraftType)?.label) : undefined;
-            return (
-            <div className="p-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>
-                  {selCompId || selRegistration || selectedAircraft}
-                </span>
-                <button
-                  onClick={() => setSelectedAircraft(null)}
-                  className="text-xs px-2 py-0.5 rounded"
-                  style={{
-                    background: "var(--color-bg-tertiary)",
-                    color: "var(--color-text-secondary)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  閉じる
-                </button>
-              </div>
-              {selGliderType && (
-                <DetailRow label="機種名" value={selGliderType} />
-              )}
-              {selRegistration && (
-                <DetailRow label="登録番号" value={selRegistration} />
-              )}
-              {selCompId && (
-                <DetailRow label="CN" value={selCompId} />
-              )}
-              {typeLabel && (
-                <DetailRow label="航空機タイプ" value={typeLabel} />
-              )}
-              {selPilot && (
-                <DetailRow label="パイロット" value={selPilot} />
-              )}
-              <DetailRow label="高度" value={formatAltitude(selectedDetail.position.altitude_m, units.altitude)} />
-              <DetailRow label="速度" value={formatSpeed(selectedDetail.position.ground_speed_ms, units.speed)} />
-              <DetailRow label="上昇率" value={formatClimbRate(selectedDetail.position.climb_rate_ms, units.climbRate)} />
-              <DetailRow label="方位" value={`${selectedDetail.position.heading_deg.toFixed(0)}°`} />
-              <DetailRow label="旋回" value={`${selectedDetail.position.turn_rate_degs.toFixed(1)}°/s`} />
-              <DetailRow
-                label="パス(L/D)"
-                value={(() => {
-                  const h = selectedDetail.position.altitude_m - fElev;
-                  if (h <= 0) return "—";
-                  const d = haversineM(fLat, fLon,
-                    selectedDetail.position.latitude, selectedDetail.position.longitude);
-                  return `${(d / h).toFixed(1)} (必要 ≤${units.safeGlideRatio})`;
-                })()}
-              />
-            </div>
-            );
-          })()}
-
           {/* Danger section (通信途絶 / パス不足) */}
           {dangerList.length > 0 && (
             <div style={{ borderBottom: "1px solid var(--color-border)" }}>

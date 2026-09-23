@@ -340,6 +340,8 @@ interface TrackerState {
   lastResetDay: string;
   started: boolean;
   seq: number;
+  /** 機体ごとの「今のフライト」の航跡 [timeMs, lat, lon]。地図のクリック表示用 */
+  tracks: Map<string, [number, number, number][]>;
 }
 
 const STATE_KEY = Symbol.for("feeldscope.flightTracker");
@@ -356,6 +358,7 @@ function S(): TrackerState {
       lastResetDay: "",
       started: false,
       seq: 0,
+      tracks: new Map(),
     };
     g[STATE_KEY] = s;
   }
@@ -386,6 +389,7 @@ function checkDailyReset(): void {
   if (s.lastResetDay !== day) {
     s.flights = [];
     s.tracking.clear();
+    s.tracks.clear();
     s.lastResetDay = day;
   }
 }
@@ -415,6 +419,12 @@ function closeOpenFlights(deviceId: string, time: string, exceptId?: string): vo
   if (changed) s.flights = next;
 }
 
+/** 機体DBから表示用の登録番号を引く（無ければ deviceId のまま） */
+function trackerRegistration(deviceId: string): string {
+  const rec = lookupByDeviceId(S().aircraftDb, deviceId);
+  return rec?.registration || rec?.competition_id || deviceId;
+}
+
 /** 着陸を記録する。追っていた飛行に時刻を入れ、取り残しがあれば空欄で閉じる */
 function recordLanding(deviceId: string, tr: TrackingState, time: string): void {
   const s = S();
@@ -423,6 +433,21 @@ function recordLanding(deviceId: string, tr: TrackingState, time: string): void 
     s.flights = s.flights.map((f) =>
       f.id === id && f.landingTime === null ? { ...f, landingTime: time } : f);
     console.log(`[flight-tracker] landing ${deviceId} ${time}`);
+  } else {
+    // 離陸を観測していない機体（外来機の飛来、離陸後に FLARM の電源を入れた等）。
+    // 着陸を検知した時点で、離陸欄を空欄にした「着陸のみ」の記録を残す
+    // （運航者決定 2026-09-23。誤値を出さない方針は維持し、離陸時刻は推定しない）。
+    const entry: FlightLogEntry = {
+      id: `f${Date.now().toString(36)}${(s.seq++).toString(36)}`,
+      registration: trackerRegistration(deviceId),
+      deviceId,
+      takeoffTime: "",
+      landingTime: time,
+      releaseAlt: null,
+      releaseDist: null,
+    };
+    s.flights = [...s.flights, entry];
+    console.log(`[flight-tracker] landing-only ${deviceId} ${time} (takeoff unobserved)`);
   }
   closeOpenFlights(deviceId, "");
 }
@@ -581,7 +606,37 @@ function acquirePosition(deviceId: string, tr: TrackingState, cur: LastFix): boo
   tr.acquiring = null;
   tr.lastFix = cur;
   tr.rejects = 0;
+  appendTrack(deviceId, tr, cur);
   return true;
+}
+
+/**
+ * 「今のフライト」の航跡を貯める（地図のクリック表示用）。
+ * 地上では直近90秒だけ残す（離陸滑走の始まりを含めるため）。飛行中は
+ * 2秒間隔に間引いて貯め、上限を超えたら古い側から1点おきに粗くする。
+ * 着陸して地上に戻ると90秒で自然に消え、次のフライトが新しく始まる。
+ */
+const TRACK_GROUND_KEEP_MS = 90_000;
+const TRACK_MIN_INTERVAL_MS = 2_000;
+const TRACK_MAX_POINTS = 14_400;
+function appendTrack(deviceId: string, tr: TrackingState, cur: LastFix): void {
+  const s = S();
+  let t = s.tracks.get(deviceId);
+  if (!t) { t = []; s.tracks.set(deviceId, t); }
+  const last = t[t.length - 1];
+  if (last && cur.timeMs - last[0] < TRACK_MIN_INTERVAL_MS) return;
+  t.push([cur.timeMs, cur.lat, cur.lon]);
+  if (tr.phase === "ground") {
+    const cutoff = cur.timeMs - TRACK_GROUND_KEEP_MS;
+    while (t.length && t[0][0] < cutoff) t.shift();
+  } else if (t.length > TRACK_MAX_POINTS) {
+    const keepTail = 600;   // 直近は細かいまま残す
+    const thinned: [number, number, number][] = [];
+    for (let i = 0; i < t.length; i++) {
+      if (i >= t.length - keepTail || i % 2 === 0) thinned.push(t[i]);
+    }
+    s.tracks.set(deviceId, thinned);
+  }
 }
 
 /** 曳航ペアの状態を捨てる。次の飛行に前の索の相手を持ち越さない */
@@ -960,6 +1015,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   } else {
     tr.rejects = 0;
     tr.lastFix = cur;
+    appendTrack(deviceId, tr, cur);
   }
 
   // 受信機が出す飛行状態。null = この送信側は値を出していない（従来どおりの判定に落とす）
@@ -1222,6 +1278,12 @@ export function getFlightLog(): FlightLogEntry[] {
   checkDailyReset();
   normalizeFlights();
   return S().flights;
+}
+
+/** 地図のクリック表示用: この機体の「今のフライト」の航跡 [[lat,lon],...] */
+export function getFlightTrack(deviceId: string): [number, number][] {
+  const t = S().tracks.get(deviceId);
+  return t ? t.map((p) => [p[1], p[2]]) : [];
 }
 
 /** 機体ごとの現在の状態。地図の着陸進入表示に使う */

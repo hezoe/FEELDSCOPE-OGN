@@ -12,6 +12,14 @@ const RADIUS_NM = 50;
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
+
+  // 状態照会のみ(?status=1)。ステータス画面が「実際に受信できているか」を表示する
+  // ための読み取りで、購読は開始しない(勝手に受信を始めない)。
+  if (sp.get("status")) {
+    const st = ognStatus();
+    return NextResponse.json({ now: new Date().toISOString(), source: "aprs.glidernet.org", status: st });
+  }
+
   const latS = sp.get("lat");
   const lonS = sp.get("lon");
   const lat = latS ? Number(latS) : NaN;

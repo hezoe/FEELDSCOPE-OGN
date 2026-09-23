@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import net from "node:net";
+import https from "node:https";
 
 // 日本→adsb.lol(欧州ホスト)は RTT≈290ms あり、Node 既定の Happy Eyeballs
 // 試行タイムアウト(250ms)より長いため、既定のままでは TCP 接続が SYN-ACK 到着前に
 // 毎回打ち切られ ETIMEDOUT になる(2026-09-23 滝川で実証)。プロセス全体で試行猶予を
 // 2秒に延ばす(機体DBオンライン取得など他の外向き fetch も同様に救われる)。
+// 注: Next.js が差し替える fetch(同梱undici)はこの既定値を尊重しないため、
+// adsb.lol への取得自体は下の getJsonV4(node:https + IPv4直行)で行う。
 if (typeof net.setDefaultAutoSelectFamilyAttemptTimeout === "function") {
   net.setDefaultAutoSelectFamilyAttemptTimeout(2000);
 }
@@ -77,28 +80,51 @@ function altMeters(ac: AdsbLolAircraft): number {
   return Number.isFinite(n) ? Math.round(n * 0.3048) : 0; // ft -> m
 }
 
+/**
+ * adsb.lol を node:https + IPv4 直行で叩いて JSON を返す。
+ * Next.js の fetch(同梱undici)は Happy Eyeballs の試行打ち切りで本環境
+ * (日本→欧州 RTT≈290ms・DNS遅延あり)では接続に失敗し続けるため使わない
+ * (2026-09-23 滝川で node:https family:4 の成功を実証)。
+ */
+function getJsonV4(url: string, timeoutMs: number): Promise<{ status: number; json: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      family: 4,
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      timeout: timeoutMs,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => {
+        const status = res.statusCode || 0;
+        if (status !== 200) { resolve({ status, json: null }); return; }
+        try { resolve({ status, json: JSON.parse(Buffer.concat(chunks).toString("utf8")) }); }
+        catch (e) { reject(e); }
+      });
+    });
+    req.on("timeout", () => req.destroy(Object.assign(new Error("request timeout"), { code: "ETIMEDOUT" })));
+    req.on("error", reject);
+  });
+}
+
 async function pollAdsbLol(lat: number, lon: number): Promise<void> {
   const url = `https://api.adsb.lol/v2/point/${lat}/${lon}/${RADIUS_NM}`;
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 12_000);
   let list: AdsbLolAircraft[] = [];
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: ctrl.signal });
-    if (!r.ok) {
-      lastError = `HTTP ${r.status}`; // 429=adsb.lol側レート制限 等
+    const { status, json } = await getJsonV4(url, 12_000);
+    if (status !== 200) {
+      lastError = `HTTP ${status}`; // 429=adsb.lol側レート制限 等
       lastErrorAt = Date.now();
       return; // 失敗時は既存キャッシュを維持(lastPollは成功時のみ更新)
     }
-    const d = await r.json();
-    if (Array.isArray(d?.ac)) list = d.ac as AdsbLolAircraft[];
+    const d = json as { ac?: AdsbLolAircraft[] };
+    if (Array.isArray(d?.ac)) list = d.ac;
     lastError = null;
   } catch (e) {
-    const cause = (e as { cause?: { code?: string } })?.cause?.code;
-    lastError = cause || (e instanceof Error ? e.message : String(e));
+    const err = e as { cause?: { code?: string }; code?: string; message?: string };
+    lastError = err.cause?.code || err.code || (e instanceof Error ? e.message : String(e));
     lastErrorAt = Date.now();
     return; // 失敗時は既存キャッシュを維持
-  } finally {
-    clearTimeout(to);
   }
 
   const now = Date.now();

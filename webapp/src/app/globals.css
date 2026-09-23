@@ -81,6 +81,22 @@ button, [role="button"] {
 .ac-top { bottom: 100%; margin-bottom: 2px; font-size: 10px; font-weight: 700; }
 .ac-bot { top: 100%; margin-top: 2px; font-size: 9px; font-weight: 600; opacity: 0.95; }
 
+/* 機首の回転をCSSで滑らかに(DOMを保ったまま transform だけ更新する。FlightMap の applyIconSmooth 参照)。
+   タブ非表示中は JS 側が transition:none を当ててスナップさせる(復帰時のくるくる回転防止)。 */
+.ac-mk .aircraft-icon svg { transition: transform 1.2s linear; }
+
+/* 同心円(滑空場中心・5km毎)の距離ラベル */
+.ring-label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #607d8b;
+  pointer-events: none;
+  text-shadow:
+    -1px -1px 0 var(--color-bg-primary), 1px -1px 0 var(--color-bg-primary),
+    -1px 1px 0 var(--color-bg-primary), 1px 1px 0 var(--color-bg-primary);
+}
+
 /* Blink for status list */
 @keyframes blink-status {
   0%, 100% { background: rgba(0, 103, 192, 0.15); }

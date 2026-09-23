@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import HelpHint from "@/components/HelpHint";
+import { useUnits } from "@/lib/UnitContext";
 
 interface SystemSummary {
   uptime: string;
@@ -73,6 +74,26 @@ interface StatusPayload {
   flight_log: FlightLogStats;
 }
 
+/** /api/open-adsb の受信状態(設定ONでも実際に取得できているかの確認用) */
+interface OpenAdsbProbe {
+  last_poll: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  count?: number;
+}
+
+/** /api/open-ogn?status=1 の受信状態(購読は開始しない読み取り専用) */
+interface OpenOgnProbe {
+  status?: { connected: boolean; count: number; last_request: string | null };
+}
+
+/** iso時刻が今から maxAgeMs 以内か(受信の鮮度判定) */
+function isFresh(iso: string | null | undefined, maxAgeMs: number): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) && Date.now() - t < maxAgeMs;
+}
+
 function timeSince(iso: string | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso).getTime();
@@ -88,6 +109,9 @@ export default function StatusPage() {
   const [data, setData] = useState<StatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, setTick] = useState(0);
+  const { units } = useUnits();
+  const [openAdsbProbe, setOpenAdsbProbe] = useState<OpenAdsbProbe | null | undefined>(undefined);
+  const [openOgnProbe, setOpenOgnProbe] = useState<OpenOgnProbe | null | undefined>(undefined);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,6 +129,31 @@ export default function StatusPage() {
     const t = setInterval(() => setTick(n => n + 1), 1000);
     return () => { clearInterval(i); clearInterval(t); };
   }, [fetchData]);
+
+  // Open データ源(外部API)の実受信状態。設定ONのときだけ照会する
+  // (OFFのソースをこちらの照会で勝手に動かさない。Open OGNは購読を開始しない?status=1)。
+  useEffect(() => {
+    let stop = false;
+    async function probe() {
+      if (units.openAdsb) {
+        try {
+          const r = await fetch(`/api/open-adsb?lat=${units.airfield.latitude}&lon=${units.airfield.longitude}`);
+          const j = await r.json();
+          if (!stop) setOpenAdsbProbe(j);
+        } catch { if (!stop) setOpenAdsbProbe(null); }
+      } else if (!stop) setOpenAdsbProbe(undefined);
+      if (units.openOgn) {
+        try {
+          const r = await fetch("/api/open-ogn?status=1");
+          const j = await r.json();
+          if (!stop) setOpenOgnProbe(j);
+        } catch { if (!stop) setOpenOgnProbe(null); }
+      } else if (!stop) setOpenOgnProbe(undefined);
+    }
+    probe();
+    const iv = setInterval(probe, 10000);
+    return () => { stop = true; clearInterval(iv); };
+  }, [units.openAdsb, units.openOgn, units.airfield.latitude, units.airfield.longitude]);
 
   return (
     <main className="flex-1 flex items-start justify-center overflow-y-auto py-6 px-4 rounded-md" style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)" }}>
@@ -225,6 +274,56 @@ export default function StatusPage() {
                 )}
               </>
             )}
+          </div>
+        </Card>
+
+        {/* Open data sources (external APIs) */}
+        <Card title="Open データ源（外部API受信状態）" helpId="status-open-sources">
+          <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+            設定でONにした外部データ源（Open ADS-B / Open OGN）が、<strong>実際に受信できているか</strong>を表示します。
+            「設定したつもりでも受信できていない」状態はここで分かります。
+          </p>
+          <div className="space-y-2">
+            {/* Open ADS-B (adsb.lol) */}
+            {(() => {
+              if (!units.openAdsb) {
+                return <Stat label="Open ADS-B（adsb.lol）" value="無効（設定でOFF）" />;
+              }
+              const p = openAdsbProbe;
+              const ok = isFresh(p?.last_poll, 60_000);
+              return (
+                <>
+                  <Stat
+                    label="Open ADS-B（adsb.lol）"
+                    value={p === undefined ? "確認中…" : ok ? `受信OK（${p?.count ?? 0}機）` : "取得できていません"}
+                    accent={p === undefined ? undefined : ok ? "success" : "danger"}
+                  />
+                  {p && <Stat label="　最終取得成功" value={p.last_poll ? timeSince(p.last_poll) : "なし（起動後一度も成功していません）"} mono small />}
+                  {p?.last_error && (
+                    <div className="p-2 rounded text-xs font-mono" style={{ background: "var(--color-danger-dim)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
+                      直近の失敗: {p.last_error}（{timeSince(p.last_error_at || undefined)}）
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            {/* Open OGN (APRS-IS) */}
+            {(() => {
+              if (!units.openOgn) {
+                return <Stat label="Open OGN（aprs.glidernet.org）" value="無効（設定でOFF）" />;
+              }
+              const st = openOgnProbe?.status;
+              return (
+                <>
+                  <Stat
+                    label="Open OGN（aprs.glidernet.org）"
+                    value={openOgnProbe === undefined ? "確認中…" : st?.connected ? `接続中（${st.count}機）` : "未接続（マップ表示中に自動接続されます）"}
+                    accent={openOgnProbe === undefined ? undefined : st?.connected ? "success" : "warning"}
+                  />
+                  {st?.last_request && <Stat label="　最終購読要求" value={timeSince(st.last_request)} mono small />}
+                </>
+              );
+            })()}
           </div>
         </Card>
 

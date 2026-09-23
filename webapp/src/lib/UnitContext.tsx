@@ -29,6 +29,7 @@ interface UnitContextType {
   setAdsb: (a: AdsbConfig) => void;
   setOpenAdsb: (v: boolean) => void;
   setOpenOgn: (v: boolean) => void;
+  setRangeRings: (v: boolean) => void;
   setMapSource: (m: MapSource) => void;
 }
 
@@ -45,6 +46,7 @@ const UnitContext = createContext<UnitContextType>({
   setAdsb: () => {},
   setOpenAdsb: () => {},
   setOpenOgn: () => {},
+  setRangeRings: () => {},
   setMapSource: () => {},
 });
 
@@ -118,6 +120,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setAdsb: (adsb: AdsbConfig) => update({ adsb }),
         setOpenAdsb: (openAdsb: boolean) => update({ openAdsb }),
         setOpenOgn: (openOgn: boolean) => update({ openOgn }),
+        setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >

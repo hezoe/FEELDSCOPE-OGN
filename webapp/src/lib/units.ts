@@ -45,6 +45,8 @@ export interface UnitPreferences {
   openAdsb: boolean;
   /** Open OGN: OGNネットワーク(APRS-IS/aprs.glidernet.org)へ直結し空港周辺(半径50海里)の OGN 機を取得しローカルとマージ(既定OFF) */
   openOgn: boolean;
+  /** 同心円表示: 滑空場を中心に5km毎・30kmまでの距離円(点線)を描く(既定ON) */
+  rangeRings: boolean;
 }
 
 export const DEFAULT_UNITS: UnitPreferences = {
@@ -59,6 +61,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
   adsb: DEFAULT_ADSB,
   openAdsb: false,
   openOgn: false,
+  rangeRings: true,
 };
 
 const STORAGE_KEY = "ogn-unit-preferences";
