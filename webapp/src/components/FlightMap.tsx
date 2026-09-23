@@ -127,52 +127,58 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
   });
 }
 
-// ── アイコンのスムーズ表示（移動・機首回転） ──
-// 位置は rAF の線形補間で滑らかに動かす（等速直線移動の機体には等速が最も自然）。
-// 機首はアイコンDOMを保ったまま CSS transition で回す（DOM再生成すると瞬間ジャンプする）。
-// タブ非表示中はスナップし、復帰時に溜まった動きを一気に再生しない（くるくる回転防止）。
-const MOVE_ANIM_MS = 1600;   // 位置補間時間。ビーコン間隔より少し短くして遅延蓄積を防ぐ
-const MOVE_SNAP_M = 5000;    // これ以上のジャンプは受信ギャップとみなしスナップ
+// ── マーカーのスムーズ移動（対地速度ベースの推測航法。ogn-web v0.9.0 と同方式） ──
+// 方針: 航空機は常に対地速度で動いているので、アイコンも「平均化した対地速度」で
+// 機首方向へ前進し続ければ自然に次の検知位置の近くへ来る。ズレの吸収は
+//  ・前後方向 = 速度の増減だけで行う(遅れていれば最大+40%増速、進み過ぎなら減速〜停止)。
+//    **後退(バック)は絶対にしない**。追い越したら減速して実機に追い付かれるのを待つ。
+//  ・横方向   = レート制限つきで経路へ寄せる(横滑りは後退ではない)。
+// ずれすぎ防止: 目標点はfixから最大 DR_EXTRAP_MAX_MS ぶんの外挿で頭打ち。
+// 大ジャンプ(受信ギャップ)・タブ非表示時は従来どおり即時スナップ。
+const DR_TAU_MS = 1200;         // 静止時/横ズレの収束時定数
+const DR_EXTRAP_MAX_MS = 10000; // 目標点の外挿上限 = 検知位置から最大10秒ぶん
+const DR_SNAP_M = 5000;         // これ以上の誤差はスナップ
+const DR_SPD_EMA = 0.3;         // fix毎の対地速度の平均化係数(直近3〜4fixの移動平均相当)
+const DR_CATCH_S = 8;           // 前後ズレを増減速で吸収する時定数
+const DR_SPD_MIN = 1.5;         // m/s。これ未満は静止扱い(収束のみ)
 
 interface SmoothMarkerRec {
   marker: L.Marker;
-  animId?: number;
-  animTarget?: L.LatLng;
+  /** 最新の受信fix(位置+速度ベクトル+実測定時刻)。推測航法の基準 */
+  fix?: { lat: number; lon: number; vN: number; vE: number; t: number };
+  /** アイコンの巡航速度(対地速度のEMA) */
+  vAvg?: number | null;
   dispHeading?: number;
   iconKey?: string;
 }
 
-function cancelMoveAnim(rec: SmoothMarkerRec): void {
-  if (rec.animId !== undefined) { cancelAnimationFrame(rec.animId); rec.animId = undefined; }
-  rec.animTarget = undefined;
-}
+const drItems = new Set<SmoothMarkerRec>();  // 推測航法の対象レコード(全レイヤ共通)
 
-function moveMarkerSmooth(rec: SmoothMarkerRec, to: L.LatLng): void {
-  cancelMoveAnim(rec);
-  const from = rec.marker.getLatLng();
-  if ((typeof document !== "undefined" && document.hidden) || from.equals(to) || from.distanceTo(to) > MOVE_SNAP_M) {
-    rec.marker.setLatLng(to);
-    return;
+function drSetFix(
+  rec: SmoothMarkerRec, lat: number, lon: number,
+  speedMs: number | null | undefined, trackDeg: number | null | undefined, fixTime?: number,
+): void {
+  const spd = speedMs != null && speedMs > 1 ? speedMs : 0;
+  let vN = 0, vE = 0;
+  if (spd && trackDeg != null) {
+    const r = (trackDeg * Math.PI) / 180;
+    vN = spd * Math.cos(r);
+    vE = spd * Math.sin(r);
   }
-  rec.animTarget = to;
-  const t0 = performance.now();
-  const step = (t: number) => {
-    const k = Math.min(1, (t - t0) / MOVE_ANIM_MS);
-    rec.marker.setLatLng([from.lat + (to.lat - from.lat) * k, from.lng + (to.lng - from.lng) * k]);
-    if (k < 1) rec.animId = requestAnimationFrame(step);
-    else { rec.animId = undefined; rec.animTarget = undefined; }
-  };
-  rec.animId = requestAnimationFrame(step);
-}
-
-/** 進行中の位置アニメを目的地へ即時確定させる（タブ復帰時など） */
-function snapMarker(rec: SmoothMarkerRec): void {
-  if (rec.animTarget) {
-    const to = rec.animTarget;
-    cancelMoveAnim(rec);
-    rec.marker.setLatLng(to);
+  // 1回の外れ値で暴れないよう速度は指数移動平均
+  rec.vAvg = rec.vAvg == null ? spd : rec.vAvg + (spd - rec.vAvg) * DR_SPD_EMA;
+  const now = Date.now();
+  // fix時刻は分かる範囲で実測定時刻(OGN=ビーコン時刻)。クロックずれで未来にならないよう now でクランプ
+  rec.fix = { lat, lon, vN, vE, t: Math.min(fixTime || now, now) };
+  drItems.add(rec);
+  const cur = rec.marker.getLatLng();
+  if ((typeof document !== "undefined" && document.hidden) || cur.distanceTo([lat, lon]) > DR_SNAP_M) {
+    rec.marker.setLatLng([lat, lon]);
+    rec.vAvg = spd; // スナップ時は平均もリセット
   }
 }
+
+function drDrop(rec: SmoothMarkerRec): void { drItems.delete(rec); }
 
 /** 機首を最短弧で回す。350°→10° は +20° になり長回りしない。instant はタブ復帰時のスナップ用 */
 function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: boolean): void {
@@ -995,10 +1001,10 @@ export default function FlightMap() {
         existing.label = label;
         existing.lastUpdateMs = Date.now();
         existing.adsb = isAdsb;
-        moveMarkerSmooth(existing, latlng);
         applyIconSmooth(existing, iconKey, pos.heading_deg, lbls.top, lbls.bot,
           () => makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls));
         const nowMs = Date.now();
+        drSetFix(existing, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg, positionTimeMs(pos, nowMs));
         addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
         existing.trail.setStyle({ color });
       } else {
@@ -1011,7 +1017,7 @@ export default function FlightMap() {
         const trail = L.polyline([latlng], { color, weight: 2, opacity: 0.6 }).addTo(map);
 
         const createdMs = Date.now();
-        aircraft.set(deviceId, {
+        const rec: TrackedAircraft = {
           position: pos,
           marker,
           trail,
@@ -1021,7 +1027,9 @@ export default function FlightMap() {
           adsb: isAdsb,
           dispHeading: pos.heading_deg,
           iconKey,
-        });
+        };
+        aircraft.set(deviceId, rec);
+        drSetFix(rec, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg, positionTimeMs(pos, createdMs));
       }
 
       // 離着陸・離脱の検知はサーバ側 (src/lib/flight-tracker.ts) が行う。
@@ -1042,7 +1050,7 @@ export default function FlightMap() {
       // Only remove aircraft of the same type (FLARM list removes FLARM, ADS-B list removes ADS-B)
       if (isAdsbList !== !!ac.adsb) continue;
       if (!activeIds.has(id)) {
-        cancelMoveAnim(ac);
+        drDrop(ac);
         map?.removeLayer(ac.marker);
         map?.removeLayer(ac.trail);
         aircraft.delete(id);
@@ -1100,7 +1108,7 @@ export default function FlightMap() {
   // 居れば重複表示しない(MQTT を優先)。フライトログには関与しない(表示のみ)。
   const clearOpenAdsb = useCallback(() => {
     const map = mapRef.current;
-    for (const [, e] of openAdsbRef.current) { cancelMoveAnim(e); map?.removeLayer(e.marker); map?.removeLayer(e.trail); }
+    for (const [, e] of openAdsbRef.current) { drDrop(e); map?.removeLayer(e.marker); map?.removeLayer(e.trail); }
     openAdsbRef.current.clear();
   }, []);
 
@@ -1140,14 +1148,14 @@ export default function FlightMap() {
           e = { marker, trail, dispHeading: a.heading_deg, iconKey: key };
           openAdsbRef.current.set(a.device_id, e);
         } else {
-          moveMarkerSmooth(e, latlng);
           applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
         }
+        drSetFix(e, a.latitude, a.longitude, a.ground_speed_ms, a.heading_deg);
         e.trail.setLatLngs((a.trail || []).map((p) => L.latLng(p[0], p[1])));
       }
       // 一覧から消えた機体を除去
       for (const [id, e] of openAdsbRef.current) {
-        if (!seen.has(id)) { cancelMoveAnim(e); map.removeLayer(e.marker); map.removeLayer(e.trail); openAdsbRef.current.delete(id); }
+        if (!seen.has(id)) { drDrop(e); map.removeLayer(e.marker); map.removeLayer(e.trail); openAdsbRef.current.delete(id); }
       }
     }
 
@@ -1162,7 +1170,7 @@ export default function FlightMap() {
   // 居れば表示しない(=ローカル優先マージ)。表示のみでフライトログ/DB登録には不関与。
   const clearOpenOgn = useCallback(() => {
     const map = mapRef.current;
-    for (const [, e] of openOgnRef.current) { cancelMoveAnim(e); map?.removeLayer(e.marker); }
+    for (const [, e] of openOgnRef.current) { drDrop(e); map?.removeLayer(e.marker); }
     openOgnRef.current.clear();
   }, []);
 
@@ -1209,12 +1217,12 @@ export default function FlightMap() {
           e = { marker, dispHeading: a.heading_deg, iconKey: key };
           openOgnRef.current.set(hex, e);
         } else {
-          moveMarkerSmooth(e, latlng);
           applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
         }
+        drSetFix(e, a.latitude, a.longitude, a.ground_speed_ms, a.heading_deg);
       }
       for (const [hex, e] of openOgnRef.current) {
-        if (!seen.has(hex)) { cancelMoveAnim(e); map.removeLayer(e.marker); openOgnRef.current.delete(hex); }
+        if (!seen.has(hex)) { drDrop(e); map.removeLayer(e.marker); openOgnRef.current.delete(hex); }
       }
     }
 
@@ -1223,7 +1231,68 @@ export default function FlightMap() {
     return () => { stopped = true; clearInterval(iv); clearOpenOgn(); };
   }, [units.openOgn, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenOgn]);
 
-  // ── タブ復帰時のスナップ(非表示中に溜まった移動・回転を復帰時に一気に再生しない) ──
+  // ── 推測航法の描画ループ(全レイヤ共通・単一rAF・約30fps) ──
+  // タブ非表示中は停止(fix受信時に drSetFix がスナップするので復帰時も位置は正しい)。
+  // 画面外の機体は補間せず直接追従して負荷を抑える。
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const frame = (tNow: number) => {
+      raf = requestAnimationFrame(frame);
+      if (tNow - last < 33) return; // ~30fps(多数のADS-B機でも負荷を抑える)
+      const dt = tNow - last;
+      last = tNow;
+      const map = mapRef.current;
+      if (!map || document.hidden || drItems.size === 0) return;
+      const dtS = dt / 1000;
+      const now = Date.now();
+      const kConv = 1 - Math.exp(-dt / DR_TAU_MS); // フレーム毎の収束率(静止時/横ズレ用)
+      const bounds = map.getBounds().pad(0.2);
+      for (const rec of drItems) {
+        const f = rec.fix;
+        if (!f) { drItems.delete(rec); continue; }
+        // 目標点 = fixを実測速度ベクトルで外挿(上限あり)した「今いるはずの位置」
+        const ageS = Math.min(Math.max(now - f.t, 0), DR_EXTRAP_MAX_MS) / 1000;
+        const mLat = 111320;
+        const mLon = 111320 * Math.cos((f.lat * Math.PI) / 180);
+        const tLat = f.lat + (f.vN * ageS) / mLat;
+        const tLon = f.lon + (f.vE * ageS) / mLon;
+        const cur = rec.marker.getLatLng();
+        if (!bounds.contains(cur)) { rec.marker.setLatLng([tLat, tLon]); continue; } // 画面外は直接追従
+        const dN = (tLat - cur.lat) * mLat; // 目標までのズレ(m)
+        const dE = (tLon - cur.lng) * mLon;
+        const vAvg = rec.vAvg || 0;
+        let stepN: number, stepE: number;
+        if (vAvg < DR_SPD_MIN) {
+          // ほぼ静止(地上): GPSゆらぎ程度なので単純収束(後退の概念なし)
+          stepN = dN * kConv;
+          stepE = dE * kConv;
+        } else {
+          // 飛行中: 表示機首の方向へ平均速度で前進。前後ズレは増減速のみで吸収(下限0=バック禁止)
+          const hd = ((rec.dispHeading != null ? rec.dispHeading : 0) * Math.PI) / 180;
+          const uN = Math.cos(hd), uE = Math.sin(hd);
+          const gapAlong = dN * uN + dE * uE; // 進行方向の前後ズレ(+=遅れ/-=行き過ぎ)
+          const vCmd = Math.min(Math.max(vAvg + gapAlong / DR_CATCH_S, 0), vAvg * 1.4);
+          stepN = uN * vCmd * dtS;
+          stepE = uE * vCmd * dtS;
+          // 横ズレ(進行方向と直交)はレート制限つきで経路へ寄せる
+          let lN = (dN - gapAlong * uN) * kConv;
+          let lE = (dE - gapAlong * uE) * kConv;
+          const lMag = Math.hypot(lN, lE);
+          const lMax = Math.max(0.5 * vAvg, 5) * dtS; // 横補正の最大速度
+          if (lMag > lMax) { lN *= lMax / lMag; lE *= lMax / lMag; }
+          stepN += lN;
+          stepE += lE;
+        }
+        if (Math.abs(stepN) < 0.01 && Math.abs(stepE) < 0.01) continue; // 静止+収束済み
+        rec.marker.setLatLng([cur.lat + stepN / mLat, cur.lng + stepE / mLon]);
+      }
+    };
+    raf = requestAnimationFrame(frame);
+    return () => { cancelAnimationFrame(raf); drItems.clear(); };
+  }, []);
+
+  // ── タブ復帰時のスナップ(非表示中に溜まった回転を復帰時に一気に再生しない) ──
   useEffect(() => {
     const onVis = () => {
       if (document.hidden) return;
@@ -1233,7 +1302,6 @@ export default function FlightMap() {
         ...openOgnRef.current.values(),
       ];
       for (const rec of recs) {
-        snapMarker(rec);
         if (rec.dispHeading != null) rotateMarkerSmooth(rec, ((rec.dispHeading % 360) + 360) % 360, true);
       }
     };

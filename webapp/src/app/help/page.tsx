@@ -726,11 +726,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.12 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.12</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="機体アイコンの動きをさらに滑らかに（推測航法）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>アイコンの移動を単純な補間から<strong>対地速度ベースの推測航法（dead reckoning）</strong>に変更しました（ogn.ezoe.net と同方式）。アイコンは平均化した対地速度で機首方向へ前進し続け、受信位置とのズレは<strong>増減速だけで吸収（後退しない）</strong>します。</li>
+          <li>受信の合間も実速度で動き続けるため、動きが途切れず自然になります。受信ギャップ（大ジャンプ）やタブ非表示時は従来どおり即時表示です。</li>
+          <li>描画は全機体まとめて約30fpsの単一ループで行い、画面外の機体は補間を省略して負荷を抑えます。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.11 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.11</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="マップの操作性・表示を大幅強化">
