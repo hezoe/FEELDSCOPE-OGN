@@ -704,11 +704,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.10 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.10</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="Open ADS-B が表示されない問題を修正（全サイト共通）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>日本からデータ元（adsb.lol・欧州サーバ）への接続が、Node の接続試行タイムアウト（250ms）より通信の往復時間（約290ms）が長いために<strong>毎回失敗していた問題を修正</strong>しました。試行猶予を2秒に延長し、機体情報のオンライン取得など他の外部通信も同時に改善されます。</li>
+          <li>取得に失敗した場合、<strong>失敗理由（<code>last_error</code>）を API 応答に出す</strong>ようにしました。従来は無音で失敗し原因調査が困難でした。</li>
+          <li>失敗が続いてもリクエスト毎に再試行せず一定間隔に間引くようにし、データ元のレート制限（429）を悪化させないようにしました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.9 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.9</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-22</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="OGN受信機の自動復帰（ウォッチドッグ）を各機へ確実に配布">

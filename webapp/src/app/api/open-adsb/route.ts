@@ -1,4 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import net from "node:net";
+
+// 日本→adsb.lol(欧州ホスト)は RTT≈290ms あり、Node 既定の Happy Eyeballs
+// 試行タイムアウト(250ms)より長いため、既定のままでは TCP 接続が SYN-ACK 到着前に
+// 毎回打ち切られ ETIMEDOUT になる(2026-09-23 滝川で実証)。プロセス全体で試行猶予を
+// 2秒に延ばす(機体DBオンライン取得など他の外向き fetch も同様に救われる)。
+if (typeof net.setDefaultAutoSelectFamilyAttemptTimeout === "function") {
+  net.setDefaultAutoSelectFamilyAttemptTimeout(2000);
+}
 
 // Open ADS-B: 公開の adsb.lol から空港周辺(半径250nm)の ADS-B 機を取得する。
 // 受信機やローカルの tar1090 は不要。設定画面の「OpenなADS-Bを追加」ON のとき
@@ -53,7 +62,10 @@ interface OpenAdsbRecord {
 
 // モジュールスコープの共有状態(同一 Node プロセス内で全リクエスト共有)
 const store = new Map<string, OpenAdsbRecord>();
-let lastPoll = 0;
+let lastPoll = 0;      // 最後に adsb.lol 取得が「成功」した時刻
+let lastAttempt = 0;   // 最後に取得を「試みた」時刻(失敗時の再試行間隔もこれで間引く)
+let lastError: string | null = null; // 直近の取得失敗理由(成功でクリア)。診断用にAPI応答へ出す
+let lastErrorAt = 0;
 let lastCenterKey = "";
 let inflight: Promise<void> | null = null;
 
@@ -72,11 +84,18 @@ async function pollAdsbLol(lat: number, lon: number): Promise<void> {
   let list: AdsbLolAircraft[] = [];
   try {
     const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: ctrl.signal });
-    if (r.ok) {
-      const d = await r.json();
-      if (Array.isArray(d?.ac)) list = d.ac as AdsbLolAircraft[];
+    if (!r.ok) {
+      lastError = `HTTP ${r.status}`; // 429=adsb.lol側レート制限 等
+      lastErrorAt = Date.now();
+      return; // 失敗時は既存キャッシュを維持(lastPollは成功時のみ更新)
     }
-  } catch {
+    const d = await r.json();
+    if (Array.isArray(d?.ac)) list = d.ac as AdsbLolAircraft[];
+    lastError = null;
+  } catch (e) {
+    const cause = (e as { cause?: { code?: string } })?.cause?.code;
+    lastError = cause || (e instanceof Error ? e.message : String(e));
+    lastErrorAt = Date.now();
     return; // 失敗時は既存キャッシュを維持
   } finally {
     clearTimeout(to);
@@ -127,9 +146,11 @@ export async function GET(req: NextRequest) {
 
   const now = Date.now();
   const centerKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-  // 中心が変わったら即時再取得。それ以外はキャッシュ間隔で間引く。
-  if (centerKey !== lastCenterKey || now - lastPoll > CACHE_MS) {
+  // 中心が変わったら即時再取得。それ以外は「試行」間隔で間引く(失敗が続いても
+  // リクエスト毎に叩き直さない=レート制限を悪化させない)。
+  if (centerKey !== lastCenterKey || now - lastAttempt > CACHE_MS) {
     lastCenterKey = centerKey;
+    lastAttempt = now;
     if (!inflight) {
       inflight = pollAdsbLol(lat, lon).finally(() => { inflight = null; });
     }
@@ -159,6 +180,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     now: new Date().toISOString(),
     last_poll: lastPoll ? new Date(lastPoll).toISOString() : null,
+    last_error: lastError,
+    last_error_at: lastErrorAt ? new Date(lastErrorAt).toISOString() : null,
     center: { lat, lon },
     radius_nm: RADIUS_NM,
     radius_miles: RADIUS_NM, // マイル=海里で運用
