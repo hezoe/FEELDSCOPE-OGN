@@ -150,6 +150,12 @@ interface SmoothMarkerRec {
   vAvg?: number | null;
   dispHeading?: number;
   iconKey?: string;
+  /** 航跡線(あれば)。先端はアイコンのアニメーション位置に毎フレーム追従させる */
+  trail?: L.Polyline;
+  /** 航跡の履歴部分(受信fix由来)。描画は [...trailBase, マーカー現在位置] */
+  trailBase?: L.LatLng[];
+  /** 履歴再生の倍速(リアルタイム=1)。移動・回転・収束の速さに反映 */
+  rate?: number;
 }
 
 const drItems = new Set<SmoothMarkerRec>();  // 推測航法の対象レコード(全レイヤ共通)
@@ -157,8 +163,9 @@ const drItems = new Set<SmoothMarkerRec>();  // 推測航法の対象レコー�
 function drSetFix(
   rec: SmoothMarkerRec, lat: number, lon: number,
   speedMs: number | null | undefined, trackDeg: number | null | undefined, fixTime?: number,
+  rate = 1,   // 履歴再生の倍速(1〜20)。アイコンも倍速で動かす。リアルタイム=1
 ): void {
-  const spd = speedMs != null && speedMs > 1 ? speedMs : 0;
+  const spd = (speedMs != null && speedMs > 1 ? speedMs : 0) * rate;
   let vN = 0, vE = 0;
   if (spd && trackDeg != null) {
     const r = (trackDeg * Math.PI) / 180;
@@ -168,8 +175,13 @@ function drSetFix(
   // 1回の外れ値で暴れないよう速度は指数移動平均
   rec.vAvg = rec.vAvg == null ? spd : rec.vAvg + (spd - rec.vAvg) * DR_SPD_EMA;
   const now = Date.now();
-  // fix時刻は分かる範囲で実測定時刻(OGN=ビーコン時刻)。クロックずれで未来にならないよう now でクランプ
-  rec.fix = { lat, lon, vN, vE, t: Math.min(fixTime || now, now) };
+  // fix時刻は分かる範囲で実測定時刻(OGN=ビーコン時刻)。未来や大きく過去(履歴再生の
+  // 歴史的時刻・時計異常)は受信時刻扱いにする。ここが過去のままだと外挿上限いっぱい
+  // 常に先回りして位置がずれ続ける。
+  let t = fixTime || now;
+  if (t > now || now - t > 30_000) t = now;
+  rec.fix = { lat, lon, vN, vE, t };
+  rec.rate = rate;
   drItems.add(rec);
   const cur = rec.marker.getLatLng();
   if ((typeof document !== "undefined" && document.hidden) || cur.distanceTo([lat, lon]) > DR_SNAP_M) {
@@ -179,6 +191,25 @@ function drSetFix(
 }
 
 function drDrop(rec: SmoothMarkerRec): void { drItems.delete(rec); }
+
+/**
+ * 「このフライト」実線航跡のヘッドライン点列を作る。
+ * 本線(サーバ履歴)の末尾点と同じfixをブラウザ側の直近履歴から探し、
+ * **それ以降のfixだけ**を経由してアイコン現在位置へ繋ぐ。
+ * 古いfixまで含めると、末尾→60秒前へ戻る直線が旋回をショートカットして見える。
+ */
+function trackHeadPoints(rec: SmoothMarkerRec, lastPt: L.LatLng): L.LatLngExpression[] {
+  const base = rec.trailBase || [];
+  let idx = -1;
+  let bestD = Infinity;
+  for (let k = base.length - 1; k >= 0; k--) {
+    const d = Math.abs(base[k].lat - lastPt.lat) + Math.abs(base[k].lng - lastPt.lng);
+    if (d < 1e-7) { idx = k; break; }        // 同一fix(同じ受信ストリーム由来なので通常ここで一致)
+    if (d < bestD) { bestD = d; idx = d < 0.002 ? k : idx; }  // 予備: 約200m以内の最寄り点
+  }
+  const tail = idx >= 0 ? base.slice(idx + 1) : [];
+  return [lastPt, ...tail, rec.marker.getLatLng()];
+}
 
 /** 機首を最短弧で回す。350°→10° は +20° になり長回りしない。instant はタブ復帰時のスナップ用 */
 function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: boolean): void {
@@ -195,6 +226,9 @@ function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: bool
     svg.style.transform = `rotate(${deg}deg)`;
     requestAnimationFrame(() => { svg.style.transition = ""; });
   } else {
+    // 履歴再生の倍速では旋回も倍速で起きるので、回転アニメ時間も 1.2s/倍率 に短縮する
+    const rt = rec.rate || 1;
+    svg.style.transition = rt > 1 ? `transform ${(1.2 / rt).toFixed(2)}s linear` : "";
     svg.style.transform = `rotate(${deg}deg)`;
   }
 }
@@ -497,7 +531,9 @@ function addTrailPoint(
     ac.trailPoints = pts.filter((p) => p.arrivalMs >= cutoff);
   }
 
-  ac.trail.setLatLngs(ac.trailPoints.map((p) => p.latlng));
+  // 履歴=受信fix。描画の先端はアイコンのアニメーション位置(推測航法ループが毎フレーム追従)
+  ac.trailBase = ac.trailPoints.map((p) => p.latlng);
+  ac.trail.setLatLngs([...ac.trailBase, ac.marker.getLatLng()]);
 }
 
 function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayNameMode): string {
@@ -573,7 +609,10 @@ export default function FlightMap() {
   const anonRef = useRef<Map<string, { marker: L.Marker; lastMs: number }>>(new Map());
 
   // 選択機体の「このフライト」航跡(実線)。選択解除で消す。
+  // trackLine=サーバ履歴の本線(5秒毎更新)、trackHead=本線末尾→直近fix→アイコンのヘッドライン(毎フレーム追従)
   const trackLineRef = useRef<L.Polyline | null>(null);
+  const trackHeadRef = useRef<L.Polyline | null>(null);
+  const selectedRecRef = useRef<SmoothMarkerRec | null>(null);
 
   // Open OGN (ogn.ezoe.net) の独立レイヤ。hex キー。ローカル OGN とは別管理。
   const openOgnRef = useRef<Map<string, SmoothMarkerRec>>(new Map());
@@ -1004,7 +1043,8 @@ export default function FlightMap() {
         applyIconSmooth(existing, iconKey, pos.heading_deg, lbls.top, lbls.bot,
           () => makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls));
         const nowMs = Date.now();
-        drSetFix(existing, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg, positionTimeMs(pos, nowMs));
+        drSetFix(existing, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg,
+          drSimRef.current ? nowMs : positionTimeMs(pos, nowMs), drRateRef.current);
         addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
         existing.trail.setStyle({ color });
       } else {
@@ -1022,6 +1062,7 @@ export default function FlightMap() {
           marker,
           trail,
           trailPoints: [{ latlng, arrivalMs: createdMs, posMs: positionTimeMs(pos, createdMs) }],
+          trailBase: [latlng],
           label,
           lastUpdateMs: createdMs,
           adsb: isAdsb,
@@ -1029,7 +1070,8 @@ export default function FlightMap() {
           iconKey,
         };
         aircraft.set(deviceId, rec);
-        drSetFix(rec, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg, positionTimeMs(pos, createdMs));
+        drSetFix(rec, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg,
+          drSimRef.current ? createdMs : positionTimeMs(pos, createdMs), drRateRef.current);
       }
 
       // 離着陸・離脱の検知はサーバ側 (src/lib/flight-tracker.ts) が行う。
@@ -1151,7 +1193,8 @@ export default function FlightMap() {
           applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
         }
         drSetFix(e, a.latitude, a.longitude, a.ground_speed_ms, a.heading_deg);
-        e.trail.setLatLngs((a.trail || []).map((p) => L.latLng(p[0], p[1])));
+        e.trailBase = (a.trail || []).map((p) => L.latLng(p[0], p[1]));
+        e.trail.setLatLngs([...e.trailBase, e.marker.getLatLng()]);
       }
       // 一覧から消えた機体を除去
       for (const [id, e] of openAdsbRef.current) {
@@ -1231,6 +1274,16 @@ export default function FlightMap() {
     return () => { stopped = true; clearInterval(iv); clearOpenOgn(); };
   }, [units.openOgn, units.airfield.latitude, units.airfield.longitude, mapReady, clearOpenOgn]);
 
+  // 履歴再生の倍速(シミュレータのMQTTステータス由来)。アイコンの移動速度に反映する。
+  // 再生中はfix時刻に受信時刻を使う(ペイロードの時刻はIGCの歴史的時刻のため)。
+  const drRateRef = useRef(1);
+  const drSimRef = useRef(false);
+  useEffect(() => {
+    const sim = !!(receiverStatus?.simulated && receiverStatus.simulator);
+    drSimRef.current = sim;
+    drRateRef.current = sim ? Math.max(1, receiverStatus?.simulator?.speed || 1) : 1;
+  }, [receiverStatus]);
+
   // ── 推測航法の描画ループ(全レイヤ共通・単一rAF・約30fps) ──
   // タブ非表示中は停止(fix受信時に drSetFix がスナップするので復帰時も位置は正しい)。
   // 画面外の機体は補間せず直接追従して負荷を抑える。
@@ -1262,22 +1315,25 @@ export default function FlightMap() {
         const dN = (tLat - cur.lat) * mLat; // 目標までのズレ(m)
         const dE = (tLon - cur.lng) * mLon;
         const vAvg = rec.vAvg || 0;
+        // 履歴再生の倍速では時間の流れがrate倍なので、収束・追いつきの時定数もrate倍で締める
+        const rrate = rec.rate || 1;
+        const kC = rrate === 1 ? kConv : 1 - Math.exp(-(dt * rrate) / DR_TAU_MS);
         let stepN: number, stepE: number;
         if (vAvg < DR_SPD_MIN) {
           // ほぼ静止(地上): GPSゆらぎ程度なので単純収束(後退の概念なし)
-          stepN = dN * kConv;
-          stepE = dE * kConv;
+          stepN = dN * kC;
+          stepE = dE * kC;
         } else {
           // 飛行中: 表示機首の方向へ平均速度で前進。前後ズレは増減速のみで吸収(下限0=バック禁止)
           const hd = ((rec.dispHeading != null ? rec.dispHeading : 0) * Math.PI) / 180;
           const uN = Math.cos(hd), uE = Math.sin(hd);
           const gapAlong = dN * uN + dE * uE; // 進行方向の前後ズレ(+=遅れ/-=行き過ぎ)
-          const vCmd = Math.min(Math.max(vAvg + gapAlong / DR_CATCH_S, 0), vAvg * 1.4);
+          const vCmd = Math.min(Math.max(vAvg + (gapAlong * rrate) / DR_CATCH_S, 0), vAvg * 1.4);
           stepN = uN * vCmd * dtS;
           stepE = uE * vCmd * dtS;
           // 横ズレ(進行方向と直交)はレート制限つきで経路へ寄せる
-          let lN = (dN - gapAlong * uN) * kConv;
-          let lE = (dE - gapAlong * uE) * kConv;
+          let lN = (dN - gapAlong * uN) * kC;
+          let lE = (dE - gapAlong * uE) * kC;
           const lMag = Math.hypot(lN, lE);
           const lMax = Math.max(0.5 * vAvg, 5) * dtS; // 横補正の最大速度
           if (lMag > lMax) { lN *= lMax / lMag; lE *= lMax / lMag; }
@@ -1286,6 +1342,16 @@ export default function FlightMap() {
         }
         if (Math.abs(stepN) < 0.01 && Math.abs(stepE) < 0.01) continue; // 静止+収束済み
         rec.marker.setLatLng([cur.lat + stepN / mLat, cur.lng + stepE / mLon]);
+        // 航跡線の先端をアイコン位置に追従させる(受信fixのままだと先端が機体から離れる)
+        if (rec.trail && rec.trailBase) {
+          rec.trail.setLatLngs([...rec.trailBase, rec.marker.getLatLng()]);
+        }
+        // 選択中の機体は「このフライト」実線航跡のヘッドラインもアイコンに追従させる
+        if (rec === selectedRecRef.current && trackHeadRef.current && trackLineRef.current) {
+          const base = trackLineRef.current.getLatLngs() as L.LatLng[];
+          const lastPt = base[base.length - 1];
+          if (lastPt) trackHeadRef.current.setLatLngs(trackHeadPoints(rec, lastPt));
+        }
       }
     };
     raf = requestAnimationFrame(frame);
@@ -1346,9 +1412,19 @@ export default function FlightMap() {
         const d = await r.json();
         if (stopped) return;
         const pts = (d.points || []) as [number, number][];
+        const rec = aircraftRef.current.get(device) || null;
+        selectedRecRef.current = rec;
         if (pts.length > 1) {
+          const style = { color: "#1565c0", weight: 3, opacity: 0.85, interactive: false } as const;
           if (trackLineRef.current) trackLineRef.current.setLatLngs(pts);
-          else trackLineRef.current = L.polyline(pts, { color: "#1565c0", weight: 3, opacity: 0.85, interactive: false }).addTo(m);
+          else trackLineRef.current = L.polyline(pts, style).addTo(m);
+          // ヘッドライン: 本線末尾→(末尾以降の)直近fix→アイコン現在位置(以降は描画ループが毎フレーム追従)
+          const last = pts[pts.length - 1];
+          if (rec) {
+            const head = trackHeadPoints(rec, L.latLng(last[0], last[1]));
+            if (trackHeadRef.current) trackHeadRef.current.setLatLngs(head);
+            else trackHeadRef.current = L.polyline(head, style).addTo(m);
+          }
         }
       } catch { /* noop */ }
     }
@@ -1357,7 +1433,9 @@ export default function FlightMap() {
     return () => {
       stopped = true;
       clearInterval(iv);
+      selectedRecRef.current = null;
       if (trackLineRef.current) { map.removeLayer(trackLineRef.current); trackLineRef.current = null; }
+      if (trackHeadRef.current) { map.removeLayer(trackHeadRef.current); trackHeadRef.current = null; }
     };
   }, [selectedAircraft, mapReady]);
 

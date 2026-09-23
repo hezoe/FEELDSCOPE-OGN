@@ -726,11 +726,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.13 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.13</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="航跡線を機体アイコンに追従（v1.4.12の修正）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>推測航法の導入で<strong>航跡線の先端が機体アイコンから離れて見える</strong>ことがあった問題を修正。航跡線の先端は<strong>アイコンのアニメーション計算位置</strong>に毎フレーム追従します（履歴部分は従来どおり受信位置）。</li>
+          <li><strong>履歴再生の倍速に対応</strong> — 再生倍速（1〜20x）に合わせて機体アイコンの移動速度も倍速になります（倍速スライダーの変更は即時反映）。</li>
+          <li>倍速再生時は<strong>機首の回転アニメと位置の追従（収束・追いつき）も倍率に合わせて速く</strong>し、高倍速の旋回でも向きと位置が遅れないようにしました。</li>
+          <li>機体クリックの<strong>「このフライト」実線航跡も先端がアイコンに毎フレーム追従</strong>するようにし、通常の航跡より表示が遅れる問題を解消しました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.12 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.12</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="機体アイコンの動きをさらに滑らかに（推測航法）">
