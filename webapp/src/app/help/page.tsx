@@ -726,11 +726,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.15 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.15</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-27</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="「OpenなADS-B」「OpenなOGN」を機体ごとに保存">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>「OpenなADS-Bを追加」「OpenなOGNを追加（OGNネットワーク）」の表示ON/OFFを、<strong>機体（受信機）側に保存</strong>するようにしました。これまではブラウザ内（localStorage）にURLのホスト単位で保存していたため、<strong>別のブラウザ・別のURL・プライベートウィンドウで開くと既定OFFに戻って見える</strong>問題がありました。</li>
+          <li>これにより、<strong>各機体で一度ONにすれば、どの端末・どのURLから開いても維持</strong>されます。設定は滑空場（airfield）設定と同じく機体ごとに保存されます。</li>
+          <li>更新後の初回表示では、その端末で以前ONにしていた場合の設定を引き継いで機体側に保存します。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.14 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.14</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-27</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="地上待機中のアイコンが回り続ける現象を修正">

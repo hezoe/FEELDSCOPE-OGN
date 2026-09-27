@@ -608,7 +608,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium">OpenなADS-Bを追加（adsb.lol）</span>
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  受信機がなくても、公開の adsb.lol から空港周辺（半径20海里）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。
+                  受信機がなくても、公開の adsb.lol から空港周辺（半径20海里）の ADS-B 機を取得して青色で表示します。ONにすると受信を開始します。フライトログには記録されません。<strong>この設定は機体（受信機）ごとに保存</strong>され、別のブラウザやURLで開いても維持されます。
                 </p>
               </div>
 
@@ -624,7 +624,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium">OpenなOGNを追加（OGNネットワーク）</span>
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  ローカル受信に加えて、OGNネットワーク（aprs.glidernet.org）へ直接接続し、空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。
+                  ローカル受信に加えて、OGNネットワーク（aprs.glidernet.org）へ直接接続し、空港周辺（半径50海里）の OGN 機を取得して表示します。同じ機体はローカル受信を優先します。ONにすると受信を開始します。フライトログには記録されません。<strong>この設定は機体（受信機）ごとに保存</strong>され、別のブラウザやURLで開いても維持されます。
                 </p>
               </div>
               <div>

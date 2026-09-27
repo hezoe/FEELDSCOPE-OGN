@@ -9,6 +9,11 @@ const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
 const FEELDSCOPE_OGN_DIR = process.env.FEELDSCOPE_OGN_DIR || "/home/pi/FEELDSCOPE-OGN";
 const ADSB_CONFIG_PATH = process.env.FEELDSCOPE_ADSB_CONFIG || `${FEELDSCOPE_DIR}/adsb-config.json`;
 const AIRFIELD_CONFIG_PATH = process.env.FEELDSCOPE_AIRFIELD_CONFIG || `${FEELDSCOPE_DIR}/airfield-config.json`;
+// 表示設定(OpenなADS-B / OpenなOGN)は「機体(端末)ごとの設定」として端末側に保存する。
+// 以前はブラウザの localStorage(オリジン単位)だったため、別ブラウザ/別URL/プライベート
+// ウィンドウでは既定OFFに戻って見えた。airfield-config.json と同じ場所に置き、env が
+// 無くても全端末で正しく書ける（AIRFIELD_CONFIG_PATH のディレクトリに view-config.json）。
+const VIEW_CONFIG_PATH = process.env.FEELDSCOPE_VIEW_CONFIG || AIRFIELD_CONFIG_PATH.replace(/[^/]*$/, "view-config.json");
 const DHCPCD_CONF = "/etc/dhcpcd.conf";
 const WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf";
 const OGN_RECEIVER_CONF = "/boot/OGN-receiver.conf";
@@ -70,6 +75,30 @@ async function loadAirfieldConfig(): Promise<AirfieldConfig> {
 
 async function saveAirfieldConfig(config: AirfieldConfig): Promise<void> {
   await writeFile(AIRFIELD_CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+interface ViewConfig {
+  openAdsb: boolean;
+  openOgn: boolean;
+}
+
+// 端末に保存が無ければ null を返す（未設定と「明示的にOFF」を区別するため）。
+// クライアントは null のとき localStorage 値を尊重し、その値で端末を初期化(seed)する。
+async function loadViewConfig(): Promise<ViewConfig | null> {
+  try {
+    const data = await readFile(VIEW_CONFIG_PATH, "utf-8");
+    const parsed = JSON.parse(data);
+    return {
+      openAdsb: parsed.openAdsb === true,
+      openOgn: parsed.openOgn === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveViewConfig(config: ViewConfig): Promise<void> {
+  await writeFile(VIEW_CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
 async function detectReceiverId(): Promise<string> {
@@ -552,9 +581,10 @@ export async function GET(request: Request) {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
-  const [adsbConfig, airfieldConfig, network, version, autoReboot, remoteSupport] = await Promise.all([
+  const [adsbConfig, airfieldConfig, viewConfig, network, version, autoReboot, remoteSupport] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
+    loadViewConfig(),
     getNetworkStatus(),
     getVersionInfo(),
     getAutoRebootConfig(),
@@ -565,6 +595,8 @@ export async function GET(request: Request) {
     mode,
     receiver_id: receiverId,
     airfield_config: airfieldConfig,
+    // 表示設定(端末保存)。未設定なら null（クライアントが localStorage 値で初期化する）。
+    view_config: viewConfig,
     ogn_mqtt_active: ognMqtt,
     igc_simulator_active: igcSim,
     mosquitto_active: mosquitto,
@@ -588,7 +620,9 @@ export async function POST(request: Request) {
   // 「管理者ログイン or オペレーター(リモートサポート中の管理者)」が必須。
   // 閲覧(GET)は無認証。リモートサポートは失念時の唯一の解除導線なので、
   //   トグル(remote-support-save)も初回登録(catvpn-enroll)も無認証で許可する。
-  const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll"]);
+  // view-save = OpenなADS-B/OGN の表示ON/OFF。機微情報を含まない「表示設定」で、
+  // 従来もブラウザ側で無認証に切替できていたため、端末保存化後も無認証で許可する。
+  const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll", "view-save"]);
   if (!OPEN_ACTIONS.has(action)) {
     const ctx = await getAuthContext(request);
     if (!isAuthorizedToMutate(ctx)) {
@@ -698,6 +732,16 @@ export async function POST(request: Request) {
         };
         await saveAirfieldConfig(airfield);
         return NextResponse.json({ ok: true, airfield });
+      }
+
+      case "view-save": {
+        // OpenなADS-B / OpenなOGN の表示ON/OFF を端末に保存（機体ごとの設定）。
+        const view: ViewConfig = {
+          openAdsb: !!body.openAdsb,
+          openOgn: !!body.openOgn,
+        };
+        await saveViewConfig(view);
+        return NextResponse.json({ ok: true, view });
       }
 
       case "hostname-save": {

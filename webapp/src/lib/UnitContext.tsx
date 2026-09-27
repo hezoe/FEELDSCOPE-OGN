@@ -50,6 +50,18 @@ const UnitContext = createContext<UnitContextType>({
   setMapSource: () => {},
 });
 
+/**
+ * OpenなADS-B/OGN の表示ON/OFF を端末(機体)側へ保存する。表示専用の非機微設定で、
+ * サーバ側 view-save も無認証で受ける。失敗は無視（ネットワーク不通でも表示は継続）。
+ */
+function persistViewConfig(openAdsb: boolean, openOgn: boolean): void {
+  fetch("/api/system", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "view-save", openAdsb, openOgn }),
+  }).catch(() => {});
+}
+
 export function UnitProvider({ children }: { children: ReactNode }) {
   const [units, setUnits] = useState<UnitPreferences>(DEFAULT_UNITS);
   const [unitsLoaded, setUnitsLoaded] = useState(false);
@@ -63,10 +75,18 @@ export function UnitProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         // Server airfield is the source of truth. Display-only unit prefs stay in localStorage.
         const airfield: AirfieldConfig = data.airfield_config ?? local.airfield;
-        const merged = { ...local, airfield };
+        // OpenなADS-B/OGN は「端末(機体)ごとの設定」。端末に保存があればそれを正本に採用。
+        // 無ければ(未設定/旧版) localStorage 値を尊重し、その値で端末を初期化(seed)する。
+        const view = data.view_config as { openAdsb?: boolean; openOgn?: boolean } | null | undefined;
+        const merged: UnitPreferences = {
+          ...local,
+          airfield,
+          ...(view ? { openAdsb: !!view.openAdsb, openOgn: !!view.openOgn } : {}),
+        };
         setUnits(merged);
         saveUnits(merged);
         setUnitsLoaded(true);
+        if (!view) persistViewConfig(merged.openAdsb, merged.openOgn);
       })
       .catch(() => {
         setUnits(local);
@@ -78,6 +98,15 @@ export function UnitProvider({ children }: { children: ReactNode }) {
     const next = { ...units, ...partial };
     setUnits(next);
     saveUnits(next);
+  }
+
+  // OpenなADS-B/OGN のトグル。ローカル即時反映(地図が即反応)に加え、端末側へ保存して
+  // 別ブラウザ/別URL/再訪でも維持されるようにする（オリジン単位の localStorage 依存を解消）。
+  function updateView(partial: Partial<Pick<UnitPreferences, "openAdsb" | "openOgn">>) {
+    const next = { ...units, ...partial };
+    setUnits(next);
+    saveUnits(next);
+    persistViewConfig(next.openAdsb, next.openOgn);
   }
 
   function updateAirfield(airfield: AirfieldConfig) {
@@ -118,8 +147,8 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setSafeGlideRatio: (safeGlideRatio: number) => update({ safeGlideRatio }),
         setAirfield: (airfield: AirfieldConfig) => updateAirfield(airfield),
         setAdsb: (adsb: AdsbConfig) => update({ adsb }),
-        setOpenAdsb: (openAdsb: boolean) => update({ openAdsb }),
-        setOpenOgn: (openOgn: boolean) => update({ openOgn }),
+        setOpenAdsb: (openAdsb: boolean) => updateView({ openAdsb }),
+        setOpenOgn: (openOgn: boolean) => updateView({ openOgn }),
         setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
