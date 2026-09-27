@@ -726,11 +726,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.14 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.14</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-27</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="地上待機中のアイコンが回り続ける現象を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>地上で待機中（駐機中）の機体アイコンが、<strong>止まっているのにクルクル回り続ける</strong>現象を修正しました。静止中はGPS/FLARMの進行方向（track）が微小に揺れ、アイコンがそれに追従していたためです。</li>
+          <li><strong>対地速度がごく低い（静止とみなせる）間は、機首の向きを最後に動いていたときの方向で固定</strong>し、機体が動き出したら通常どおり向きの追従を再開します。位置の推測航法（移動の滑らかさ）は従来どおりで、向きの表示だけを安定させています。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.13 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.13</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-23</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="航跡線を機体アイコンに追従（v1.4.12の修正）">

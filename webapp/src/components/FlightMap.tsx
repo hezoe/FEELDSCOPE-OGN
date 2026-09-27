@@ -149,6 +149,9 @@ interface SmoothMarkerRec {
   /** アイコンの巡航速度(対地速度のEMA) */
   vAvg?: number | null;
   dispHeading?: number;
+  /** 静止中(対地速度 < DR_SPD_MIN)に据え置く機首方位。地上待機中は GPS/FLARM の
+   *  track がジッタで暴れてアイコンがクルクル回るため、動き出すまでこの値で固定する。 */
+  headingHold?: number;
   iconKey?: string;
   /** 航跡線(あれば)。先端はアイコンのアニメーション位置に毎フレーム追従させる */
   trail?: L.Polyline;
@@ -231,6 +234,19 @@ function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: bool
     svg.style.transition = rt > 1 ? `transform ${(1.2 / rt).toFixed(2)}s linear` : "";
     svg.style.transform = `rotate(${deg}deg)`;
   }
+}
+
+/**
+ * 表示に使う機首方位を返す。地上待機など静止中(対地速度 < DR_SPD_MIN)は GPS/FLARM の
+ * track がジッタで暴れ、追従するとアイコンがクルクル回る。そこで最後に「動いていた」
+ * ときの方位を据え置き(凍結)し、対地速度が戻れば実測方位の追従に復帰する。
+ * 速度不明(null)のときは据え置かず実測方位をそのまま使う。
+ */
+function headingForDisplay(rec: SmoothMarkerRec, headingDeg: number, speedMs: number | null | undefined): number {
+  const stationary = speedMs != null && speedMs < DR_SPD_MIN;
+  if (stationary && rec.headingHold != null) return rec.headingHold;
+  rec.headingHold = headingDeg;
+  return headingDeg;
 }
 
 /**
@@ -917,8 +933,9 @@ export default function FlightMap() {
         const color = adsbColor(ac.position);
         const lbls = iconLabels(ac.label, ac.position, units);
         const key = [color, 0, 1, "", "", "", ""].join("|");
-        applyIconSmooth(ac, key, ac.position.heading_deg, lbls.top, lbls.bot,
-          () => makeAircraftIcon(ac.position.heading_deg, color, false, undefined, true, undefined, undefined, undefined, lbls));
+        const hdg = headingForDisplay(ac, ac.position.heading_deg, ac.position.ground_speed_ms);
+        applyIconSmooth(ac, key, hdg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(hdg, color, false, undefined, true, undefined, undefined, undefined, lbls));
       } else {
         ac.label = resolveLabel(ac.position, id, units.displayName);
         const { airfield: af } = units;
@@ -933,8 +950,9 @@ export default function FlightMap() {
         const reg = dbRec?.registration || ac.position.glider_id || ac.position.competition_id;
         const lbls = iconLabels(ac.label, ac.position, units);
         const key = [color, blink ? 1 : 0, 0, dbRec?.aircraft_type || "", ac.position.glider_type || "", reg || "", ac.position.aircraft_type || ""].join("|");
-        applyIconSmooth(ac, key, ac.position.heading_deg, lbls.top, lbls.bot,
-          () => makeAircraftIcon(ac.position.heading_deg, color, blink, ac.position.glider_type, false, reg, ac.position.aircraft_type, dbRec?.aircraft_type, lbls));
+        const hdg = headingForDisplay(ac, ac.position.heading_deg, ac.position.ground_speed_ms);
+        applyIconSmooth(ac, key, hdg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(hdg, color, blink, ac.position.glider_type, false, reg, ac.position.aircraft_type, dbRec?.aircraft_type, lbls));
       }
     }
   }, [units]);
@@ -1040,9 +1058,12 @@ export default function FlightMap() {
         existing.label = label;
         existing.lastUpdateMs = Date.now();
         existing.adsb = isAdsb;
-        applyIconSmooth(existing, iconKey, pos.heading_deg, lbls.top, lbls.bot,
-          () => makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls));
+        const hdg = headingForDisplay(existing, pos.heading_deg, pos.ground_speed_ms);
+        applyIconSmooth(existing, iconKey, hdg, lbls.top, lbls.bot,
+          () => makeAircraftIcon(hdg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls));
         const nowMs = Date.now();
+        // 推測航法(drSetFix)には実測 track を渡す(位置外挿は実際の進行方向で行う)。
+        // 凍結するのはアイコンの機首表示だけで、位置の動きには影響させない。
         drSetFix(existing, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg,
           drSimRef.current ? nowMs : positionTimeMs(pos, nowMs), drRateRef.current);
         addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
@@ -1067,6 +1088,7 @@ export default function FlightMap() {
           lastUpdateMs: createdMs,
           adsb: isAdsb,
           dispHeading: pos.heading_deg,
+          headingHold: pos.heading_deg,
           iconKey,
         };
         aircraft.set(deviceId, rec);
@@ -1182,15 +1204,16 @@ export default function FlightMap() {
         const tipPos = { altitude_m: a.altitude_m, ground_speed_ms: a.ground_speed_ms, adsb_mode: a.adsb_mode } as unknown as AircraftPosition;
         const lbls = iconLabels(label, tipPos, unitsRef.current);
         const key = ["openadsb", a.reg || ""].join("|");
-        const build = () => makeAircraftIcon(a.heading_deg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined, lbls);
         let e = openAdsbRef.current.get(a.device_id);
+        const hdg = e ? headingForDisplay(e, a.heading_deg, a.ground_speed_ms) : a.heading_deg;
+        const build = () => makeAircraftIcon(hdg, COLOR_ADSB, false, undefined, true, a.reg || undefined, undefined, undefined, lbls);
         if (!e) {
           const marker = L.marker(latlng, { icon: build() }).addTo(map);
           const trail = L.polyline([], { color: COLOR_ADSB, weight: 2, opacity: 0.5, dashArray: "4,3" }).addTo(map);
-          e = { marker, trail, dispHeading: a.heading_deg, iconKey: key };
+          e = { marker, trail, dispHeading: hdg, headingHold: hdg, iconKey: key };
           openAdsbRef.current.set(a.device_id, e);
         } else {
-          applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
+          applyIconSmooth(e, key, hdg, lbls.top, lbls.bot, build);
         }
         drSetFix(e, a.latitude, a.longitude, a.ground_speed_ms, a.heading_deg);
         e.trailBase = (a.trail || []).map((p) => L.latLng(p[0], p[1]));
@@ -1253,14 +1276,15 @@ export default function FlightMap() {
         const tipPos = { altitude_m: a.altitude_m ?? 0, ground_speed_ms: a.ground_speed_ms } as unknown as AircraftPosition;
         const lbls = iconLabels(label, tipPos, unitsRef.current);
         const key = ["openogn", dbRec?.aircraft_type || "", dbRec?.glider_type || "", dbRec?.registration || ""].join("|");
-        const build = () => makeAircraftIcon(a.heading_deg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type, lbls);
         let e = openOgnRef.current.get(hex);
+        const hdg = e ? headingForDisplay(e, a.heading_deg, a.ground_speed_ms) : a.heading_deg;
+        const build = () => makeAircraftIcon(hdg, COLOR_NORMAL, false, dbRec?.glider_type, false, dbRec?.registration || undefined, undefined, dbRec?.aircraft_type, lbls);
         if (!e) {
           const marker = L.marker(latlng, { icon: build() }).addTo(map);
-          e = { marker, dispHeading: a.heading_deg, iconKey: key };
+          e = { marker, dispHeading: hdg, headingHold: hdg, iconKey: key };
           openOgnRef.current.set(hex, e);
         } else {
-          applyIconSmooth(e, key, a.heading_deg, lbls.top, lbls.bot, build);
+          applyIconSmooth(e, key, hdg, lbls.top, lbls.bot, build);
         }
         drSetFix(e, a.latitude, a.longitude, a.ground_speed_ms, a.heading_deg);
       }
