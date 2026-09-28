@@ -105,7 +105,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setRainRadar, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -643,6 +643,20 @@ export default function SettingsPage() {
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                   滑空場を中心に半径5km・10km・15km・20km・25km・30kmの距離円（点線・距離ラベル付き）を地図に表示します。機体までの距離の目視把握に使えます。
+                </p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.rainRadar}
+                    onChange={(e) => setRainRadar(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">雨雲レーダー（気象庁）</span>
+                </label>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  気象庁の高解像度降水ナウキャスト（レーダー実況・約1km・5分毎更新）を地図に半透明で重ねます。左下に観測時刻と降水強度の凡例を表示します。表示にはインターネット接続が必要です。
                 </p>
               </div>
             </div>

@@ -594,6 +594,26 @@ function lookupDbRecord(db: AircraftDatabase, deviceId: string, gliderId?: strin
   return rec; // return the (possibly empty) record if no registration match
 }
 
+// 雨雲レーダー: 気象庁の時刻(UTC "YYYYMMDDhhmmss") → "MM/DD hh:mm JST"
+function radarJstLabel(utc14: string): string {
+  const d = new Date(Date.UTC(+utc14.slice(0, 4), +utc14.slice(4, 6) - 1, +utc14.slice(6, 8), +utc14.slice(8, 10) + 9, +utc14.slice(10, 12)));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} JST`;
+}
+// 雨雲レーダーの凡例(気象庁 高解像度降水ナウキャストの色区分, mm/h)
+const RADAR_COLORS = ["#f2f2ff", "#a0d2ff", "#218cff", "#0041ff", "#faf500", "#ff9900", "#ff2800", "#b40068"];
+const RADAR_STEPS = [1, 5, 10, 20, 30, 50, 80];
+// 気象庁ナウキャストのタイルは偶数ズーム(4/6/8/10)にしか無い(奇数は空画像)。タイルの倍率を偶数へ切り下げ、
+// 奇数ズームでは1つ下の偶数タイルを拡大表示する(5→4, 7→6, 9→8。11以上は10、3以下は4)。
+type ClampZoomProto = { _clampZoom(zoom: number): number };
+const JmaTileLayer = (L.TileLayer as unknown as { extend(props: object): new (url: string, opts: L.TileLayerOptions) => L.TileLayer }).extend({
+  _clampZoom(this: L.TileLayer, zoom: number): number {
+    const z = (L.TileLayer.prototype as unknown as ClampZoomProto)._clampZoom.call(this, zoom);
+    return z - (z % 2);
+  },
+});
+const JMA_BOUNDS = L.latLngBounds([[20, 118], [49, 156]]);   // 日本周辺(範囲外のタイルは要求しない)
+
 export default function FlightMap() {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -1444,6 +1464,47 @@ export default function FlightMap() {
     return () => { map.removeLayer(group); };
   }, [mapReady, units.rangeRings, units.airfield.latitude, units.airfield.longitude]);
 
+  // ── 雨雲レーダー(気象庁 高解像度降水ナウキャスト)。設定「雨雲レーダー」でON/OFF(既定ON) ──
+  // 基図の上・滑空場/同心円(airfieldPane=350)/航跡/機体の下(radarPane=300)に半透明で重ねる。
+  // 最新時刻は /api/radar(サーバが気象庁から中継)を1分毎に確認し、更新されていればタイルURLを差し替える
+  // (気象庁は5分毎更新)。気象庁タイルはズーム4〜10(11以降は10を拡大表示)。要インターネット。
+  const [radarTime, setRadarTime] = useState<string | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !units.rainRadar) { setRadarTime(null); return; }
+    if (!map.getPane("radarPane")) {
+      const pane = map.createPane("radarPane");
+      pane.style.zIndex = "300";
+      pane.style.pointerEvents = "none";
+    }
+    let layer: L.TileLayer | null = null;
+    let lastValid = "";
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/radar", { cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        const d = (await r.json()) as { validtime: string; tile: string };
+        if (cancelled) return;
+        if (!layer) {
+          layer = new JmaTileLayer(d.tile, {
+            pane: "radarPane", opacity: 0.6, maxZoom: 18, minNativeZoom: 4, maxNativeZoom: 10, bounds: JMA_BOUNDS,
+            attribution: "雨雲: <a href='https://www.jma.go.jp/bosai/nowc/' target='_blank' rel='noopener'>気象庁</a>",
+          }).addTo(map);
+        } else if (d.validtime !== lastValid) {
+          layer.setUrl(d.tile);
+        }
+        lastValid = d.validtime;
+        setRadarTime(radarJstLabel(d.validtime));
+      } catch {
+        if (!cancelled) setRadarTime("取得できません");
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 60_000);
+    return () => { cancelled = true; clearInterval(timer); if (layer) map.removeLayer(layer); };
+  }, [mapReady, units.rainRadar]);
+
   // ── 選択機体の「このフライト」の航跡(実線)。地図の余白クリックで選択解除→消える ──
   // 航跡はサーバのメモリ上にあり、離陸から着陸まで。着陸後も次のフライトが始まるまで残る。
   useEffect(() => {
@@ -1664,6 +1725,32 @@ export default function FlightMap() {
                 保存
               </button>
             </div>
+
+            {/* 雨雲レーダーの凡例(地図左下) */}
+            {units.rainRadar && radarTime && (
+              <div
+                className="absolute z-[1000] rounded-md"
+                style={{
+                  left: 8, bottom: 8, padding: "5px 7px 4px", fontSize: 11, color: "#333",
+                  background: "rgba(255,255,255,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.25)", pointerEvents: "none",
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap" }}>
+                  雨雲レーダー <span style={{ fontWeight: 400, color: "#555" }}>{radarTime}</span>
+                </div>
+                <div style={{ display: "flex" }}>
+                  {RADAR_COLORS.map((c) => (
+                    <span key={c} style={{ width: 20, height: 9, background: c, border: "1px solid rgba(0,0,0,0.08)" }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", marginLeft: 20 }}>
+                  {RADAR_STEPS.map((v) => (
+                    <span key={v} style={{ width: 20, marginLeft: -4, fontSize: 9, color: "#555" }}>{v}</span>
+                  ))}
+                  <span style={{ marginLeft: 2, fontSize: 9, color: "#555" }}>mm/h</span>
+                </div>
+              </div>
+            )}
 
             {/* 機体の詳細パネル(地図右上)。地図の余白クリックで自動的に閉じる */}
             {selectedDetail && (() => {

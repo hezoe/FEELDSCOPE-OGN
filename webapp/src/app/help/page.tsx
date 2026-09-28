@@ -207,6 +207,14 @@ function ManualContent() {
             <li>既定は表示です。消したい場合は設定 → マップ表示の<strong>「同心円表示」のチェックを外して</strong>ください。</li>
           </ul>
         </Section>
+        <Section id="map-rain-radar" heading="雨雲レーダー（気象庁）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>気象庁の高解像度降水ナウキャスト</strong>（レーダー実況・約1km・5分毎更新）を地図に半透明で重ねます。滑空場・同心円・航跡・機体は雨雲の上に表示されます。</li>
+            <li>地図の<strong>左下に観測時刻（JST）と降水強度の凡例</strong>（1〜80mm/h 以上）を表示します。最新データは1分毎に確認し、更新されると自動で差し替わります。</li>
+            <li>既定は表示です。消したい場合は設定 → マップ表示の<strong>「雨雲レーダー（気象庁）」のチェックを外して</strong>ください。</li>
+            <li>表示には<strong>インターネット接続</strong>が必要です（オフライン地図のときも、接続があれば表示されます）。出典：気象庁。</li>
+          </ul>
+        </Section>
         <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             各機体の現在地から滑空場までの距離 ÷（現在高度 − 滑空場標高）で滑空比を計算し、設定値（デフォルト15:1）を超えると赤点滅で警告します。
@@ -729,11 +737,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.18 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.18</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-29</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="地図に雨雲レーダーを表示">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>気象庁の高解像度降水ナウキャスト</strong>（レーダー実況・約1km・5分毎更新）を地図に半透明で重ねて表示するようにしました。滑空場・同心円・航跡・機体は雨雲の上に表示されます。</li>
+          <li>地図の左下に<strong>観測時刻と降水強度の凡例</strong>を表示します。最新データは自動で差し替わります。</li>
+          <li>設定 → マップ表示の<strong>「雨雲レーダー（気象庁）」</strong>でON/OFFできます（既定ON）。表示にはインターネット接続が必要です。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.17 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.17</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-28</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="デモ機では端末本体の設定を変更できないように修正">

@@ -30,6 +30,7 @@ interface UnitContextType {
   setOpenAdsb: (v: boolean) => void;
   setOpenOgn: (v: boolean) => void;
   setRangeRings: (v: boolean) => void;
+  setRainRadar: (v: boolean) => void;
   setMapSource: (m: MapSource) => void;
 }
 
@@ -47,6 +48,7 @@ const UnitContext = createContext<UnitContextType>({
   setOpenAdsb: () => {},
   setOpenOgn: () => {},
   setRangeRings: () => {},
+  setRainRadar: () => {},
   setMapSource: () => {},
 });
 
@@ -150,6 +152,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setOpenAdsb: (openAdsb: boolean) => updateView({ openAdsb }),
         setOpenOgn: (openOgn: boolean) => updateView({ openOgn }),
         setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
+        setRainRadar: (rainRadar: boolean) => update({ rainRadar }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >

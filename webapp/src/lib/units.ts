@@ -47,6 +47,8 @@ export interface UnitPreferences {
   openOgn: boolean;
   /** 同心円表示: 滑空場を中心に5km毎・30kmまでの距離円(点線)を描く(既定ON) */
   rangeRings: boolean;
+  /** 雨雲レーダー: 気象庁の高解像度降水ナウキャスト(5分毎・約1km)を地図に半透明で重ねる(既定ON・要インターネット) */
+  rainRadar: boolean;
 }
 
 export const DEFAULT_UNITS: UnitPreferences = {
@@ -62,6 +64,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
   openAdsb: false,
   openOgn: false,
   rangeRings: true,
+  rainRadar: true,
 };
 
 const STORAGE_KEY = "ogn-unit-preferences";
