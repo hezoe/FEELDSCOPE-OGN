@@ -195,7 +195,9 @@ function ManualContent() {
         <Section id="map-aircraft-click" heading="機体クリック（このフライトの航跡・詳細パネル）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li>機体アイコンをクリックすると、<strong>右上に詳細パネル</strong>（機種・登録番号・CN・高度・速度・上昇率・方位・パス等）と、<strong>その機体が「このフライトで飛んだ」航跡（青の実線）</strong>を表示します。</li>
-            <li>航跡は飛行中なら伸びていきます（約5秒ごとに追随）。着陸して地上に戻ると約90秒で消え、次のフライトから新しく始まります。</li>
+            <li>航跡は<strong>離陸（滑走の始まり）から</strong>描き、飛行中なら伸びていきます（約5秒ごとに追随）。</li>
+            <li><strong>着陸後も、その機体の次のフライトが始まるまで航跡は残ります</strong>。着陸した機体をクリックすると、直前のフライトの航跡（離陸〜着陸）を確認できます。次のフライトが始まると前の航跡は消え、新しいフライトの航跡に切り替わります。</li>
+            <li>航跡は機体（受信機）のメモリ上だけに保持しています。<strong>webアプリや機体を再起動すると消えます</strong>（再起動後に始まったフライトから再び記録します）。</li>
             <li><strong>地図上の機体以外（余白）をクリックすると自動的に閉じます</strong>。パネルの「閉じる」でも閉じられます。</li>
           </ul>
         </Section>
@@ -438,6 +440,7 @@ function ManualContent() {
             <li><strong>アップデート実行</strong>ボタン — クリックで <code>git pull</code> + <code>npm install</code> + <code>npm run build</code> + サービス再起動を自動実行</li>
             <li><strong>プログレスバー</strong> — 1/5〜5/5のステップを%で表示（約2〜3分）</li>
             <li><strong>完了メッセージ</strong> — 緑バナーで Shift + Ctrl + R によるハードリロードを促す</li>
+            <li><strong>他の端末で開いたままの画面</strong> — 1分ごとに機体の版数を確認し、更新されていれば自動で再読み込み（地図タブ表示中・入力操作中でないときのみ。v1.4.16以降）</li>
           </ul>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
             <strong>⚠ 注意:</strong> 固定化(OverlayFS)がONの場合はアップデートできません。先に固定化をOFFにして再起動してください。
@@ -726,11 +729,47 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.16 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.16</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-28</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="GPSが不安定なときも地上のアイコンが回らないように改善">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.4.14 の対策後も、<strong>GPSの受信が悪いときや機体を手で押して動かしているとき</strong>に、地上のアイコンの向きが何度も反転することがありました。GPSが不安定だと対地速度まで揺れて「動いている」と判定され、でたらめな進行方向に追従していたためです（たきかわの実測では1分半に15回反転）。</li>
+          <li>低速（秒速6m未満）のときは、<strong>進行方向が前回とほぼ同じ向き（25°以内）で3回続いたときだけ</strong>アイコンの向きを変えるようにしました。本物の地上旋回は少しずつ連続して向きが変わるので従来どおり追従し、GPSの揺れ（毎回でたらめに飛ぶ）では向きが変わりません。滑走・飛行中（秒速6m以上）はこれまでどおりすぐに追従します。</li>
+        </ul>
+      </Card>
+
+      <Card title="開いたままの画面を、更新後に自動で新しい版へ切り替え">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体をアップデートしても、<strong>開いたままのブラウザ画面は古いプログラムのまま動き続けていました</strong>（再読み込みするまで修正が反映されない）。</li>
+          <li>画面が機体の版数を1分ごとに確認し、<strong>新しい版に更新されていたら自動で再読み込み</strong>するようにしました。地図タブを表示していて、入力欄を操作していないときにだけ行います（設定画面などで入力中の内容は消えません。地図タブへ戻ったときに切り替わります）。当日のフライトログは再読み込み後もそのまま表示されます。</li>
+          <li>この仕組みはこの版から入るため、<strong>今回の更新の直後だけは</strong>、開いている画面を一度手で再読み込みしてください。</li>
+        </ul>
+      </Card>
+
+      <Card title="機体クリックの航跡を、着陸後も次のフライトまで表示">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体をクリックしたときの「このフライト」の航跡（青の実線）を、<strong>着陸後も次のフライトが始まるまで</strong>表示するようにしました。これまでは着陸して地上に戻ると約90秒で消えていたため、降りた機体の飛行経路を後から確認できませんでした。</li>
+          <li>航跡は<strong>離陸（滑走の始まり）から着陸まで</strong>です。離陸前に駐機していた間の位置は含めません。次のフライトが始まると前の航跡は消え、新しい航跡に切り替わります。</li>
+          <li>航跡は機体（受信機）のメモリ上だけに保持します。webアプリや機体の再起動で消えます。</li>
+        </ul>
+      </Card>
+
+      <Card title="離脱距離を離脱した地点で測るように修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>フライトログの離脱距離（滑空場から離脱地点までの距離）を、<strong>離脱を検知した時点の位置ではなく、最高高度に達した地点（＝離脱地点）</strong>で測るようにしました。離脱高度はもともと最高高度を使っていたので、高度と距離が同じ地点の値になります。</li>
+          <li>グライダーが自分で離脱を検知した便では、検知が数分後（サーマル旋回中など）になることがあり、距離が大きくずれていました（たきかわの実測で約1.6km）。曳航機側も検知までに進んだ分だけずれていました。同日の記録で再計算すると、実際に2機が離れた地点との差は平均約240m→約55mに縮まりました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.15 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.15</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-27</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="「OpenなADS-B」「OpenなOGN」を機体ごとに保存">

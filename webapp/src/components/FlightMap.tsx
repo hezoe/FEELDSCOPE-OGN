@@ -141,6 +141,12 @@ const DR_SNAP_M = 5000;         // これ以上の誤差はスナップ
 const DR_SPD_EMA = 0.3;         // fix毎の対地速度の平均化係数(直近3〜4fixの移動平均相当)
 const DR_CATCH_S = 8;           // 前後ズレを増減速で吸収する時定数
 const DR_SPD_MIN = 1.5;         // m/s。これ未満は静止扱い(収束のみ)
+// 機首表示の追従条件(headingForDisplay)。地上の低速域では GPS/FLARM の track が
+// 毎回でたらめに飛ぶ(たきかわ 2026-09-28 実測: GPS劣化・手押し移動で速度ノイズが
+// 1.5〜10m/s に跳ね、速度だけの判定では1.5分に15回反転した)。
+const HDG_FOLLOW_MS = 6;        // m/s。これ以上は滑走・走行中とみなし実測方位へ即追従
+const HDG_COHERENT_DEG = 25;    // 低速時: 前回の実測方位からの変化がこれ未満なら「連続」
+const HDG_COHERENT_N = 3;       // 低速時: 連続した実測がこの回数続いたら追従する
 
 interface SmoothMarkerRec {
   marker: L.Marker;
@@ -149,9 +155,13 @@ interface SmoothMarkerRec {
   /** アイコンの巡航速度(対地速度のEMA) */
   vAvg?: number | null;
   dispHeading?: number;
-  /** 静止中(対地速度 < DR_SPD_MIN)に据え置く機首方位。地上待機中は GPS/FLARM の
-   *  track がジッタで暴れてアイコンがクルクル回るため、動き出すまでこの値で固定する。 */
+  /** 表示中の機首方位(据え置き値)。地上の低速域では GPS/FLARM の track がジッタで
+   *  暴れてアイコンがクルクル回るため、headingForDisplay の条件を満たすまで固定する。 */
   headingHold?: number;
+  /** 直前に受けた実測 track(連続性の判定用) */
+  headingRawPrev?: number;
+  /** 低速域で「前回と連続した実測 track」が続いている回数 */
+  headingCoherent?: number;
   iconKey?: string;
   /** 航跡線(あれば)。先端はアイコンのアニメーション位置に毎フレーム追従させる */
   trail?: L.Polyline;
@@ -237,16 +247,27 @@ function rotateMarkerSmooth(rec: SmoothMarkerRec, heading: number, instant: bool
 }
 
 /**
- * 表示に使う機首方位を返す。地上待機など静止中(対地速度 < DR_SPD_MIN)は GPS/FLARM の
- * track がジッタで暴れ、追従するとアイコンがクルクル回る。そこで最後に「動いていた」
- * ときの方位を据え置き(凍結)し、対地速度が戻れば実測方位の追従に復帰する。
+ * 表示に使う機首方位を返す(受信fixごとに1回だけ呼ぶ。連続回数を数えるため)。
+ * 地上の低速域では GPS/FLARM の track がジッタで暴れ、追従するとアイコンがクルクル回る。
+ * GPS が劣化すると対地速度もノイズで跳ねるので、速度だけでは静止を見分けられない。
+ *  - 対地速度 >= HDG_FOLLOW_MS: 滑走・走行・飛行中。実測方位へ即追従
+ *  - それ未満: 対地速度 >= DR_SPD_MIN かつ実測 track が前回と HDG_COHERENT_DEG 未満の変化で
+ *    HDG_COHERENT_N 回続いたときだけ追従(本物の地上旋回は毎秒十数度ずつ連続して変わるが、
+ *    ジッタは毎回でたらめに飛ぶので続かない)。それ以外は据え置き
  * 速度不明(null)のときは据え置かず実測方位をそのまま使う。
  */
 function headingForDisplay(rec: SmoothMarkerRec, headingDeg: number, speedMs: number | null | undefined): number {
-  const stationary = speedMs != null && speedMs < DR_SPD_MIN;
-  if (stationary && rec.headingHold != null) return rec.headingHold;
-  rec.headingHold = headingDeg;
-  return headingDeg;
+  const prev = rec.headingRawPrev;
+  rec.headingRawPrev = headingDeg;
+  if (speedMs == null || rec.headingHold == null || speedMs >= HDG_FOLLOW_MS) {
+    rec.headingCoherent = 0;
+    rec.headingHold = headingDeg;
+    return headingDeg;
+  }
+  const coherent = prev != null && Math.abs(((headingDeg - prev + 540) % 360) - 180) < HDG_COHERENT_DEG;
+  rec.headingCoherent = speedMs >= DR_SPD_MIN && coherent ? (rec.headingCoherent || 0) + 1 : 0;
+  if (rec.headingCoherent >= HDG_COHERENT_N) rec.headingHold = headingDeg;
+  return rec.headingHold;
 }
 
 /**
@@ -933,7 +954,7 @@ export default function FlightMap() {
         const color = adsbColor(ac.position);
         const lbls = iconLabels(ac.label, ac.position, units);
         const key = [color, 0, 1, "", "", "", ""].join("|");
-        const hdg = headingForDisplay(ac, ac.position.heading_deg, ac.position.ground_speed_ms);
+        const hdg = ac.headingHold ?? ac.position.heading_deg; // 再描画のみ(新しいfixではない)
         applyIconSmooth(ac, key, hdg, lbls.top, lbls.bot,
           () => makeAircraftIcon(hdg, color, false, undefined, true, undefined, undefined, undefined, lbls));
       } else {
@@ -950,7 +971,7 @@ export default function FlightMap() {
         const reg = dbRec?.registration || ac.position.glider_id || ac.position.competition_id;
         const lbls = iconLabels(ac.label, ac.position, units);
         const key = [color, blink ? 1 : 0, 0, dbRec?.aircraft_type || "", ac.position.glider_type || "", reg || "", ac.position.aircraft_type || ""].join("|");
-        const hdg = headingForDisplay(ac, ac.position.heading_deg, ac.position.ground_speed_ms);
+        const hdg = ac.headingHold ?? ac.position.heading_deg; // 再描画のみ(新しいfixではない)
         applyIconSmooth(ac, key, hdg, lbls.top, lbls.bot,
           () => makeAircraftIcon(hdg, color, blink, ac.position.glider_type, false, reg, ac.position.aircraft_type, dbRec?.aircraft_type, lbls));
       }
@@ -1424,12 +1445,16 @@ export default function FlightMap() {
   }, [mapReady, units.rangeRings, units.airfield.latitude, units.airfield.longitude]);
 
   // ── 選択機体の「このフライト」の航跡(実線)。地図の余白クリックで選択解除→消える ──
+  // 航跡はサーバのメモリ上にあり、離陸から着陸まで。着陸後も次のフライトが始まるまで残る。
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !selectedAircraft) return;
     const device = selectedAircraft;
     const m: L.Map = map;
     let stopped = false;
+    const removeHead = () => {
+      if (trackHeadRef.current) { m.removeLayer(trackHeadRef.current); trackHeadRef.current = null; }
+    };
     async function draw() {
       try {
         const r = await fetch(`/api/flight-track?device=${encodeURIComponent(device)}`);
@@ -1442,13 +1467,20 @@ export default function FlightMap() {
           const style = { color: "#1565c0", weight: 3, opacity: 0.85, interactive: false } as const;
           if (trackLineRef.current) trackLineRef.current.setLatLngs(pts);
           else trackLineRef.current = L.polyline(pts, style).addTo(m);
-          // ヘッドライン: 本線末尾→(末尾以降の)直近fix→アイコン現在位置(以降は描画ループが毎フレーム追従)
+          // ヘッドライン: 本線末尾→(末尾以降の)直近fix→アイコン現在位置(以降は描画ループが毎フレーム追従)。
+          // 着陸済み(active=false)の航跡は着陸地点で終わるので、地上で動かした分は繋がない
           const last = pts[pts.length - 1];
-          if (rec) {
+          if (rec && d.active) {
             const head = trackHeadPoints(rec, L.latLng(last[0], last[1]));
             if (trackHeadRef.current) trackHeadRef.current.setLatLngs(head);
             else trackHeadRef.current = L.polyline(head, style).addTo(m);
+          } else {
+            removeHead();
           }
+        } else {
+          // 航跡なし(まだ飛んでいない・新しいフライトが始まったばかり)。前の線は残さない
+          if (trackLineRef.current) { m.removeLayer(trackLineRef.current); trackLineRef.current = null; }
+          removeHead();
         }
       } catch { /* noop */ }
     }

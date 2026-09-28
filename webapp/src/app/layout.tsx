@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { UnitProvider } from "@/lib/UnitContext";
 import { TabProvider } from "@/lib/TabContext";
+import VersionWatcher from "@/components/VersionWatcher";
 
 export const metadata: Metadata = {
   title: "FEELDSCOPE - OGN Flight Monitor",
@@ -20,6 +21,7 @@ export default function RootLayout({
       </head>
       <body>
         <TabProvider>
+          <VersionWatcher />
           <UnitProvider>
             {children}
           </UnitProvider>

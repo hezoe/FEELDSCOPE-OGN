@@ -304,6 +304,13 @@ interface TrackingState {
   /** 最高高度を記録した時刻と、そのときの上昇率 */
   maxAltAtMs: number | null;
   maxAltClimbMs: number | null;
+  /**
+   * 最高高度を記録した位置。離脱距離はここで測る（離脱の検知は最高点より後になる。
+   * グライダーが自分で検知したときは数分後のサーマル中のこともあり、検知時の位置だと
+   * たきかわ 2026-09-28 実測で 1.6km ずれた）。不明なら null（検知時の位置で代用）
+   */
+  maxAltLat: number | null;
+  maxAltLon: number | null;
   /** 最高高度のあと、次の位置が届くまでの間隔。まだ届いていなければ null */
   afterMaxGapMs: number | null;
   /** 最高高度の位置の直前に受けた位置から、最高高度までの間隔と、直前の位置の上昇率 */
@@ -340,8 +347,16 @@ interface TrackerState {
   lastResetDay: string;
   started: boolean;
   seq: number;
-  /** 機体ごとの「今のフライト」の航跡 [timeMs, lat, lon]。地図のクリック表示用 */
+  /**
+   * 機体ごとの「このフライト」の航跡 [timeMs, lat, lon]。地図のクリック表示用。
+   * 離陸(滑走の始まり)から着陸までを貯め、着陸後も次のフライトが始まるまで残す。
+   * メモリ上だけに持つ(webapp の再起動で消える)。
+   */
   tracks: Map<string, [number, number, number][]>;
+  /** tracks が今も伸びている(飛行中の)機体。着陸したら外れ、航跡はそのまま残る */
+  trackOpen: Set<string>;
+  /** 地上にいる間の直近の位置。離陸したとき、滑走の始まりから航跡を作るのに使う */
+  groundTracks: Map<string, [number, number, number][]>;
 }
 
 const STATE_KEY = Symbol.for("feeldscope.flightTracker");
@@ -359,9 +374,14 @@ function S(): TrackerState {
       started: false,
       seq: 0,
       tracks: new Map(),
+      trackOpen: new Set(),
+      groundTracks: new Map(),
     };
     g[STATE_KEY] = s;
   }
+  // 開発中のホットリロードで古い形の状態が残っていても動くように
+  s.trackOpen ??= new Set();
+  s.groundTracks ??= new Map();
   return s;
 }
 
@@ -390,6 +410,8 @@ function checkDailyReset(): void {
     s.flights = [];
     s.tracking.clear();
     s.tracks.clear();
+    s.trackOpen.clear();
+    s.groundTracks.clear();
     s.lastResetDay = day;
   }
 }
@@ -471,6 +493,8 @@ function toGround(tr: TrackingState, agl: number): void {
   tr.lateTowSamples = 0;
   tr.maxAltAtMs = null;
   tr.maxAltClimbMs = null;
+  tr.maxAltLat = null;
+  tr.maxAltLon = null;
   tr.afterMaxGapMs = null;
   tr.maxAltGapBeforeMs = null;
   tr.maxAltClimbBeforeMs = null;
@@ -504,6 +528,8 @@ function openFlight(
   tr.maxAltAgl = agl;
   tr.maxAltAtMs = Date.now();
   tr.maxAltClimbMs = null;
+  tr.maxAltLat = null;
+  tr.maxAltLon = null;
   tr.afterMaxGapMs = null;
   tr.maxAltGapBeforeMs = null;
   tr.maxAltClimbBeforeMs = null;
@@ -611,25 +637,46 @@ function acquirePosition(deviceId: string, tr: TrackingState, cur: LastFix): boo
 }
 
 /**
- * 「今のフライト」の航跡を貯める（地図のクリック表示用）。
- * 地上では直近90秒だけ残す（離陸滑走の始まりを含めるため）。飛行中は
- * 2秒間隔に間引いて貯め、上限を超えたら古い側から1点おきに粗くする。
- * 着陸して地上に戻ると90秒で自然に消え、次のフライトが新しく始まる。
+ * 「このフライト」の航跡を貯める（地図のクリック表示用）。
+ *  - 地上: 直近90秒だけ groundTracks に残す（離陸滑走の始まりを航跡に含めるため）。
+ *    着陸したフライトの航跡（tracks）には触らず、次のフライトが始まるまで残す。
+ *  - 飛行中: 地上から上がった最初の位置で、前のフライトの航跡を捨てて新しく始める
+ *    （滑走の始まり＝離陸時刻の少し前からの地上の位置を先頭に付ける）。
+ *    以後は2秒間隔に間引いて貯め、上限を超えたら古い側から1点おきに粗くする。
  */
 const TRACK_GROUND_KEEP_MS = 90_000;
+const TRACK_TAKEOFF_MARGIN_MS = 5_000;
 const TRACK_MIN_INTERVAL_MS = 2_000;
 const TRACK_MAX_POINTS = 14_400;
 function appendTrack(deviceId: string, tr: TrackingState, cur: LastFix): void {
   const s = S();
+  const pt: [number, number, number] = [cur.timeMs, cur.lat, cur.lon];
+  if (tr.phase === "ground") {
+    s.trackOpen.delete(deviceId);   // 着陸した。航跡はそのまま残して伸ばさない
+    let g = s.groundTracks.get(deviceId);
+    if (!g) { g = []; s.groundTracks.set(deviceId, g); }
+    const lastG = g[g.length - 1];
+    if (lastG && cur.timeMs - lastG[0] < TRACK_MIN_INTERVAL_MS) return;
+    g.push(pt);
+    const cutoff = cur.timeMs - TRACK_GROUND_KEEP_MS;
+    while (g.length && g[0][0] < cutoff) g.shift();
+    return;
+  }
+  if (!s.trackOpen.has(deviceId)) {
+    // 新しいフライトの始まり。前のフライトの航跡はここで捨てる
+    const from = (tr.takeoffMs ?? cur.timeMs) - TRACK_TAKEOFF_MARGIN_MS;
+    const roll = (s.groundTracks.get(deviceId) || []).filter((p) => p[0] >= from && p[0] < cur.timeMs);
+    s.tracks.set(deviceId, [...roll, pt]);
+    s.groundTracks.delete(deviceId);
+    s.trackOpen.add(deviceId);
+    return;
+  }
   let t = s.tracks.get(deviceId);
   if (!t) { t = []; s.tracks.set(deviceId, t); }
   const last = t[t.length - 1];
   if (last && cur.timeMs - last[0] < TRACK_MIN_INTERVAL_MS) return;
-  t.push([cur.timeMs, cur.lat, cur.lon]);
-  if (tr.phase === "ground") {
-    const cutoff = cur.timeMs - TRACK_GROUND_KEEP_MS;
-    while (t.length && t[0][0] < cutoff) t.shift();
-  } else if (t.length > TRACK_MAX_POINTS) {
+  t.push(pt);
+  if (t.length > TRACK_MAX_POINTS) {
     const keepTail = 600;   // 直近は細かいまま残す
     const thinned: [number, number, number][] = [];
     for (let i = 0; i < t.length; i++) {
@@ -920,6 +967,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       lateCreateIfAlone: false,
       maxAltAtMs: null,
       maxAltClimbMs: null,
+      maxAltLat: null,
+      maxAltLon: null,
       afterMaxGapMs: null,
       maxAltGapBeforeMs: null,
       maxAltClimbBeforeMs: null,
@@ -976,6 +1025,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
         : agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS;
       tr.phase = onGround ? "ground" : "airborne";
       tr.maxAltAgl = agl;
+      tr.maxAltLat = pos.latitude;
+      tr.maxAltLon = pos.longitude;
       tr.takeoffAgl = agl;
       tr.wasHigh = agl > AIRBORNE_CONFIRM_AGL_M;
       tr.initialized = true;
@@ -995,6 +1046,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       // 組も離脱高度も取れないので、並んで上がる曳航機を探してから決める。
       tr.phase = "airborne";
       tr.maxAltAgl = agl;
+      tr.maxAltLat = pos.latitude;
+      tr.maxAltLon = pos.longitude;
       tr.wasHigh = agl > AIRBORNE_CONFIRM_AGL_M;
       tr.rollingSinceMs = null;
       tr.lateSinceMs = nowMs;
@@ -1087,6 +1140,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     tr.maxAltAgl = agl;
     tr.maxAltAtMs = nowMs;
     tr.maxAltClimbMs = climbMs;
+    tr.maxAltLat = pos.latitude;
+    tr.maxAltLon = pos.longitude;
     tr.afterMaxGapMs = null;
     tr.maxAltGapBeforeMs = tr.prevAirFixMs !== null ? nowMs - tr.prevAirFixMs : null;
     tr.maxAltClimbBeforeMs = tr.prevAirClimbMs;
@@ -1170,8 +1225,10 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     }
 
     if (released) {
+      // 離脱点 = 最高高度の位置（高度も最高高度を使うので揃える）
       const distM = haversineM(
-        s.airfield.latitude, s.airfield.longitude, pos.latitude, pos.longitude);
+        s.airfield.latitude, s.airfield.longitude,
+        tr.maxAltLat ?? pos.latitude, tr.maxAltLon ?? pos.longitude);
       tr.phase = "released";
       const alt = Math.round(tr.maxAltAgl);
       // 上昇を続けたまま受信が途切れた曳航機は、離脱の瞬間を見ていない。
@@ -1280,10 +1337,17 @@ export function getFlightLog(): FlightLogEntry[] {
   return S().flights;
 }
 
-/** 地図のクリック表示用: この機体の「今のフライト」の航跡 [[lat,lon],...] */
-export function getFlightTrack(deviceId: string): [number, number][] {
-  const t = S().tracks.get(deviceId);
-  return t ? t.map((p) => [p[1], p[2]]) : [];
+/**
+ * 地図のクリック表示用: この機体の「このフライト」の航跡 [[lat,lon],...]。
+ * 着陸後も次のフライトが始まるまで残る。active = まだ飛行中で航跡が伸びている
+ */
+export function getFlightTrack(deviceId: string): { points: [number, number][]; active: boolean } {
+  const s = S();
+  const t = s.tracks.get(deviceId);
+  // 接地直後に受信が切れた機体は、位置が来ないまま後始末で地上に戻る(trackOpen は次の
+  // 位置まで残る)ので、今の状態でも確かめる
+  const active = s.trackOpen.has(deviceId) && s.tracking.get(deviceId)?.phase !== "ground";
+  return { points: t ? t.map((p) => [p[1], p[2]]) : [], active };
 }
 
 /** 機体ごとの現在の状態。地図の着陸進入表示に使う */
