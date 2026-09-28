@@ -3,6 +3,7 @@ import { assertHttpUrl, assertReceiverId, isSafeServiceName, run, runShell } fro
 import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
+import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
 
 
 const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
@@ -581,14 +582,17 @@ export async function GET(request: Request) {
   if (ognMqtt) mode = "realtime";
   else if (igcSim) mode = "history";
 
+  // デモ機(別サーバ上)では、リモートサポート・自動再起動はサーバ自身の状態になってしまう
+  // (VPS では wg-quick@wg0 = CATVPN ハブ)ので、読まずに null を返す
+  const hostLocked = isHostLocked();
   const [adsbConfig, airfieldConfig, viewConfig, network, version, autoReboot, remoteSupport] = await Promise.all([
     loadAdsbConfig(),
     loadAirfieldConfig(),
     loadViewConfig(),
     getNetworkStatus(),
     getVersionInfo(),
-    getAutoRebootConfig(),
-    getRemoteSupportStatus(),
+    hostLocked ? Promise.resolve(null) : getAutoRebootConfig(),
+    hostLocked ? Promise.resolve(null) : getRemoteSupportStatus(),
   ]);
 
   return NextResponse.json({
@@ -608,6 +612,8 @@ export async function GET(request: Request) {
     version,
     auto_reboot: authed ? autoReboot : null,
     remote_support: remoteSupport,
+    // true = デモ機。端末本体の設定(リモートサポート・自動再起動・ネットワーク・電源・更新・固定化)は変更不可
+    host_locked: hostLocked,
   });
 }
 
@@ -623,6 +629,17 @@ export async function POST(request: Request) {
   // view-save = OpenなADS-B/OGN の表示ON/OFF。機微情報を含まない「表示設定」で、
   // 従来もブラウザ側で無認証に切替できていたため、端末保存化後も無認証で許可する。
   const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll", "view-save"]);
+
+  // 端末本体(OS)を操作するもの。デモ機ではサーバ自身を操作してしまうので、
+  // 認証の有無に関係なく拒否する(無認証の remote-support-save も含む)。
+  const HOST_ACTIONS = new Set([
+    "reboot", "shutdown", "hostname-save", "remote-support-save", "catvpn-enroll",
+    "auto-reboot-save", "wifi-save", "eth-save", "system-update", "overlay-enable", "overlay-disable",
+  ]);
+  if (HOST_ACTIONS.has(action) && isHostLocked()) {
+    return NextResponse.json({ error: HOST_LOCKED_MESSAGE, hostLocked: true }, { status: 403 });
+  }
+
   if (!OPEN_ACTIONS.has(action)) {
     const ctx = await getAuthContext(request);
     if (!isAuthorizedToMutate(ctx)) {

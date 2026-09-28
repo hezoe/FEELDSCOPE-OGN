@@ -729,11 +729,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.17 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.17</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-28</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="デモ機では端末本体の設定を変更できないように修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Web上のデモ（別のサーバで動かしているもの）で、<strong>リモートサポート・自動再起動・ネットワーク・電源・システムアップデート・固定化・受信機設定の書き込み</strong>を行うと、機体ではなく<strong>デモを動かしているサーバ自身</strong>を操作してしまう問題がありました。実際に、デモでリモートサポートをOFFにしたところ、リモートサポート用VPNの中継サーバが止まり、全機体へのリモートサポート接続が切れました。</li>
+          <li>デモ機ではこれらの操作を<strong>サーバ側で拒否</strong>し、設定画面にも表示しないようにしました（「端末本体の設定」の案内を表示）。</li>
+          <li><strong>実際の機体（Raspberry Pi）の動作は変わりません。</strong></li>
+        </ul>
+      </Card>
+
       {/* v1.4.16 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.16</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-28</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="GPSが不安定なときも地上のアイコンが回らないように改善">

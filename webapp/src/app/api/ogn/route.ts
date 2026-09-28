@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { access, constants, readFile, rename, unlink, writeFile } from "fs/promises";
+import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
 import { run } from "@/lib/run";
 
 // /boot/rtlsdr-ogn.conf が正本。init.d は起動のたびにこれを /home/pi へ複製するので、
@@ -625,6 +626,11 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = await request.json();
   const { action } = body;
+
+  // 受信機設定の書き込み(/boot へ sudo)と受信機の再起動は端末本体の操作。デモ機では拒否する
+  if ((action === "save" || action === "restart") && isHostLocked()) {
+    return NextResponse.json({ ok: false, error: HOST_LOCKED_MESSAGE, hostLocked: true }, { status: 403 });
+  }
 
   try {
     switch (action) {

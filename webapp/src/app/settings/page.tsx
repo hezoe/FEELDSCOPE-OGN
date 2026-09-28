@@ -42,10 +42,14 @@ interface SystemStatus {
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
   remote_support: { configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string } | null;
+  /** true = デモ機(別サーバ上)。端末本体の設定は変更できないので該当カードを出さない */
+  host_locked?: boolean;
 }
 
 export default function SettingsPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  // デモ機では端末本体の設定(ネットワーク・更新・固定化・自動再起動・リモートサポート・電源)を出さない
+  const hostLocked = !!status?.host_locked;
   // 変更権限: 管理者ログイン済み or オペレーター(リモートサポート中)のみ true。
   // false の間は設定変更UI(入力欄・ボタン)を一括で無効化する。
   const [canMutate, setCanMutate] = useState(false);
@@ -768,6 +772,14 @@ export default function SettingsPage() {
           </Card>
 
           {/* Network Settings */}
+          {hostLocked && (
+            <Card title="端末本体の設定">
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                このサーバは<strong>デモ機</strong>のため、ネットワーク・システムアップデート・固定化・自動再起動・リモートサポート・電源の設定は表示・変更できません（実際の機体では表示されます）。
+              </p>
+            </Card>
+          )}
+          {!hostLocked && (
           <Card title="ネットワーク設定" helpId="settings-network">
             <div className="space-y-6">
               {/* Warning */}
@@ -1095,8 +1107,10 @@ export default function SettingsPage() {
               </p>
             </div>
           </Card>
+          )}
 
           {/* System Update */}
+          {!hostLocked && (
           <Card title="システムアップデート" helpId="settings-update">
             <div className="space-y-4">
               <div className="flex items-center gap-4 text-sm">
@@ -1253,8 +1267,10 @@ export default function SettingsPage() {
               </p>
             </div>
           </Card>
+          )}
 
           {/* Overlay FS */}
+          {!hostLocked && (
           <Card title="システム固定化" helpId="settings-overlay">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
@@ -1363,8 +1379,10 @@ export default function SettingsPage() {
               )}
             </div>
           </Card>
+          )}
 
           {/* Auto Reboot */}
+          {!hostLocked && (
           <Card title="自動再起動" helpId="settings-autoreboot">
             <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1448,11 +1466,13 @@ export default function SettingsPage() {
               </p>
             </div>
           </Card>
+          )}
 
           </fieldset>
           {/* ↑ ここまで管理者ログイン必須（リモートサポートは枠外＝失念時の復旧導線として常時操作可） */}
 
           {/* Remote Support (CATVPN) */}
+          {!hostLocked && (
           <Card title="リモートサポート" helpId="settings-remote-support">
             <div className="space-y-3">
               {status?.remote_support && !status.remote_support.configured ? (
@@ -1595,12 +1615,14 @@ export default function SettingsPage() {
               )}
             </div>
           </Card>
+          )}
 
           {/* System Power — 電源操作も管理者ログイン必須 */}
           <fieldset
             disabled={!canMutate}
             className="border-0 p-0 m-0 min-w-0 disabled:opacity-50 disabled:cursor-not-allowed"
           >
+          {!hostLocked && (
           <Card title="システム電源" helpId="settings-power">
             <div className="flex gap-4">
               <button
@@ -1668,6 +1690,7 @@ export default function SettingsPage() {
               シャットダウン後に再度起動するには電源の抜き差しが必要です
             </p>
           </Card>
+          )}
           </fieldset>
 
         </div>
