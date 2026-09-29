@@ -73,6 +73,18 @@ const TAKEOFF_CONFIRM_FIXES = 2;
  */
 const TAKEOFF_CONFIRM_DIST_M = 50;
 /**
+ * 離陸の判定と最高高度に使う位置の GPS 精度の上限（水平・垂直 m。ogn-decode の gps HxV）。
+ * 格納庫など屋内で FLARM の電源を入れると GPS が測位できず、止まったまま高度が 0〜200m を
+ * 漂い、速度が 190〜260 km/h に跳ねる。受信機の飛行中フラグまで立つので、上の距離や
+ * フラグの条件だけでは落とせない（たきかわ 2026-09-29: 屋内で電源を入れて切っただけの
+ * グライダーに 11:41 と 11:45 の偽の離陸。精度は水平 中央値12m・垂直 最大55m）。
+ * 実際の飛行の位置は 9/28 の 24,817点で水平最大 8m・垂直最大 5m、9/29 の 9,024点で
+ * 水平最大 7m・垂直最大 4m（99%値はどちらも 2〜3m）なので、余裕を持って切り分けられる。
+ * 精度を持たない位置（古い送信側）は従来どおり判定に使う。
+ */
+const GPS_TRUST_MAX_H_ACC_M = 10;
+const GPS_TRUST_MAX_V_ACC_M = 8;
+/**
  * 離陸を観測していない「飛行中」の機体が、地上で止まったままこれだけ続いたら
  * 地上に戻す。戻さないと、その機体の次の離陸を記録できない。
  */
@@ -87,6 +99,14 @@ const SIGNAL_LOST_AGL_M = 100;
 const SIGNAL_LOST_NEAR_FIELD_M = 3000;
 /** 受信が途切れた機体を見に行く間隔 */
 const SWEEP_INTERVAL_MS = 20_000;
+/**
+ * 飛行中のまま受信がこれだけ途切れたら、フライトログで「飛行中」ではなく「信号途絶」と
+ * 表示する（着陸したことにはしない。受信が戻れば「飛行中」に戻る）。
+ * ソアリング中の旋回でアンテナが受信機から隠れる途切れ（数十秒〜3分程度）では出さない。
+ * たきかわ 2026-09-29: 屋内で電源を入れたグライダーが偽の高高度（対地1,207m）で電源を
+ * 切られ、上空で途切れた扱いのまま夕方まで「飛行中」で残っていた。
+ */
+const SIGNAL_LOST_SHOW_SEC = 300;
 
 /** 離脱判定を始める最低高度 */
 const RELEASE_MIN_AGL_M = 150;
@@ -210,6 +230,11 @@ export interface FlightLogEntry {
   releaseDist: number | null;
   /** 離脱高度を曳航機から写した場合に true。自分で測れた値には付かない */
   releaseInferred?: boolean;
+  /**
+   * 飛行中（landingTime === null）のまま受信が長く途切れている。画面では「飛行中」の
+   * 代わりに「信号途絶」と表示する。受信が戻るか着陸を記録したら外れる。
+   */
+  signalLost?: boolean;
 }
 
 interface Sample {
@@ -232,6 +257,8 @@ interface LastFix {
   posMs: number | null;
   /** 対地速度。裏付け待ちの位置が既に滑走中だったかを見る */
   speedMs?: number;
+  /** 上昇率(m/s)。航跡の色分け（上昇=赤・下降=紺）に使う */
+  climbMs?: number;
 }
 
 interface TrackingState {
@@ -348,16 +375,20 @@ interface TrackerState {
   started: boolean;
   seq: number;
   /**
-   * 機体ごとの「このフライト」の航跡 [timeMs, lat, lon]。地図のクリック表示用。
+   * 機体ごとの「このフライト」の航跡 [timeMs, lat, lon, climbMs]。地図のクリック表示用
+   * （上昇率は航跡の色分けに使う）。
    * 離陸(滑走の始まり)から着陸までを貯め、着陸後も次のフライトが始まるまで残す。
    * メモリ上だけに持つ(webapp の再起動で消える)。
    */
-  tracks: Map<string, [number, number, number][]>;
+  tracks: Map<string, TrackPoint[]>;
   /** tracks が今も伸びている(飛行中の)機体。着陸したら外れ、航跡はそのまま残る */
   trackOpen: Set<string>;
   /** 地上にいる間の直近の位置。離陸したとき、滑走の始まりから航跡を作るのに使う */
-  groundTracks: Map<string, [number, number, number][]>;
+  groundTracks: Map<string, TrackPoint[]>;
 }
+
+/** 航跡の1点 [timeMs, lat, lon, climbMs] */
+type TrackPoint = [number, number, number, number];
 
 const STATE_KEY = Symbol.for("feeldscope.flightTracker");
 
@@ -436,9 +467,35 @@ function closeOpenFlights(deviceId: string, time: string, exceptId?: string): vo
   const next = s.flights.map((f) => {
     if (f.deviceId !== deviceId || f.landingTime !== null || f.id === exceptId) return f;
     changed = true;
-    return { ...f, landingTime: time };
+    return withoutSignalLost({ ...f, landingTime: time });
   });
   if (changed) s.flights = next;
+}
+
+/**
+ * この機体の「飛行中」の記録に、受信が長く途切れている印を付ける／外す。
+ * 着陸したことにはしない（遠くを飛んで受信圏外にいるだけかもしれない）。
+ */
+function setSignalLost(deviceId: string, lost: boolean): void {
+  const s = S();
+  let changed = false;
+  const next = s.flights.map((f) => {
+    if (f.deviceId !== deviceId || f.landingTime !== null || !!f.signalLost === lost) return f;
+    changed = true;
+    if (lost) return { ...f, signalLost: true };
+    const { signalLost: _cleared, ...rest } = f;
+    void _cleared;
+    return rest;
+  });
+  if (changed) s.flights = next;
+}
+
+/** 閉じた記録に残った「信号途絶」の印を落とす（表示は飛行中の記録でしか使わない） */
+function withoutSignalLost(f: FlightLogEntry): FlightLogEntry {
+  if (!f.signalLost) return f;
+  const { signalLost: _cleared, ...rest } = f;
+  void _cleared;
+  return rest;
 }
 
 /** 機体DBから表示用の登録番号を引く（無ければ deviceId のまま） */
@@ -453,7 +510,7 @@ function recordLanding(deviceId: string, tr: TrackingState, time: string): void 
   const id = tr.flightId;
   if (id) {
     s.flights = s.flights.map((f) =>
-      f.id === id && f.landingTime === null ? { ...f, landingTime: time } : f);
+      f.id === id && f.landingTime === null ? withoutSignalLost({ ...f, landingTime: time }) : f);
     console.log(`[flight-tracker] landing ${deviceId} ${time}`);
   } else {
     // 離陸を観測していない機体（外来機の飛来、離陸後に FLARM の電源を入れた等）。
@@ -598,6 +655,23 @@ function resolveLateTakeoff(
   }
 }
 
+/**
+ * 離陸の判定・最高高度に使えるだけの GPS 精度があるか（GPS_TRUST_MAX_*）。
+ * 精度の値を持たない位置は判断できないので使う（従来どおり）。
+ */
+function gpsTrusted(pos: AircraftPosition): boolean {
+  const h = pos.h_accuracy_m;
+  const v = pos.v_accuracy_m;
+  if (typeof h === "number" && Number.isFinite(h) && h > GPS_TRUST_MAX_H_ACC_M) return false;
+  if (typeof v === "number" && Number.isFinite(v) && v > GPS_TRUST_MAX_V_ACC_M) return false;
+  return true;
+}
+/** 高度（垂直方向）だけ見る。最高高度（離脱高度）の更新に使う */
+function gpsAltitudeTrusted(pos: AircraftPosition): boolean {
+  const v = pos.v_accuracy_m;
+  return !(typeof v === "number" && Number.isFinite(v) && v > GPS_TRUST_MAX_V_ACC_M);
+}
+
 /** 2つの位置の間の動きが、機体として物理的にありえるか */
 function isPlausibleMove(from: LastFix, to: LastFix): boolean {
   if (from.posMs === null || to.posMs === null) return true;
@@ -650,7 +724,7 @@ const TRACK_MIN_INTERVAL_MS = 2_000;
 const TRACK_MAX_POINTS = 14_400;
 function appendTrack(deviceId: string, tr: TrackingState, cur: LastFix): void {
   const s = S();
-  const pt: [number, number, number] = [cur.timeMs, cur.lat, cur.lon];
+  const pt: TrackPoint = [cur.timeMs, cur.lat, cur.lon, cur.climbMs ?? 0];
   if (tr.phase === "ground") {
     s.trackOpen.delete(deviceId);   // 着陸した。航跡はそのまま残して伸ばさない
     let g = s.groundTracks.get(deviceId);
@@ -678,7 +752,7 @@ function appendTrack(deviceId: string, tr: TrackingState, cur: LastFix): void {
   t.push(pt);
   if (t.length > TRACK_MAX_POINTS) {
     const keepTail = 600;   // 直近は細かいまま残す
-    const thinned: [number, number, number][] = [];
+    const thinned: TrackPoint[] = [];
     for (let i = 0; i < t.length; i++) {
       if (i >= t.length - keepTail || i % 2 === 0) thinned.push(t[i]);
     }
@@ -724,8 +798,9 @@ function normalizeFlights(): void {
  * 届きにくい、駐機して電源を切る、など）。最後に受信できた位置が飛行場の
  * すぐそばの低空なら、そこで降りたものとして着陸時刻を入れる。
  *
- * 逆に、上空で受信が途切れただけなら何もしない。遠くを長時間飛び続けて
- * 受信圏外にいるだけかもしれず、勝手に着陸にしてはいけない。
+ * 逆に、上空で受信が途切れただけなら着陸にはしない。遠くを長時間飛び続けて
+ * 受信圏外にいるだけかもしれず、勝手に着陸にしてはいけない。長く途切れたら
+ * 「信号途絶」の印だけ付け、受信が戻ったら外す。
  */
 function sweepStaleTracks(): void {
   const s = S();
@@ -744,6 +819,9 @@ function sweepStaleTracks(): void {
       if (aglAtFix < SIGNAL_LOST_AGL_M && distM < SIGNAL_LOST_NEAR_FIELD_M) {
         recordLanding(deviceId, tr, clockStr(fix.timeMs));
         toGround(tr, aglAtFix);
+      } else if (silenceSec >= SIGNAL_LOST_SHOW_SEC) {
+        // 上空で途切れた。着陸にはしないが、「飛行中」と言い続けず信号途絶と表示する
+        setSignalLost(deviceId, true);
       }
     }
   }
@@ -987,6 +1065,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       ? pos.timestamp_epoch * 1000
       : null,
     speedMs,
+    climbMs,
   };
 
   // 無受信明けは、前の位置と比べて壊れているかを判断できない。その1点で状態を
@@ -1039,7 +1118,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
         tr.lateTowSamples = 0;
         tr.lateCreateIfAlone = false;
       }
-    } else if (tr.phase === "ground" && agl >= ON_GROUND_AGL_M) {
+    } else if (tr.phase === "ground" && agl >= ON_GROUND_AGL_M && gpsTrusted(pos)) {
       // 地上にいた機体が、受信の途切れているあいだに離陸していた。たきかわ 2026-09-13
       // 実測: あるグライダーは地上で受信が2時間途切れ、次は曳航中の対地572m で見つかった
       // （実際の離陸は5分前）。見つかった時刻で離陸を作ると時刻がずれ、曳航機との
@@ -1071,6 +1150,11 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     appendTrack(deviceId, tr, cur);
   }
 
+  // 受信が戻った。「信号途絶」と表示していた記録を「飛行中」に戻す
+  if (s.flights.some((f) => f.signalLost && f.deviceId === deviceId && f.landingTime === null)) {
+    setSignalLost(deviceId, false);
+  }
+
   // 受信機が出す飛行状態。null = この送信側は値を出していない（従来どおりの判定に落とす）
   const rxState = typeof pos.state === "number" ? pos.state : null;
   const rxAirborne = rxState === null ? null : rxState >= RX_AIRBORNE_MIN_STATE;
@@ -1087,8 +1171,14 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     if (agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS) {
       closeOpenFlights(deviceId, "");
     }
+    // GPS が測位できていない位置（屋内・電源投入直後）は、速度も高度もでたらめに跳ねる。
+    // 滑走の始まりにも、離陸を確定する数にも入れない（数え直しもしない＝本物の滑走中に
+    // 1点だけ悪い位置が混ざっても、滑走はそのまま続けて見る）。
+    const gpsOk = gpsTrusted(pos);
     // 滑走の始まりを覚えておく。離陸時刻はここなので、あとで浮いたときに使う。
-    if (speedMs > TAKEOFF_SPEED_MS) {
+    if (speedMs > TAKEOFF_SPEED_MS && !gpsOk) {
+      // 精度の悪い位置: 判断に使わない
+    } else if (speedMs > TAKEOFF_SPEED_MS) {
       if (tr.rollingSinceMs === null) {
         tr.rollingSinceMs = nowMs;
         tr.rollingAgl = agl;
@@ -1105,7 +1195,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     if (tr.rollingSinceMs !== null && nowMs - tr.rollingSinceMs > TAKEOFF_CONFIRM_SEC * 1000) {
       tr.rollingSinceMs = null;   // 走り続けているが浮かない＝地上滑走
     }
-    if (tr.rollingSinceMs !== null) {
+    if (tr.rollingSinceMs !== null && gpsOk) {
       // 受信機の飛行中ビットを「浮いた」の代わりには使えない。
       // このビットは着陸の滑走中も立ったままで、停止してから約20秒遅れて
       // しか戻らない（9/13 の実測: 13.1m/s で接地→停止→20秒後に 2→1）。
@@ -1122,6 +1212,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     // 浮いて初めて飛行として記録する。地上を走っただけでは作らない。
     // 1点だけの速度・高度では作らない（壊れた位置で偽の離陸ができる）。
     if (
+      gpsOk &&
       tr.rollingSinceMs !== null &&
       tr.rollingFixes >= TAKEOFF_CONFIRM_FIXES &&
       tr.airborneFixes >= TAKEOFF_CONFIRM_FIXES &&
@@ -1136,7 +1227,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     return;
   }
 
-  if (agl > tr.maxAltAgl) {
+  // 高度の精度が悪い位置（GPS の垂直誤差が大きい）で最高高度を更新すると、偽の離脱高度になる
+  if (agl > tr.maxAltAgl && gpsAltitudeTrusted(pos)) {
     tr.maxAltAgl = agl;
     tr.maxAltAtMs = nowMs;
     tr.maxAltClimbMs = climbMs;
@@ -1338,16 +1430,17 @@ export function getFlightLog(): FlightLogEntry[] {
 }
 
 /**
- * 地図のクリック表示用: この機体の「このフライト」の航跡 [[lat,lon],...]。
- * 着陸後も次のフライトが始まるまで残る。active = まだ飛行中で航跡が伸びている
+ * 地図のクリック表示用: この機体の「このフライト」の航跡 [[lat,lon,climbMs],...]。
+ * 上昇率は航跡の色分けに使う。着陸後も次のフライトが始まるまで残る。
+ * active = まだ飛行中で航跡が伸びている
  */
-export function getFlightTrack(deviceId: string): { points: [number, number][]; active: boolean } {
+export function getFlightTrack(deviceId: string): { points: [number, number, number][]; active: boolean } {
   const s = S();
   const t = s.tracks.get(deviceId);
   // 接地直後に受信が切れた機体は、位置が来ないまま後始末で地上に戻る(trackOpen は次の
   // 位置まで残る)ので、今の状態でも確かめる
   const active = s.trackOpen.has(deviceId) && s.tracking.get(deviceId)?.phase !== "ground";
-  return { points: t ? t.map((p) => [p[1], p[2]]) : [], active };
+  return { points: t ? t.map((p) => [p[1], p[2], p[3] ?? 0]) : [], active };
 }
 
 /** 機体ごとの現在の状態。地図の着陸進入表示に使う */

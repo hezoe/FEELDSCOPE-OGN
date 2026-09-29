@@ -170,12 +170,15 @@ async function getFlightLogStats() {
     const { stdout } = await runShell(`curl -s --max-time 2 http://localhost/api/flight-log`);
     const data = JSON.parse(stdout);
     const entries = data.entries || [];
-    // 着陸時刻が空欄（""）なのは「着陸済みだが時刻不明」。飛行中は null だけ
-    const flying = entries.filter(
-      (e: { landingTime: string | null }) => e.landingTime == null).length;
-    return { total: entries.length, flying, landed: entries.length - flying };
+    // 着陸時刻が空欄（""）なのは「着陸済みだが時刻不明」。飛行中は null だけ。
+    // 上空で受信が長く途切れている記録（signalLost）は「飛行中」に数えず別に数える
+    type E = { landingTime: string | null; signalLost?: boolean };
+    const open = entries.filter((e: E) => e.landingTime == null);
+    const signalLost = open.filter((e: E) => e.signalLost === true).length;
+    const flying = open.length - signalLost;
+    return { total: entries.length, flying, landed: entries.length - open.length, signal_lost: signalLost };
   } catch {
-    return { total: 0, flying: 0, landed: 0 };
+    return { total: 0, flying: 0, landed: 0, signal_lost: 0 };
   }
 }
 

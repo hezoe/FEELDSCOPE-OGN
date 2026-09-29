@@ -27,3 +27,6 @@ qemu-test/
 # aircraft-db 破損退避(データ・共有しない)
 aircraft-db.json
 aircraft-db.json.corrupt-*
+
+# 運行監視の生データ(登録記号↔機体IDを含む・GitHub配布禁止)
+testdata/takikawa-*/

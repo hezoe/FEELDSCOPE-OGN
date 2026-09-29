@@ -167,6 +167,11 @@ interface SmoothMarkerRec {
   trail?: L.Polyline;
   /** 航跡の履歴部分(受信fix由来)。描画は [...trailBase, マーカー現在位置] */
   trailBase?: L.LatLng[];
+  /**
+   * 上昇率で色分けした航跡の履歴部分(区間ごとの線)。これがある機体は trail を
+   * 「最新の受信fix→アイコン現在位置」の先端だけに使う。無い機体(ADS-B)は従来どおり1色の1本線
+   */
+  trailSegs?: L.LayerGroup;
   /** 履歴再生の倍速(リアルタイム=1)。移動・回転・収束の速さに反映 */
   rate?: number;
 }
@@ -424,6 +429,8 @@ interface TrailPoint {
   arrivalMs: number;
   /** 位置そのものの時刻（並び順と重複判定に使う） */
   posMs: number;
+  /** 上昇率(m/s)。航跡の色分けに使う */
+  climb: number;
 }
 
 interface TrackedAircraft extends SmoothMarkerRec {
@@ -468,6 +475,61 @@ interface OpenOgnAircraft {
 }
 
 const TRAIL_DURATION_MS = 60_000; // 1 minute trail
+
+// ── 航跡の上昇率による色分け（上昇ほど赤・下降ほど黒っぽい紺・水平は灰） ──
+// サーマル(上昇域)と沈下域が航跡の色でひと目で分かるように(2026-09-29 運航者要望)。
+// 対象は自受信機の FLARM 機の航跡と、クリックで出す「このフライト」の航跡。ADS-B は従来の1色。
+/** 色の段階(m/s)。同じ段階が続く区間は1本の線にまとめて本数を減らす */
+const CLIMB_COLOR_STEP_MS = 0.5;
+/** ±この上昇率で最も濃い色になる(それ以上は同じ色) */
+const CLIMB_COLOR_MAX_MS = 5;
+/** 上昇率(m/s) → RGB の基準点。間は線形補間 */
+const CLIMB_COLOR_STOPS: [number, [number, number, number]][] = [
+  [-5, [11, 16, 51]],     // 強い沈下: 黒っぽい紺
+  [-2, [29, 78, 216]],    // 沈下: 青
+  [0, [148, 155, 168]],   // 水平: 灰
+  [2, [248, 113, 113]],   // 上昇: 薄い赤
+  [5, [185, 28, 28]],     // 強い上昇: 濃い赤
+];
+const TRAIL_STYLE = { weight: 3, opacity: 0.85, interactive: false } as const;
+const FLIGHT_TRACK_STYLE = { weight: 4, opacity: 0.9, interactive: false } as const;
+
+/** 上昇率(m/s)の色。段階に丸めるので、同じ段階なら同じ文字列になる */
+function climbColor(climbMs: number): string {
+  const v0 = Number.isFinite(climbMs) ? climbMs : 0;
+  const v = Math.max(-CLIMB_COLOR_MAX_MS, Math.min(CLIMB_COLOR_MAX_MS,
+    Math.round(v0 / CLIMB_COLOR_STEP_MS) * CLIMB_COLOR_STEP_MS));
+  let i = 0;
+  while (i < CLIMB_COLOR_STOPS.length - 2 && v > CLIMB_COLOR_STOPS[i + 1][0]) i++;
+  const [a, ca] = CLIMB_COLOR_STOPS[i];
+  const [b, cb] = CLIMB_COLOR_STOPS[i + 1];
+  const t = b === a ? 0 : Math.max(0, Math.min(1, (v - a) / (b - a)));
+  const c = ca.map((x, k) => Math.round(x + (cb[k] - x) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/**
+ * 点列を上昇率の色で区間ごとの線に描き直す。区間の色は終点側の点の上昇率。
+ * 同じ色が続く区間は1本にまとめる(旋回中は色が細かく変わるので本数を抑える)。
+ */
+function redrawClimbSegments(
+  group: L.LayerGroup,
+  pts: { latlng: L.LatLng; climb: number }[],
+  style: L.PolylineOptions,
+): void {
+  group.clearLayers();
+  if (pts.length < 2) return;
+  let runColor = climbColor(pts[1].climb);
+  let run: L.LatLng[] = [pts[0].latlng, pts[1].latlng];
+  for (let i = 2; i < pts.length; i++) {
+    const c = climbColor(pts[i].climb);
+    if (c === runColor) { run.push(pts[i].latlng); continue; }
+    group.addLayer(L.polyline(run, { ...style, color: runColor }));
+    runColor = c;
+    run = [pts[i - 1].latlng, pts[i].latlng];
+  }
+  group.addLayer(L.polyline(run, { ...style, color: runColor }));
+}
 const ANON_TTL_MS = 90_000; // RND(匿名)マーカーの保持。この間 無受信なら消す
 
 // 航跡として受け付ける最大の見かけ速度。これを超える点は、別機体の位置が
@@ -533,6 +595,7 @@ function addTrailPoint(
   latlng: L.LatLng,
   posMs: number,
   arrivalMs: number,
+  climb = 0,
 ): void {
   const pts = ac.trailPoints;
 
@@ -559,7 +622,7 @@ function addTrailPoint(
   // 時刻順に挿入する（通常は末尾）
   let i = pts.length;
   while (i > 0 && pts[i - 1].posMs > posMs) i--;
-  pts.splice(i, 0, { latlng, arrivalMs, posMs });
+  pts.splice(i, 0, { latlng, arrivalMs, posMs, climb: Number.isFinite(climb) ? climb : 0 });
 
   // 表示時間窓の外へ出た点を落とす。並びは時刻順なので、遅れて届いた点が
   // 先頭に入ることがある。先頭だけ見ると取りこぼすので全体を見る。
@@ -570,7 +633,15 @@ function addTrailPoint(
 
   // 履歴=受信fix。描画の先端はアイコンのアニメーション位置(推測航法ループが毎フレーム追従)
   ac.trailBase = ac.trailPoints.map((p) => p.latlng);
-  ac.trail.setLatLngs([...ac.trailBase, ac.marker.getLatLng()]);
+  if (ac.trailSegs) {
+    // 上昇率で色分け: 履歴は区間ごとの線、先端(最新fix→アイコン)は最新の上昇率の色
+    redrawClimbSegments(ac.trailSegs, ac.trailPoints, TRAIL_STYLE);
+    const lastP = ac.trailPoints[ac.trailPoints.length - 1];
+    ac.trail.setStyle({ color: climbColor(lastP ? lastP.climb : 0) });
+    ac.trail.setLatLngs(lastP ? [lastP.latlng, ac.marker.getLatLng()] : [ac.marker.getLatLng()]);
+  } else {
+    ac.trail.setLatLngs([...ac.trailBase, ac.marker.getLatLng()]);
+  }
 }
 
 function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayNameMode): string {
@@ -667,7 +738,10 @@ export default function FlightMap() {
 
   // 選択機体の「このフライト」航跡(実線)。選択解除で消す。
   // trackLine=サーバ履歴の本線(5秒毎更新)、trackHead=本線末尾→直近fix→アイコンのヘッドライン(毎フレーム追従)
-  const trackLineRef = useRef<L.Polyline | null>(null);
+  /** 「このフライト」の航跡(上昇率で色分けした区間の線の集まり) */
+  const trackLineRef = useRef<L.LayerGroup | null>(null);
+  /** その航跡の末尾点(ヘッドラインの起点) */
+  const trackLastRef = useRef<L.LatLng | null>(null);
   const trackHeadRef = useRef<L.Polyline | null>(null);
   const selectedRecRef = useRef<SmoothMarkerRec | null>(null);
 
@@ -707,6 +781,7 @@ export default function FlightMap() {
         if (!newDay && (airborne || silentMs < GROUND_STALE_MS)) continue;
         map?.removeLayer(ac.marker);
         map?.removeLayer(ac.trail);
+        if (ac.trailSegs) map?.removeLayer(ac.trailSegs);
         aircraft.delete(id);
         changed = true;
       }
@@ -1107,8 +1182,8 @@ export default function FlightMap() {
         // 凍結するのはアイコンの機首表示だけで、位置の動きには影響させない。
         drSetFix(existing, pos.latitude, pos.longitude, pos.ground_speed_ms, pos.heading_deg,
           drSimRef.current ? nowMs : positionTimeMs(pos, nowMs), drRateRef.current);
-        addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs);
-        existing.trail.setStyle({ color });
+        addTrailPoint(existing, latlng, positionTimeMs(pos, nowMs), nowMs, pos.climb_rate_ms);
+        if (!existing.trailSegs) existing.trail.setStyle({ color });
       } else {
         const marker = L.marker(latlng, {
           icon: makeAircraftIcon(pos.heading_deg, color, blink, pos.glider_type, isAdsb, effectiveRegistration, pos.aircraft_type, dbType, lbls),
@@ -1116,14 +1191,20 @@ export default function FlightMap() {
 
         marker.on("click", () => setSelectedAircraft(deviceId));
 
-        const trail = L.polyline([latlng], { color, weight: 2, opacity: 0.6 }).addTo(map);
+        // 航跡: FLARM 機は上昇率で色分け(区間の線 + 先端)。ADS-B は従来どおり状態色の1本線
+        const climb0 = Number.isFinite(pos.climb_rate_ms) ? pos.climb_rate_ms : 0;
+        const trailSegs = isAdsb ? undefined : L.layerGroup().addTo(map);
+        const trail = isAdsb
+          ? L.polyline([latlng], { color, weight: 2, opacity: 0.6 }).addTo(map)
+          : L.polyline([latlng], { ...TRAIL_STYLE, color: climbColor(climb0) }).addTo(map);
 
         const createdMs = Date.now();
         const rec: TrackedAircraft = {
           position: pos,
           marker,
           trail,
-          trailPoints: [{ latlng, arrivalMs: createdMs, posMs: positionTimeMs(pos, createdMs) }],
+          trailSegs,
+          trailPoints: [{ latlng, arrivalMs: createdMs, posMs: positionTimeMs(pos, createdMs), climb: climb0 }],
           trailBase: [latlng],
           label,
           lastUpdateMs: createdMs,
@@ -1158,6 +1239,7 @@ export default function FlightMap() {
         drDrop(ac);
         map?.removeLayer(ac.marker);
         map?.removeLayer(ac.trail);
+        if (ac.trailSegs) map?.removeLayer(ac.trailSegs);
         aircraft.delete(id);
       }
     }
@@ -1409,13 +1491,17 @@ export default function FlightMap() {
         rec.marker.setLatLng([cur.lat + stepN / mLat, cur.lng + stepE / mLon]);
         // 航跡線の先端をアイコン位置に追従させる(受信fixのままだと先端が機体から離れる)
         if (rec.trail && rec.trailBase) {
-          rec.trail.setLatLngs([...rec.trailBase, rec.marker.getLatLng()]);
+          if (rec.trailSegs) {
+            // 色分けした履歴は受信fixのたびに描き直す。毎フレームは先端(最新fix→アイコン)だけ
+            const lastB = rec.trailBase[rec.trailBase.length - 1];
+            rec.trail.setLatLngs(lastB ? [lastB, rec.marker.getLatLng()] : [rec.marker.getLatLng()]);
+          } else {
+            rec.trail.setLatLngs([...rec.trailBase, rec.marker.getLatLng()]);
+          }
         }
         // 選択中の機体は「このフライト」実線航跡のヘッドラインもアイコンに追従させる
-        if (rec === selectedRecRef.current && trackHeadRef.current && trackLineRef.current) {
-          const base = trackLineRef.current.getLatLngs() as L.LatLng[];
-          const lastPt = base[base.length - 1];
-          if (lastPt) trackHeadRef.current.setLatLngs(trackHeadPoints(rec, lastPt));
+        if (rec === selectedRecRef.current && trackHeadRef.current && trackLastRef.current) {
+          trackHeadRef.current.setLatLngs(trackHeadPoints(rec, trackLastRef.current));
         }
       }
     };
@@ -1513,6 +1599,12 @@ export default function FlightMap() {
     const device = selectedAircraft;
     const m: L.Map = map;
     let stopped = false;
+    // 長いフライトは区間の線が数千本になるので、この航跡だけ Canvas で描く
+    const renderer = L.canvas({ padding: 0.3 });
+    const removeLine = () => {
+      if (trackLineRef.current) { m.removeLayer(trackLineRef.current); trackLineRef.current = null; }
+      trackLastRef.current = null;
+    };
     const removeHead = () => {
       if (trackHeadRef.current) { m.removeLayer(trackHeadRef.current); trackHeadRef.current = null; }
     };
@@ -1521,26 +1613,32 @@ export default function FlightMap() {
         const r = await fetch(`/api/flight-track?device=${encodeURIComponent(device)}`);
         const d = await r.json();
         if (stopped) return;
-        const pts = (d.points || []) as [number, number][];
+        // [lat, lon, 上昇率]。古い版のサーバは上昇率を返さない(水平=灰で描く)
+        const pts = (d.points || []) as [number, number, number?][];
         const rec = aircraftRef.current.get(device) || null;
         selectedRecRef.current = rec;
         if (pts.length > 1) {
-          const style = { color: "#1565c0", weight: 3, opacity: 0.85, interactive: false } as const;
-          if (trackLineRef.current) trackLineRef.current.setLatLngs(pts);
-          else trackLineRef.current = L.polyline(pts, style).addTo(m);
+          if (!trackLineRef.current) trackLineRef.current = L.layerGroup().addTo(m);
+          redrawClimbSegments(
+            trackLineRef.current,
+            pts.map((p) => ({ latlng: L.latLng(p[0], p[1]), climb: p[2] ?? 0 })),
+            { ...FLIGHT_TRACK_STYLE, renderer },
+          );
           // ヘッドライン: 本線末尾→(末尾以降の)直近fix→アイコン現在位置(以降は描画ループが毎フレーム追従)。
           // 着陸済み(active=false)の航跡は着陸地点で終わるので、地上で動かした分は繋がない
           const last = pts[pts.length - 1];
+          trackLastRef.current = L.latLng(last[0], last[1]);
           if (rec && d.active) {
-            const head = trackHeadPoints(rec, L.latLng(last[0], last[1]));
-            if (trackHeadRef.current) trackHeadRef.current.setLatLngs(head);
-            else trackHeadRef.current = L.polyline(head, style).addTo(m);
+            const head = trackHeadPoints(rec, trackLastRef.current);
+            const headColor = climbColor(rec.position?.climb_rate_ms ?? last[2] ?? 0);
+            if (trackHeadRef.current) { trackHeadRef.current.setLatLngs(head); trackHeadRef.current.setStyle({ color: headColor }); }
+            else trackHeadRef.current = L.polyline(head, { ...FLIGHT_TRACK_STYLE, color: headColor }).addTo(m);
           } else {
             removeHead();
           }
         } else {
           // 航跡なし(まだ飛んでいない・新しいフライトが始まったばかり)。前の線は残さない
-          if (trackLineRef.current) { m.removeLayer(trackLineRef.current); trackLineRef.current = null; }
+          removeLine();
           removeHead();
         }
       } catch { /* noop */ }
@@ -1551,8 +1649,8 @@ export default function FlightMap() {
       stopped = true;
       clearInterval(iv);
       selectedRecRef.current = null;
-      if (trackLineRef.current) { map.removeLayer(trackLineRef.current); trackLineRef.current = null; }
-      if (trackHeadRef.current) { map.removeLayer(trackHeadRef.current); trackHeadRef.current = null; }
+      removeLine();
+      removeHead();
     };
   }, [selectedAircraft, mapReady]);
 
@@ -1925,6 +2023,10 @@ export default function FlightMap() {
                               className="tabular-nums bg-transparent border-b px-0 py-0 text-xs w-[3.2em]"
                               style={{ borderColor: "var(--color-border)", outline: "none", color: "inherit" }}
                             />
+                          ) : entry.signalLost ? (
+                            // 上空で受信が5分以上途切れている（着陸したとは限らない。受信が戻れば「飛行中」に戻る）
+                            <span className="font-semibold" style={{ color: "var(--color-warning)" }}
+                              title="上空で受信が5分以上途切れています（着陸は未確認）">信号途絶</span>
                           ) : (
                             <span className="font-semibold" style={{ color: "var(--color-success)" }}>飛行中</span>
                           )}

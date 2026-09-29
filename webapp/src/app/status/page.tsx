@@ -63,6 +63,8 @@ interface FlightLogStats {
   total: number;
   flying: number;
   landed: number;
+  /** 上空で受信が長く途切れている（着陸未確認）。古い版のサーバは返さない */
+  signal_lost?: number;
 }
 
 interface StatusPayload {
@@ -351,6 +353,11 @@ export default function StatusPage() {
             <Stat label="飛行中" value={String(data?.flight_log.flying ?? 0)} mono accent={data && data.flight_log.flying > 0 ? "success" : undefined} />
             <Stat label="着陸済み" value={String(data?.flight_log.landed ?? 0)} mono />
           </div>
+          {(data?.flight_log.signal_lost ?? 0) > 0 && (
+            <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+              信号途絶 {data?.flight_log.signal_lost} 機（上空で受信が5分以上途切れ、着陸は未確認。「飛行中」には含めていません）
+            </p>
+          )}
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
             フライトログは毎日 日本時間 AM 5:00 に自動リセットされます。
           </p>

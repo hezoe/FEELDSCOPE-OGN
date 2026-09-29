@@ -136,7 +136,7 @@ function ManualContent() {
             <li><strong>ドラッグ</strong> — 地図を平行移動</li>
             <li><strong>マウスホイール / ピンチ</strong> — 拡大縮小</li>
             <li><strong>右下の +/− ボタン</strong> — ズーム</li>
-            <li><strong>機体クリック</strong> — その機体を選択し、<strong>右上に詳細パネル</strong>と<strong>「このフライト」の航跡（青の実線）</strong>を表示。<strong>地図の余白クリックで自動的に閉じます</strong></li>
+            <li><strong>機体クリック</strong> — その機体を選択し、<strong>右上に詳細パネル</strong>と<strong>「このフライト」の航跡（上昇率で色分けした実線）</strong>を表示。<strong>地図の余白クリックで自動的に閉じます</strong></li>
           </ul>
         </Section>
         <Section id="map-home-save" heading="HOMEボタン・保存ボタン（マップ右上）">
@@ -190,11 +190,13 @@ function ManualContent() {
             <li>各機体アイコンの<strong>上に表示名</strong>（設定「表示名」に応じて 機番／コンテストナンバー／パイロット）、<strong>下に高度・速度</strong>を常時表示します。</li>
             <li>高度・速度の単位は設定「表示単位」に従います（m／ft、km/h／kt）。ラベルは縁取り付きで、ライト／ダークどちらのテーマでも読めます。</li>
             <li>アイコンは検知ごとに瞬間移動せず、<strong>位置も機首の向きも滑らかにアニメーション</strong>します。ブラウザを背後にして戻したときに溜まった動きを一気に再生することはありません（受信ギャップ時は即時表示）。</li>
+            <li>各機体の後ろに伸びる<strong>直近1分の航跡も上昇率で色分け</strong>します（上昇ほど赤・下降ほど黒っぽい紺・水平は灰。履歴再生でも同じ）。ADS-B 機の航跡はこれまでどおり1色です。</li>
           </ul>
         </Section>
         <Section id="map-aircraft-click" heading="機体クリック（このフライトの航跡・詳細パネル）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li>機体アイコンをクリックすると、<strong>右上に詳細パネル</strong>（機種・登録番号・CN・高度・速度・上昇率・方位・パス等）と、<strong>その機体が「このフライトで飛んだ」航跡（青の実線）</strong>を表示します。</li>
+            <li>機体アイコンをクリックすると、<strong>右上に詳細パネル</strong>（機種・登録番号・CN・高度・速度・上昇率・方位・パス等）と、<strong>その機体が「このフライトで飛んだ」航跡（実線）</strong>を表示します。</li>
+            <li>航跡は<strong>上昇率で色分け</strong>します。<strong>上昇しているほど赤く、下降しているほど黒っぽい紺</strong>、ほぼ水平は灰色です（±5 m/s で最も濃い色）。サーマル（上昇域）と沈下域が航跡の色で分かります。</li>
             <li>航跡は<strong>離陸（滑走の始まり）から</strong>描き、飛行中なら伸びていきます（約5秒ごとに追随）。</li>
             <li><strong>着陸後も、その機体の次のフライトが始まるまで航跡は残ります</strong>。着陸した機体をクリックすると、直前のフライトの航跡（離陸〜着陸）を確認できます。次のフライトが始まると前の航跡は消え、新しいフライトの航跡に切り替わります。</li>
             <li>航跡は機体（受信機）のメモリ上だけに保持しています。<strong>webアプリや機体を再起動すると消えます</strong>（再起動後に始まったフライトから再び記録します）。</li>
@@ -227,7 +229,7 @@ function ManualContent() {
             <li><strong>#</strong> — 行番号</li>
             <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）。コンテストナンバーが登録されていれば <strong>JA03KH (KH)</strong> のように括弧で併記します</li>
             <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）。<strong>空欄</strong>は「離陸を観測できなかった」場合（外来機の飛来や、離陸後に FLARM の電源を入れた等）で、着陸を検知した時点で<strong>着陸のみの記録</strong>が作られます</li>
-            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます</li>
+            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は、その機体自身の離脱を検知できず<strong>曳航機の離脱高度から写したもの</strong>です（手で直すと※は消えます）</li>
@@ -335,7 +337,7 @@ function ManualContent() {
         <Section id="status-flight-log-stats" heading="フライトログ統計（本日）">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="総記録数" desc="本日記録されたフライト総数（離陸検知＋編集追加）" />
-            <ManualRow label="飛行中" desc="現在飛行中（着陸時刻が未記録）の機体数" />
+            <ManualRow label="飛行中" desc="現在飛行中（着陸時刻が未記録）の機体数。上空で受信が5分以上途切れている「信号途絶」の機体は含めず、その下に件数を別に表示します" />
             <ManualRow label="着陸済み" desc="着陸時刻が記録された機体数" />
           </tbody></table>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
@@ -737,11 +739,39 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.19 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.19</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-29</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="屋内で電源を入れた FLARM を「離陸」と記録する問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>格納庫など屋内で FLARM の電源を入れると GPS がうまく測位できず、止まったままでも<strong>高度が 0〜200m を漂い、速度が 190〜260 km/h に跳ねる</strong>ことがあります。受信機の「飛行中」の目印まで立つため、飛んでいないグライダーに<strong>偽の離陸・着陸・離脱高度</strong>が記録されていました（たきかわ 2026-09-29: 屋内で電源を入れて切っただけの機体に2件）。</li>
+          <li>FLARM が送る <strong>GPS の精度（水平・垂直の誤差）が悪い位置は、離陸の判定と離脱高度に使わない</strong>ようにしました（水平10m・垂直8mより悪い位置）。実際に飛んでいる機体の精度は水平・垂直とも数m以内なので、本物の離陸の記録には影響しません（9/28・9/29 の実データの再生で、偽の2件だけが消え、ほかの記録は変わらないことを確認）。</li>
+        </ul>
+      </Card>
+
+      <Card title="上空で受信が途切れた機体を「信号途絶」と表示">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでは上空で受信が途切れると、着陸を確認できないまま夕方まで<strong>「飛行中」</strong>と表示され続けていました。</li>
+          <li>上空で受信が<strong>5分以上途切れた</strong>機体は、フライトログの着陸欄を<strong>「信号途絶」</strong>（橙）と表示するようにしました。遠くを飛んでいて受信圏外にいるだけかもしれないので、着陸したことにはしません。<strong>受信が戻れば「飛行中」に戻ります</strong>。</li>
+          <li>ステータス画面の「飛行中」の数には含めず、件数を別に表示します。</li>
+        </ul>
+      </Card>
+
+      <Card title="航跡を上昇率で色分け">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体の航跡を<strong>上昇率で色分け</strong>するようにしました。<strong>上昇しているほど赤く、下降しているほど黒っぽい紺</strong>、ほぼ水平は灰色です（±5 m/s で最も濃い色）。サーマル（上昇域）と沈下域がひと目で分かります。</li>
+          <li>対象は、<strong>機体をクリックしたときの「このフライト」の航跡</strong>と、<strong>各機体の後ろに伸びる直近1分の航跡</strong>（履歴再生でも同じ）です。ADS-B 機の航跡はこれまでどおり1色です。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.18 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.18</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-29</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="地図に雨雲レーダーを表示">
