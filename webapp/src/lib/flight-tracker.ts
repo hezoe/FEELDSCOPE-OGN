@@ -165,11 +165,6 @@ const TOW_PAIR_MIN_SAMPLES = 3;
  */
 const WINCH_CLIMB_MS = 7;
 /**
- * 曳航機の離脱を見てから、グライダー自身の離脱検知を待つ時間。
- * 自分で測れた値のほうが確かなので、待ってから空欄のときだけ写す。
- */
-const TOW_PAIR_INFER_GRACE_SEC = 120;
-/**
  * 受信の途切れているあいだに離陸していた機体（FLARM の電源を入れたのが離陸後、等）は、
  * 見つかった時刻が離陸時刻ではない。並んで上がっている曳航機をこれだけ探し、
  * 見つからなければ見つかった時刻で飛行を作る。
@@ -808,7 +803,7 @@ function sweepStaleTracks(): void {
   for (const [deviceId, tr] of s.tracking) {
     const fix = tr.lastFix;
     if (!fix) continue;
-    applyPendingRelease(tr, nowMs);
+    applyPendingRelease(tr);
     const silenceSec = (nowMs - fix.timeMs) / 1000;
     if (silenceSec < SIGNAL_LOST_SEC) continue;
 
@@ -889,13 +884,16 @@ function updateTowPair(
 }
 
 /**
- * 曳航機から預かった離脱高度を、猶予のあとで飛行記録へ写す。
- * 自分で測れた値があればそちらを残す。
+ * 曳航機から預かった離脱高度を、すぐに飛行記録へ写す。
+ * 索が外れた瞬間は曳航機のほうが確実に分かる（左旋回で一気に降下する）。グライダーは
+ * 減速しながら右旋回するとは限らず、ウェーブの日などは少し右へ避けるだけでまっすぐ
+ * 飛び続けるので、自分の判定を待つと離脱後のサーマル/ウェーブ上昇を拾ってしまう
+ * （たきかわ 2026-10-01 実測: 実際 約970m の便に 1324m）。曳航機が離脱を見る前に
+ * グライダー自身が測れていた値だけは残す。
  */
-function applyPendingRelease(tr: TrackingState, nowMs: number): void {
+function applyPendingRelease(tr: TrackingState): void {
   const s = S();
   if (tr.pendingSinceMs === null || tr.pendingReleaseAlt === null) return;
-  if (nowMs - tr.pendingSinceMs < TOW_PAIR_INFER_GRACE_SEC * 1000) return;
 
   const id = tr.flightId;
   const alt = tr.pendingReleaseAlt;
@@ -1297,6 +1295,9 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     if (tow && agl > TOW_RELEASE_MIN_AGL_M) {
       // 曳航機は離脱後に降下していく。最高高度からの下がりが確実な合図。
       if (tr.maxAltAgl - agl > TOW_RELEASE_ALT_DROP_M) released = true;
+    } else if (!tow && tr.pendingReleaseAlt !== null) {
+      // 索の相手の曳航機が離脱を見て高度を預けてくれている。グライダー自身の判定は使わない
+      // （このあと applyPendingRelease が曳航機の値を写す）。
     } else if (!tow && tr.winchLaunch) {
       // ウィンチ発航。索が外れると上昇が一気に止まる。速度は見ない
       // （機首を下げて加速するので、曳航のような減速は起きない）。
@@ -1364,7 +1365,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       tr.pendingSinceMs = null;
 
       // 曳航機の離脱は確実に取れる。索の相手が分かっていれば、その高度を
-      // 預けておく。グライダー自身が測れなかったときだけ、あとで使われる。
+      // 預けておく。グライダーはこの値を使い、自分の離脱判定はしない（applyPendingRelease）。
       if (tow && !unseen && tr.pairConfirmed && tr.pairDeviceId) {
         const mate = s.tracking.get(tr.pairDeviceId);
         if (mate && mate.phase === "airborne" && mate.flightId) {
@@ -1378,7 +1379,7 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
 
   // 索でつながっている相手を追い、預かった離脱高度があれば頃合いを見て使う
   updateTowPair(deviceId, tr, pos.latitude, pos.longitude, pos.altitude_m, climbMs, nowMs);
-  applyPendingRelease(tr, nowMs);
+  applyPendingRelease(tr);
 
   // ── 着陸 ──
   // 止まったところまで受信できるとは限らない。滑走路上は電波が届きにくく、

@@ -232,7 +232,7 @@ function ManualContent() {
             <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
-            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は、その機体自身の離脱を検知できず<strong>曳航機の離脱高度から写したもの</strong>です（手で直すと※は消えます）</li>
+            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航機の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則こちら。手で直すと※は消えます）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
             <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）</li>
             <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
@@ -255,7 +255,7 @@ function ManualContent() {
             <li><strong>離脱検知（グライダー・曳航）</strong> — 対地150m以上で、離陸から100m以上上昇したあと、上昇が止まり、かつ6秒以内に <strong>5 m/s以上</strong> 減速したとき</li>
             <li><strong>離脱検知（グライダー・ウィンチ）</strong> — 離陸から60秒以内に上昇率 <strong>7 m/s</strong> 以上が5秒続いたらウィンチ発航とみなし、そのあと上昇率が <strong>2 m/s</strong> 以下に落ちた瞬間を離脱とします。速度は見ません</li>
             <li><strong>離脱検知（曳航機）</strong> — 対地300m以上で、高度ピークから50m以上の降下</li>
-            <li><strong>離脱高度の補完（曳航）</strong> — 曳航機とグライダーが60秒以内に離陸し、水平200m・垂直100m以内で3回以上並んで上がったら曳航ペアとみなします。曳航機の離脱を検知したあと<strong>2分待って</strong>もグライダー側で検知できなければ、曳航機の離脱高度を写します（※印付き）</li>
+            <li><strong>離脱高度の補完（曳航）</strong> — 曳航機とグライダーが60秒以内に離陸し、水平200m・垂直100m以内で3回以上並んで上がったら曳航ペアとみなします。曳航機の離脱を検知したら、<strong>グライダーにもすぐ同じ離脱高度・距離を写します</strong>（※印付き）。索が外れた瞬間は、左旋回で一気に降下する曳航機のほうが確実に分かるためです。グライダー自身の離脱検知は、曳航ペアが分からない便（ウィンチ・単独など）と、曳航機より先に自分で検知できた便にだけ使います</li>
             <li><strong>ウィンチ発航との区別</strong> — 上昇率が <strong>6 m/s</strong> を超える機体は索で曳かれていないとみなし、曳航ペアに入れません</li>
           </ul>
         </Section>
@@ -739,11 +739,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.20 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.20</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-01</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="曳航のグライダーの離脱高度を、曳航機の値にそろえました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>これまでは、曳航機が離脱を検知してから<strong>2分待ち</strong>、そのあいだにグライダーが自分で離脱を検知すればその値を使っていました。ところがグライダーは、いつも減速しながら右旋回で離脱するとは限りません。<strong>ウェーブの日</strong>などは強風で風下に流されないよう、少し右へ避けるだけでまっすぐ飛び続けます。そのまま上昇を続けると、<strong>サーマルやウェーブの頂上で速度が落ちたところを離脱と読み、離脱後に上がった高度を記録</strong>していました（たきかわ 2026-10-01: 実際 約970m の便に 1324m。2026-09-12 にも同じ型の誤記録）。</li>
+          <li>索が外れた瞬間は、<strong>左旋回で一気に降下する曳航機のほうが確実に分かります</strong>。曳航ペアが分かっている便は、曳航機の離脱を検知したら<strong>すぐにグライダーにも同じ離脱高度・距離を写す</strong>ようにしました（※印付き）。グライダー自身の離脱検知は、ウィンチ・単独など曳航ペアが分からない便と、曳航機より先に自分で検知できた便にだけ使います。</li>
+          <li>たきかわ 9日分（608便）の実データで再生して確認しました。変わったのは曳航のグライダー55便だけで、すべて<strong>相手の曳航機と同じ値</strong>になりました。多くは十数m低くなります（グライダーは曳航機より少し上を飛び、離脱の引き起こしでも少し上がるため）。値が消えた便・新しく入った便はありません。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.19 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.19</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-09-29</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="屋内で電源を入れた FLARM を「離陸」と記録する問題を修正">
