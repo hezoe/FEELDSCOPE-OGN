@@ -31,6 +31,20 @@ log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# ネットワーク(名前解決とHTTP)が使えるようになるまで待つ。Wi-Fi をつなぎ直した直後は数十秒使えず、
+# そのあいだの apt-get が失敗して ufw・WireGuard の導入が飛ばされていた（2026-10-01 専用イメージの初回インストール）。
+wait_for_network() {
+    local i
+    for i in $(seq 1 60); do
+        if getent hosts raspbian.raspberrypi.org >/dev/null 2>&1 \
+           && curl -fsS --max-time 5 -o /dev/null http://raspbian.raspberrypi.org/ 2>/dev/null; then
+            return 0
+        fi
+        sleep 2
+    done
+    log_warn "Network did not come back within 2 minutes (continuing)"
+}
+
 # =============================================================================
 # Pre-flight checks
 # =============================================================================
@@ -87,6 +101,12 @@ echo ""
 # =============================================================================
 
 log_info "[1/9] Installing system packages..."
+# Wi-Fi 設定の重複整理（OGN 設定マネージャが起動のたびに追記する）は、整理すると Wi-Fi をつなぎ直すので
+# ネットワークを使う手順より前に済ませ、回復を待つ（Step 8 でサービスとして登録し、そこでは変化が無ければ何もしない）。
+if [ -f "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" ]; then
+    bash "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" || log_warn "wpa dedupe reported warnings (continuing)"
+fi
+wait_for_network
 apt-get update -qq
 apt-get install -y -qq mosquitto mosquitto-clients python3-pip git cmake libusb-1.0-0-dev
 
@@ -422,6 +442,7 @@ cp "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope-wpa-dedupe
 systemctl enable feeldscope-wpa-dedupe.service >/dev/null 2>&1 || true
 bash /usr/local/sbin/feeldscope-wpa-dedupe || log_warn "  wpa dedupe reported warnings (continuing)"
+wait_for_network   # 後の CATVPN 登録・ufw 導入が apt を使う
 
 # 新規インストールの既定はリモートサポートOFF（設定画面からONにする）
 systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true

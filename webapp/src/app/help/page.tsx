@@ -739,11 +739,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.22 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.22</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="新規インストールでファイアウォールとリモートサポートの準備が飛ばされる問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>インストールの途中で Wi-Fi 設定の重複を整理すると Wi-Fi がつなぎ直され、数十秒ネットに出られなくなります。そのあいだに行う<strong>ファイアウォール（ufw）とリモートサポート（WireGuard）の導入が失敗して飛ばされていました</strong>（Wi-Fi で接続している場合）。</li>
+          <li>Wi-Fi 設定の整理をインストールの最初に行い、<strong>ネットワークが戻るのを待ってから</strong>次の手順に進むようにしました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.21 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.21</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-01</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="FEELDSCOPE 専用の SD カードイメージを準備中（書き込んで設定ファイルを1つ書くだけ）">
