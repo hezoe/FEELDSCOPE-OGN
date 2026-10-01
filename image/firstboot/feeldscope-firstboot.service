@@ -1,0 +1,16 @@
+# FEELDSCOPE 専用イメージ: 初回起動で FEELDSCOPE を自動インストールする（完了後は自分で無効化）
+[Unit]
+Description=FEELDSCOPE first-boot auto installer
+After=network-online.target
+Wants=network-online.target feeldscope-firstboot-status.service
+ConditionPathExists=!/var/lib/feeldscope-firstboot/done
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/sbin/feeldscope-firstboot.sh
+# インストールは 20〜40 分かかる
+TimeoutStartSec=0
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

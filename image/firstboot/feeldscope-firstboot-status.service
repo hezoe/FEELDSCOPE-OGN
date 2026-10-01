@@ -1,0 +1,15 @@
+# FEELDSCOPE 専用イメージ: 初回の自動インストール中、進み具合をポート80で表示する
+# （FEELDSCOPE 本体を起動する直前に feeldscope-install.sh が止める）
+[Unit]
+Description=FEELDSCOPE first-boot status page (port 80)
+After=network.target
+ConditionPathExists=!/var/lib/feeldscope-firstboot/done
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/feeldscope-firstboot-status.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

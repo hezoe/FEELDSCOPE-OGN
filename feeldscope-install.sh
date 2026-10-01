@@ -90,6 +90,19 @@ log_info "[1/9] Installing system packages..."
 apt-get update -qq
 apt-get install -y -qq mosquitto mosquitto-clients python3-pip git cmake libusb-1.0-0-dev
 
+# 日本向けの基本設定: キーボードを日本語配列(jp106)、タイムゾーンを日本時間に。
+# OGN 公式イメージは英国配列(gb)・ロンドン時間のため、受信機に直接つないだ日本語キーボードで
+# 記号が別の文字になり、パスワードの打ち間違いの原因になっていた。
+if [ -f /etc/default/keyboard ] && ! grep -q '^XKBLAYOUT="jp"' /etc/default/keyboard; then
+    sed -i -e 's/^XKBMODEL=.*/XKBMODEL="jp106"/' -e 's/^XKBLAYOUT=.*/XKBLAYOUT="jp"/' -e 's/^XKBVARIANT=.*/XKBVARIANT=""/' /etc/default/keyboard
+    setupcon -k --force --save >/dev/null 2>&1 || true
+    log_info "Keyboard layout set to Japanese (jp106)"
+fi
+if [ "$(cat /etc/timezone 2>/dev/null)" != "Asia/Tokyo" ]; then
+    timedatectl set-timezone Asia/Tokyo 2>/dev/null || { echo "Asia/Tokyo" > /etc/timezone; ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime; }
+    log_info "Timezone set to Asia/Tokyo"
+fi
+
 # Install paho-mqtt for Python
 pip3 install --break-system-packages paho-mqtt 2>/dev/null || pip3 install paho-mqtt
 
@@ -423,6 +436,9 @@ systemctl enable --now feeldscope-ogn-watchdog.timer   >/dev/null 2>&1 || true
 
 log_info "[9/9] Starting FEELDSCOPE services..."
 
+# FEELDSCOPE 専用イメージの初回自動インストール中は、進み具合のページがポート80を使っている。
+# 本体を起動する前に止める（手作業でのインストールでは存在しないので何もしない）。
+systemctl stop feeldscope-firstboot-status.service 2>/dev/null || true
 # Core services: ogn-mqtt + webapp (always enabled)
 systemctl enable ogn-mqtt.service
 systemctl enable feeldscope-webapp.service

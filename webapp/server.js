@@ -11,14 +11,22 @@ const app = next({ dev: false, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
-  createServer((req, res) => {
+  const server = createServer((req, res) => {
     const ip = (req.socket && req.socket.remoteAddress) || "";
     // 詐称防止: クライアント供給ヘッダを消してから実IPを設定
     delete req.headers["x-client-ip"];
     delete req.headers["x-real-ip"];
     req.headers["x-client-ip"] = ip;
     handle(req, res);
-  }).listen(port, hostname, () => {
+  });
+  // 待ち受けに失敗したら(ポート80が使用中など)終了し、systemd(Restart=on-failure)に起動し直させる。
+  // Next.js は uncaughtException を記録するだけで終了しないため、ここで終了しないと
+  // 待ち受けていないまま「動作中」に見え続け、画面が開かない（2026-10-01 専用イメージの初回インストールで発生）。
+  server.on("error", (err) => {
+    console.error(`feeldscope-webapp: listen failed on ${hostname}:${port}: ${err && err.message}`);
+    process.exit(1);
+  });
+  server.listen(port, hostname, () => {
     console.log(`feeldscope-webapp (custom server) listening on ${hostname}:${port}`);
   });
 });

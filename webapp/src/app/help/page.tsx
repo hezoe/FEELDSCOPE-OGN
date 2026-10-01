@@ -739,11 +739,30 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.21 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.21</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-01</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="FEELDSCOPE 専用の SD カードイメージを準備中（書き込んで設定ファイルを1つ書くだけ）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>OGN 公式イメージをもとに、<strong>キーボードを日本語配列・時刻を日本時間・OverlayFS を無効</strong>にした専用イメージを準備しています（実機での確認後に公開し、セットアップガイドでご案内します）。SD カードに書き込み、パソコンで <code>OGN-receiver.conf</code>（受信機名・座標・SSH パスワード・Wi-Fi）を書いて電源を入れると、<strong>初回起動で最新の FEELDSCOPE を自動でインストール</strong>します（30〜40分）。進み具合は同じネットワークのブラウザで <code>http://ogn-receiver.local/</code> に表示されます。SSH での作業は不要です。</li>
+          <li>OGN 公式イメージはキーボードが英国配列のため、受信機に直接つないだ日本語キーボードでは記号が別の文字になり、パスワードの打ち間違いの原因になっていました。手作業でインストールした場合も、インストーラーが日本語配列・日本時間に設定するようにしました。</li>
+        </ul>
+      </Card>
+
+      <Card title="画面が開かないまま止まる問題を修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>起動したときにポート80が使用中だと、FEELDSCOPE が<strong>待ち受けに失敗したまま「動作中」に見え続け</strong>、画面が開きませんでした。待ち受けに失敗したら終了し、<strong>自動で起動し直す</strong>ようにしました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.20 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.20</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-01</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="曳航のグライダーの離脱高度を、曳航機の値にそろえました">
