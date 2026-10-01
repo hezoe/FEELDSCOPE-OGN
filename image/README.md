@@ -10,7 +10,7 @@ OGN 公式イメージ（[seb-ogn-rpi-image](http://download.glidernet.org/seb-o
 2. パソコンで SD カードの `OGN-receiver.conf` を開き、受信機名・緯度・経度・SSH パスワード（英字と数字だけ）・
    Wi-Fi（使う場合）を書いて保存
 3. Raspberry Pi に SD カード・SDR ドングル（アンテナ付き）・LAN を挿して電源を入れる
-4. 30〜40分待つ（途中で自動的に再起動する）。ブラウザで `http://ogn-receiver.local/` を開くと進み具合が見え、
+4. Raspberry Pi 4 で15分ほど（回線や機種により40分ほど）待つ（途中で自動的に再起動する）。ブラウザで `http://ogn-receiver.local/` を開くと進み具合が見え、
    完了すると同じアドレスで FEELDSCOPE が開く（管理者の初期パスワード `admin`）
 
 ## イメージに加えている変更（`build-image.sh`）
@@ -63,7 +63,7 @@ sudo env PATH=/usr/sbin:/usr/bin:/sbin:/bin bash image/build-image.sh /home/debi
 - [ ] 書き込み直後の SD カードをパソコンに挿すと `OGN-receiver.conf` と `FEELDSCOPE-README.txt` が見える
 - [ ] 電源投入後、`http://ogn-receiver.local/`（または IP）で進み具合が表示される
 - [ ] 1回目の自動再起動のあと、ルート領域が SD カードいっぱいに広がっている（`df -h /`）
-- [ ] 30〜40分で完了し、同じアドレスで FEELDSCOPE が開く・受信機名と座標が反映されている
+- [ ] 15〜40分で完了し、同じアドレスで FEELDSCOPE が開く・受信機名と座標が反映されている
 - [ ] 受信機に直接つないだ日本語キーボードで記号（@ : * ( ) _ など）が正しく打てる
 - [ ] `OGN-receiver.conf` のパスワードで SSH ログインできる
 - [ ] 再起動しても FEELDSCOPE が残っている（OverlayFS 無効）

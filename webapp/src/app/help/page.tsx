@@ -739,11 +739,25 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.23 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.23</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="FEELDSCOPE 専用の SD カードイメージを公開しました（簡易インストール版）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>SD カードに書き込み、設定ファイルを1つ書いて電源を入れるだけで、OGN 受信機と FEELDSCOPE が<strong>自動でセットアップ</strong>されます（SSH でのコマンド操作は不要・日本語キーボード配列）。イメージは <a href="https://github.com/hezoe/FEELDSCOPE-OGN/releases/latest" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }} className="underline">GitHub のリリース</a> から、手順は画像付きの <a href="https://ezoe.net/glider/FEELDSCOPE-OGN-quick-install.html" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }} className="underline">FEELD-SCOPE &amp; OGN-Receiver 簡易インストール版</a> をご覧ください。</li>
+          <li>すでにお使いの受信機は、入れ直す必要はありません。</li>
+          <li>リポジトリ同梱のセットアップガイドにも、簡易版への案内を加えました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.22 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.22</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="新規インストールでファイアウォールとリモートサポートの準備が飛ばされる問題を修正">
@@ -759,9 +773,10 @@ function ReleaseNotesContent() {
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-01</span>
       </div>
 
-      <Card title="FEELDSCOPE 専用の SD カードイメージを準備中（書き込んで設定ファイルを1つ書くだけ）">
+      <Card title="FEELDSCOPE 専用の SD カードイメージ（書き込んで設定ファイルを1つ書くだけ）">
         <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          <li>OGN 公式イメージをもとに、<strong>キーボードを日本語配列・時刻を日本時間・OverlayFS を無効</strong>にした専用イメージを準備しています（実機での確認後に公開し、セットアップガイドでご案内します）。SD カードに書き込み、パソコンで <code>OGN-receiver.conf</code>（受信機名・座標・SSH パスワード・Wi-Fi）を書いて電源を入れると、<strong>初回起動で最新の FEELDSCOPE を自動でインストール</strong>します（30〜40分）。進み具合は同じネットワークのブラウザで <code>http://ogn-receiver.local/</code> に表示されます。SSH での作業は不要です。</li>
+          <li>OGN 公式イメージをもとに、<strong>キーボードを日本語配列・時刻を日本時間・OverlayFS を無効</strong>にした専用イメージを作りました（2026-10-02 公開）。SD カードに書き込み、パソコンで <code>OGN-receiver.conf</code>（受信機名・座標・SSH パスワード・Wi-Fi）を書いて電源を入れると、<strong>初回起動で最新の FEELDSCOPE を自動でインストール</strong>します（Raspberry Pi 4 で15分ほど）。進み具合は同じネットワークのブラウザで <code>http://ogn-receiver.local/</code> に表示されます。SSH での作業は不要です。</li>
+          <li>イメージは <a href="https://github.com/hezoe/FEELDSCOPE-OGN/releases/latest" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }} className="underline">GitHub のリリース</a> から、手順は画像付きの <a href="https://ezoe.net/glider/FEELDSCOPE-OGN-quick-install.html" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-accent)" }} className="underline">FEELD-SCOPE &amp; OGN-Receiver 簡易インストール版</a> をご覧ください。</li>
           <li>OGN 公式イメージはキーボードが英国配列のため、受信機に直接つないだ日本語キーボードでは記号が別の文字になり、パスワードの打ち間違いの原因になっていました。手作業でインストールした場合も、インストーラーが日本語配列・日本時間に設定するようにしました。</li>
         </ul>
       </Card>
