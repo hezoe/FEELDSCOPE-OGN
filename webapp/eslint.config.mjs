@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 同梱した外部ライブラリ(leaflet-velocity の配布物そのまま)
+    "src/lib/vendor/**",
   ]),
 ]);
 

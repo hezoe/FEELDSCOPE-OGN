@@ -217,6 +217,16 @@ function ManualContent() {
             <li>表示には<strong>インターネット接続</strong>が必要です（オフライン地図のときも、接続があれば表示されます）。出典：気象庁。</li>
           </ul>
         </Section>
+        <Section id="map-wind" heading="風の流れ（気象庁アメダス・MSM）">
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>設定 → マップ表示の<strong>「風の流れ（気象庁）」</strong>で、風に乗って流れる<strong>粒子</strong>を地形が透ける濃さで地図に重ねます（既定は非表示）。粒子の<strong>色は風速</strong>（青＝弱い → 青緑 → 緑 → 黄 → 橙 → 赤 → 赤紫＝約40kt 以上）。</li>
+            <li><strong>高さ</strong>を選べます：<strong>地上</strong>＝気象庁アメダスの<strong>実測</strong>（10分平均の風向・風速、10分毎更新）を約10km の格子に補間したもの（観測点から離れた海上などには粒子を出しません）／<strong>1,000ft・2,000ft・5,000ft</strong>＝気象庁 MSM の<strong>予報</strong>（975／950／850hPa の気圧面の風・約10km 格子・3時間毎の予報。実際の高さは気圧によって変わります）。</li>
+            <li>地図の<strong>左下</strong>に時刻（JST・観測／予報）と<strong>滑空場の風</strong>（風向＝吹いてくる方角・10°単位、風速 kt と m/s）を表示します。地上は<strong>近くのアメダス（30km 以内）の実測値</strong>をそのまま表示します。雨雲レーダーと両方表示するときは、雨雲レーダーの凡例が上・風の凡例が下になります。</li>
+            <li>データは <strong>ogn.ezoe.net</strong> が気象庁から取り込んで整形したものを、この端末が中継して滑空場の周辺だけ表示します（表示には<strong>インターネット接続</strong>が必要）。アメダスは気象庁ホームページの公開データで公式の配信サービスではないため、気象庁の都合で止まることがあります（凡例に「取得できません」）。</li>
+            <li>予報・補間した値なので、山や海岸の細かい風、サーマル・ローター等は表現されません。飛行の判断には公式の気象情報と現地の観測を使ってください。</li>
+            <li>出典：地上＝<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener noreferrer" className="underline">気象庁ホームページ「アメダス」</a>を加工して作成／上空＝気象庁 MSM（Open-Meteo、CC BY 4.0）。地図右下にも表示します。</li>
+          </ul>
+        </Section>
         <Section id="map-path-warning" heading="パス判定（安全滑空比による警告）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             各機体の現在地から滑空場までの距離 ÷（現在高度 − 滑空場標高）で滑空比を計算し、設定値（デフォルト15:1）を超えると赤点滅で警告します。
@@ -740,11 +750,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.25 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.25</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-03</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="風の流れを地図に表示（地上＝アメダス実測・上空＝MSM 予報）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定 → マップ表示に<strong>「風の流れ（気象庁）」</strong>を追加しました（既定は非表示）。風に乗って流れる粒子で風向・風速（色）を表示します。</li>
+          <li>高さは<strong>地上</strong>（気象庁アメダスの実測・10分毎）と、<strong>1,000ft／2,000ft／5,000ft</strong>（気象庁 MSM の予報）から選べます。</li>
+          <li>地図の左下に時刻と<strong>滑空場の風</strong>（地上は近くのアメダスの実測値）を表示します。雨雲レーダーと両方表示するときは、雨雲が上・風が下に並びます。</li>
+          <li>データは ogn.ezoe.net 経由で取得し、滑空場の周辺だけを表示します（インターネット接続が必要）。出典は地図右下とマニュアルに記載しています。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.24 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.24</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="リモートサポートの登録にトークンが不要になりました（承認制）">

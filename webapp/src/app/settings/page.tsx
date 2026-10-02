@@ -108,7 +108,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setRainRadar, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setRainRadar, setWindFlow, setWindLevel, setMapSource } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -660,6 +660,37 @@ export default function SettingsPage() {
                 </label>
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
                   気象庁の高解像度降水ナウキャスト（レーダー実況・約1km・5分毎更新）を地図に半透明で重ねます。左下に観測時刻と降水強度の凡例を表示します。表示にはインターネット接続が必要です。
+                </p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={units.windFlow}
+                    onChange={(e) => setWindFlow(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">風の流れ（気象庁）</span>
+                </label>
+                {units.windFlow && (
+                  <div className="flex mt-2 rounded overflow-hidden text-xs" style={{ border: "1px solid var(--color-border)", maxWidth: 360 }}>
+                    {([["sfc", "地上"], ["975", "1,000ft"], ["950", "2,000ft"], ["850", "5,000ft"]] as const).map(([v, label]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setWindLevel(v)}
+                        className="flex-1 px-2 py-1.5 font-medium"
+                        style={units.windLevel === v
+                          ? { background: "var(--color-accent)", color: "#fff" }
+                          : { background: "var(--color-bg-secondary)", color: "var(--color-text-primary)" }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                  風に乗って流れる粒子を地図に重ねます（色＝風速）。<strong>地上</strong>は気象庁アメダスの実測（10分平均・10分毎）、<strong>1,000ft／2,000ft／5,000ft</strong>は気象庁 MSM の予報（975／950／850hPa）です。左下に時刻と滑空場の風（地上は近くのアメダスの実測値）を表示します。データは ogn.ezoe.net 経由で取得します（インターネット接続が必要）。
                 </p>
               </div>
             </div>

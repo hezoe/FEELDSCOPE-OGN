@@ -31,6 +31,9 @@ export const DEFAULT_ADSB: AdsbConfig = {
   interval: 3,
 };
 
+/** 風の流れの高さ: 地上=アメダス実測 / 975・950・850hPa=MSM 予報(約1,000/2,000/5,000ft) */
+export type WindLevel = "sfc" | "975" | "950" | "850";
+
 export interface UnitPreferences {
   altitude: AltitudeUnit;
   speed: SpeedUnit;
@@ -49,6 +52,9 @@ export interface UnitPreferences {
   rangeRings: boolean;
   /** 雨雲レーダー: 気象庁の高解像度降水ナウキャスト(5分毎・約1km)を地図に半透明で重ねる(既定ON・要インターネット) */
   rainRadar: boolean;
+  /** 風の流れ: 気象庁の風(地上=アメダス実測・上空=MSM 予報)を粒子で重ねる(既定OFF・要インターネット) */
+  windFlow: boolean;
+  windLevel: WindLevel;
 }
 
 export const DEFAULT_UNITS: UnitPreferences = {
@@ -65,6 +71,8 @@ export const DEFAULT_UNITS: UnitPreferences = {
   openOgn: false,
   rangeRings: true,
   rainRadar: true,
+  windFlow: false,
+  windLevel: "sfc",
 };
 
 const STORAGE_KEY = "ogn-unit-preferences";

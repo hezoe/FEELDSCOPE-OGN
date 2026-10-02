@@ -674,6 +674,47 @@ function radarJstLabel(utc14: string): string {
 // 雨雲レーダーの凡例(気象庁 高解像度降水ナウキャストの色区分, mm/h)
 const RADAR_COLORS = ["#f2f2ff", "#a0d2ff", "#218cff", "#0041ff", "#faf500", "#ff9900", "#ff2800", "#b40068"];
 const RADAR_STEPS = [1, 5, 10, 20, 30, 50, 80];
+
+// ── 風の流れ(ogn.ezoe.net と同じ表示) ──
+// 地上 = 気象庁アメダスの実測(10分平均・10分毎)を約10km 格子に補間したもの / 上空 = 気象庁 MSM の予報。
+// データは /api/wind(この端末のサーバが ogn.ezoe.net から中継し、滑空場の周辺だけ切り出す)。
+const WIND_LABEL: Record<string, string> = { sfc: "地上（アメダス実測）", "975": "約1,000ft（975hPa）", "950": "約2,000ft（950hPa）", "850": "約5,000ft（850hPa）" };
+const WIND_COLORS = ["#1565c0", "#0288d1", "#00897b", "#7cb342", "#f9a825", "#ef6c00", "#d32f2f", "#880e4f"];
+const WIND_MAX_MS = 20;               // この風速(約39kt)以上で最も濃い色
+const AMEDAS_NEAR_KM = 30;            // 凡例に「近くのアメダス」の実測値を出す距離
+// 出典(地図右下)。アメダスは気象庁ホームページのデータを補間・加工している旨を書く(気象庁ホームページ利用規約)
+const WIND_ATTR = {
+  obs: "風（地上）: <a href='https://www.jma.go.jp/bosai/amedas/' target='_blank' rel='noopener'>気象庁ホームページ「アメダス」</a>を加工して作成",
+  forecast: "風（上空）: 気象庁 MSM（<a href='https://open-meteo.com/' target='_blank' rel='noopener'>Open-Meteo</a> CC BY 4.0）",
+};
+type WindGrid = { header: { nx: number; ny: number; la1: number; lo1: number; dx: number; dy: number }; data: (number | null)[] }[];
+type AmedasStation = { name: string; lat: number; lon: number; ms: number; dir: number | null };
+function isoJstLabel(iso: string): string {   // "2026-10-02T07:00:00Z" → "10/02 16:00"
+  const d = new Date(Date.parse(iso) + 9 * 3600e3);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+// 格子から双線形補間した風(向き=吹いてくる方角・真方位, 速さ m/s)。値の無い格子なら null
+function windAtGrid(g: WindGrid | null, lat: number, lon: number): { dir: number; ms: number } | null {
+  if (!g) return null;
+  const h = g[0].header, U = g[0].data, V = g[1].data;
+  const fy = (h.la1 - lat) / h.dy, fx = (lon - h.lo1) / h.dx;
+  if (!(fx >= 0 && fy >= 0 && fx <= h.nx - 1 && fy <= h.ny - 1)) return null;
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(x0 + 1, h.nx - 1), y1 = Math.min(y0 + 1, h.ny - 1);
+  const tx = fx - x0, ty = fy - y0;
+  const corners = [y0 * h.nx + x0, y0 * h.nx + x1, y1 * h.nx + x0, y1 * h.nx + x1];
+  if (corners.some((i) => U[i] == null || V[i] == null)) return null;
+  const bl = (A: (number | null)[]) => ((A[corners[0]] as number) * (1 - tx) + (A[corners[1]] as number) * tx) * (1 - ty) +
+                                      ((A[corners[2]] as number) * (1 - tx) + (A[corners[3]] as number) * tx) * ty;
+  const u = bl(U), v = bl(V);
+  return { dir: (Math.atan2(-u, -v) * 180 / Math.PI + 360) % 360, ms: Math.hypot(u, v) };
+}
+function windText(w: { dir: number | null; ms: number } | null): string {
+  if (!w) return "—";
+  if (w.ms < 0.5 || w.dir == null) return "静穏";
+  const d = Math.round(w.dir / 10) * 10 || 360;   // 航空の慣例: 10°単位・北は 360
+  return `${String(d).padStart(3, "0")}° ${Math.round(w.ms * 1.94384)}kt（${w.ms.toFixed(1)}m/s）`;
+}
 // 気象庁ナウキャストのタイルは偶数ズーム(4/6/8/10)にしか無い(奇数は空画像)。タイルの倍率を偶数へ切り下げ、
 // 奇数ズームでは1つ下の偶数タイルを拡大表示する(5→4, 7→6, 9→8。11以上は10、3以下は4)。
 type ClampZoomProto = { _clampZoom(zoom: number): number };
@@ -1591,6 +1632,98 @@ export default function FlightMap() {
     return () => { cancelled = true; clearInterval(timer); if (layer) map.removeLayer(layer); };
   }, [mapReady, units.rainRadar]);
 
+  // ── 風の流れ。設定「風の流れ」でON/OFF(既定OFF)、高さは 地上(アメダス実測)/1,000/2,000/5,000ft(MSM 予報) ──
+  // 粒子は leaflet-velocity(同梱)。windPane(320)= 雨雲(300)の上・滑空場/同心円(350)/航跡/機体の下、地形が透ける濃さ。
+  // 5分毎に /api/wind/meta を確認し、時刻が変わっていれば格子を取り直す(地上は10分毎・上空は3時間毎に更新される)。
+  const [windInfo, setWindInfo] = useState<{ title: string; time: string; at: string } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !units.windFlow) { setWindInfo(null); return; }
+    if (!map.getPane("windPane")) {
+      const pane = map.createPane("windPane");
+      pane.style.zIndex = "320";
+      pane.style.pointerEvents = "none";
+      pane.style.opacity = "0.75";
+    }
+    const level = units.windLevel;
+    const lat = units.airfield.latitude, lon = units.airfield.longitude, afName = units.airfield.name;
+    const title = WIND_LABEL[level] || level;
+    let cancelled = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let layer: any = null;
+    let key = "";
+    let grid: WindGrid | null = null;
+    let stations: AmedasStation[] | null = null;
+    let attr: string | null = null;
+    const setAttr = (a: string | null) => {
+      const ac = map.attributionControl;
+      if (!ac || attr === a) return;
+      if (attr) ac.removeAttribution(attr);
+      attr = a;
+      if (a) ac.addAttribution(a);
+    };
+    const nearestAmedas = (): (AmedasStation & { km: number }) | null => {
+      if (!stations) return null;
+      const kx = 111.32 * Math.cos(lat * Math.PI / 180);
+      let best: AmedasStation | null = null, bd = Infinity;
+      for (const st of stations) {
+        const d = Math.hypot((st.lat - lat) * 110.57, (st.lon - lon) * kx);
+        if (d < bd) { bd = d; best = st; }
+      }
+      return best && bd <= AMEDAS_NEAR_KM ? { ...best, km: bd } : null;
+    };
+    const load = async () => {
+      try {
+        // leaflet-velocity はグローバルの L に velocityLayer を足す
+        (window as unknown as { L: typeof L }).L = L;
+        await import("@/lib/vendor/leaflet-velocity.min.js");
+        const rm = await fetch("/api/wind/meta", { cache: "no-store" });
+        if (!rm.ok) throw new Error(String(rm.status));
+        const meta = (await rm.json()) as { levels?: Record<string, { valid: string; kind?: string }> };
+        const info = meta.levels?.[level];
+        if (!info) throw new Error("no data");
+        const k = `${level}@${info.valid}`;
+        if (k !== key) {
+          const qs = `lat=${lat}&lon=${lon}`;
+          const rg = await fetch(`/api/wind/${level}?${qs}`);
+          if (!rg.ok) throw new Error(String(rg.status));
+          const data = (await rg.json()) as WindGrid;
+          let st: AmedasStation[] | null = null;
+          if (level === "sfc") {
+            const ra = await fetch(`/api/wind/amedas?${qs}`);
+            if (ra.ok) st = ((await ra.json()) as { stations?: AmedasStation[] }).stations || null;
+          }
+          if (cancelled) return;
+          grid = data; stations = st; key = k;
+          if (!layer) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            layer = (L as any).velocityLayer({
+              data, displayValues: false, paneName: "windPane",
+              minVelocity: 0, maxVelocity: WIND_MAX_MS, colorScale: WIND_COLORS,
+              velocityScale: 0.007, particleAge: 64, lineWidth: 1.5, particleMultiplier: 1 / 320, frameRate: 20, opacity: 0.95,
+            });
+            layer.addTo(map);
+          } else {
+            layer.setData(data);
+          }
+        }
+        if (cancelled) return;
+        setAttr(info.kind === "obs" ? WIND_ATTR.obs : WIND_ATTR.forecast);
+        const near = level === "sfc" ? nearestAmedas() : null;
+        setWindInfo({
+          title,
+          time: `${isoJstLabel(info.valid)} JST ${info.kind === "obs" ? "観測" : "予報"}`,
+          at: near ? `${afName}: ${near.name}アメダス ${windText(near)}` : `${afName}: ${windText(windAtGrid(grid, lat, lon))}`,
+        });
+      } catch {
+        if (!cancelled) setWindInfo({ title, time: "取得できません", at: "" });
+      }
+    };
+    load();
+    const timer = setInterval(load, 5 * 60_000);
+    return () => { cancelled = true; clearInterval(timer); if (layer) map.removeLayer(layer); setAttr(null); };
+  }, [mapReady, units.windFlow, units.windLevel, units.airfield.latitude, units.airfield.longitude, units.airfield.name]);
+
   // ── 選択機体の「このフライト」の航跡(実線)。地図の余白クリックで選択解除→消える ──
   // 航跡はサーバのメモリ上にあり、離陸から着陸まで。着陸後も次のフライトが始まるまで残る。
   useEffect(() => {
@@ -1824,29 +1957,51 @@ export default function FlightMap() {
               </button>
             </div>
 
-            {/* 雨雲レーダーの凡例(地図左下) */}
-            {units.rainRadar && radarTime && (
-              <div
-                className="absolute z-[1000] rounded-md"
-                style={{
-                  left: 8, bottom: 8, padding: "5px 7px 4px", fontSize: 11, color: "#333",
-                  background: "rgba(255,255,255,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.25)", pointerEvents: "none",
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap" }}>
-                  雨雲レーダー <span style={{ fontWeight: 400, color: "#555" }}>{radarTime}</span>
-                </div>
-                <div style={{ display: "flex" }}>
-                  {RADAR_COLORS.map((c) => (
-                    <span key={c} style={{ width: 20, height: 9, background: c, border: "1px solid rgba(0,0,0,0.08)" }} />
-                  ))}
-                </div>
-                <div style={{ display: "flex", marginLeft: 20 }}>
-                  {RADAR_STEPS.map((v) => (
-                    <span key={v} style={{ width: 20, marginLeft: -4, fontSize: 9, color: "#555" }}>{v}</span>
-                  ))}
-                  <span style={{ marginLeft: 2, fontSize: 9, color: "#555" }}>mm/h</span>
-                </div>
+            {/* 左下の凡例(表示中のものだけ縦に積む。両方なら雨雲レーダーが上・風の流れが下) */}
+            {((units.rainRadar && radarTime) || (units.windFlow && windInfo)) && (
+              <div className="absolute z-[1000]" style={{ left: 8, bottom: 8, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, pointerEvents: "none" }}>
+                {units.rainRadar && radarTime && (
+                  <div
+                    className="rounded-md"
+                    style={{
+                      padding: "5px 7px 4px", fontSize: 11, color: "#333",
+                      background: "rgba(255,255,255,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap" }}>
+                      雨雲レーダー <span style={{ fontWeight: 400, color: "#555" }}>{radarTime}</span>
+                    </div>
+                    <div style={{ display: "flex" }}>
+                      {RADAR_COLORS.map((c) => (
+                        <span key={c} style={{ width: 20, height: 9, background: c, border: "1px solid rgba(0,0,0,0.08)" }} />
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", marginLeft: 20 }}>
+                      {RADAR_STEPS.map((v) => (
+                        <span key={v} style={{ width: 20, marginLeft: -4, fontSize: 9, color: "#555" }}>{v}</span>
+                      ))}
+                      <span style={{ marginLeft: 2, fontSize: 9, color: "#555" }}>mm/h</span>
+                    </div>
+                  </div>
+                )}
+                {units.windFlow && windInfo && (
+                  <div
+                    className="rounded-md"
+                    style={{
+                      padding: "5px 7px 4px", fontSize: 11, color: "#333",
+                      background: "rgba(255,255,255,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap" }}>
+                      風 {windInfo.title} <span style={{ fontWeight: 400, color: "#555" }}>{windInfo.time}</span>
+                    </div>
+                    <div style={{ width: 160, height: 8, borderRadius: 2, border: "1px solid rgba(0,0,0,0.08)", background: `linear-gradient(90deg, ${WIND_COLORS.join(", ")})` }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", width: 172, fontSize: 9, color: "#555" }}>
+                      <span>0</span><span>10</span><span>20</span><span>30</span><span>40kt</span>
+                    </div>
+                    {windInfo.at && <div style={{ marginTop: 2, fontWeight: 600, color: "#1b3a5c", whiteSpace: "nowrap" }}>{windInfo.at}</div>}
+                  </div>
+                )}
               </div>
             )}
 

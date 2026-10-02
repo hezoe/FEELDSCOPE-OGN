@@ -11,6 +11,7 @@ import {
   ClimbRateUnit,
   DistanceUnit,
   DisplayNameMode,
+  WindLevel,
   AirfieldConfig,
   AdsbConfig,
   MapSource,
@@ -31,6 +32,8 @@ interface UnitContextType {
   setOpenOgn: (v: boolean) => void;
   setRangeRings: (v: boolean) => void;
   setRainRadar: (v: boolean) => void;
+  setWindFlow: (v: boolean) => void;
+  setWindLevel: (v: WindLevel) => void;
   setMapSource: (m: MapSource) => void;
 }
 
@@ -49,6 +52,8 @@ const UnitContext = createContext<UnitContextType>({
   setOpenOgn: () => {},
   setRangeRings: () => {},
   setRainRadar: () => {},
+  setWindFlow: () => {},
+  setWindLevel: () => {},
   setMapSource: () => {},
 });
 
@@ -153,6 +158,8 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setOpenOgn: (openOgn: boolean) => updateView({ openOgn }),
         setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
         setRainRadar: (rainRadar: boolean) => update({ rainRadar }),
+        setWindFlow: (windFlow: boolean) => update({ windFlow }),
+        setWindLevel: (windLevel: WindLevel) => update({ windLevel }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >
