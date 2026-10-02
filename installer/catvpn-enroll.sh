@@ -4,12 +4,19 @@
 # 1コマンドで WireGuard + SSH CA セットアップを完了する。
 #
 # Usage:
-#   sudo ./catvpn-enroll.sh <TOKEN>           # トークンモード (admin手渡し)
-#   sudo ./catvpn-enroll.sh --auto            # 自動モード (hostname経由でVPSの保留トークンを使用)
+#   sudo ./catvpn-enroll.sh <TOKEN>           # トークンモード (admin手渡し・64桁の16進)
+#   sudo ./catvpn-enroll.sh --auto            # 自動モード (トークン不要。下記)
+#   sudo ./catvpn-enroll.sh --auto --retry    # 再試行タイマーからの呼び出し
 #   sudo ./catvpn-enroll.sh <TOKEN> <API_URL> # API URLを上書き
 #
 # Defaults:
 #   API_URL = https://cathub.ezoe.net
+#
+# 自動モード: hostname の保留トークン(/claim)が無ければ、MAC 由来の名前(feeldscope-xxxxxx)で
+#   /self-enroll に登録を申請する。ハブは 2026-10-02 から承認制で、申請は「承認待ち」(HTTP 202)になり
+#   管理者に通知される。承認待ちの間は再試行タイマー(catvpn-enroll-retry.timer, 10分ごと)を入れて
+#   申請し直し、承認されたら自動で加入してタイマーを止める。却下(403)・14日たっても承認されない場合も止める。
+#   状態は /var/lib/catvpn-client/enroll-status に書く(設定画面の表示用)。
 #
 # 冪等: 既に /etc/wireguard/wg0.conf がある場合は何もせず終了 (0で正常終了)。
 
@@ -17,18 +24,24 @@ set -euo pipefail
 
 MODE=""
 TOKEN=""
+RETRY=0
 API="https://cathub.ezoe.net"
 
 if [ "${1:-}" = "--auto" ]; then
     MODE="auto"
-    API="${2:-$API}"
+    shift
+    if [ "${1:-}" = "--retry" ]; then
+        RETRY=1
+        shift
+    fi
+    API="${1:-$API}"
 elif [ -n "${1:-}" ]; then
     MODE="token"
     TOKEN="$1"
     API="${2:-$API}"
 else
     echo "Usage: $0 <TOKEN> [API_URL]" >&2
-    echo "       $0 --auto [API_URL]" >&2
+    echo "       $0 --auto [--retry] [API_URL]" >&2
     exit 1
 fi
 
@@ -40,10 +53,90 @@ fi
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 err() { echo "ERROR: $*" >&2; }
 
+# ---------- 登録の状態と再試行タイマー ----------
+STATUS_DIR=/var/lib/catvpn-client
+STATUS_FILE="$STATUS_DIR/enroll-status"
+RETRY_MAX_DAYS=14
+RETRY_UNIT=/etc/systemd/system/catvpn-enroll-retry
+
+status_get() { sed -n "s/^$1=//p" "$STATUS_FILE" 2>/dev/null | head -1 || true; }
+# 電池の無い Pi は起動直後の時計が古い(2022年など)。年が 2025 未満の時刻は記録・比較に使わない
+clock_ok() { [ "$(date +%Y)" -ge 2025 ]; }
+
+# write_status <state> <hostname> <message> [requested_at]
+#   state: pending(承認待ち) / error(申請できなかった) / rejected(却下) / expired(期限切れ) / enrolled(加入済み)
+write_status() {
+    local first
+    first=$(status_get first_pending_at)
+    case "$1" in
+        pending|error) [ -z "$first" ] && clock_ok && first=$(date -u +%Y-%m-%dT%H:%M:%SZ) ;;
+        *) first="" ;;
+    esac
+    install -d -m 755 "$STATUS_DIR"
+    {
+        echo "state=$1"
+        echo "hostname=$2"
+        echo "message=$(echo "$3" | tr '\n' ' ' | cut -c1-300)"
+        echo "requested_at=${4:-}"
+        echo "first_pending_at=$first"
+        echo "checked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "$STATUS_FILE.tmp"
+    mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+    chmod 644 "$STATUS_FILE"
+}
+
+retry_timer_enable() {
+    local svc tmr
+    svc="[Unit]
+Description=CATVPN registration retry (until approved by the administrator)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/etc/wireguard/wg0.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/catvpn-enroll --auto --retry
+"
+    tmr="[Unit]
+Description=CATVPN registration retry every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
+"
+    if [ "$(cat "$RETRY_UNIT.service" 2>/dev/null)" != "$svc" ] || [ "$(cat "$RETRY_UNIT.timer" 2>/dev/null)" != "$tmr" ]; then
+        printf '%s' "$svc" > "$RETRY_UNIT.service"
+        printf '%s' "$tmr" > "$RETRY_UNIT.timer"
+        systemctl daemon-reload
+    fi
+    systemctl enable --now catvpn-enroll-retry.timer >/dev/null 2>&1 || true
+}
+
+retry_timer_disable() {
+    [ -f "$RETRY_UNIT.timer" ] || return 0
+    systemctl disable --now catvpn-enroll-retry.timer >/dev/null 2>&1 || true
+}
+
 # ---------- 0. Idempotency: skip if already enrolled ----------
 if [ -f /etc/wireguard/wg0.conf ] && grep -q "^Address" /etc/wireguard/wg0.conf; then
     log "Already enrolled (/etc/wireguard/wg0.conf exists). Nothing to do."
+    retry_timer_disable
     exit 0
+fi
+
+# 再試行タイマーからの呼び出し: 申請から RETRY_MAX_DAYS 日たっても承認されなければやめる
+if [ "$RETRY" = 1 ]; then
+    FIRST=$(status_get first_pending_at)
+    if [ -n "$FIRST" ] && clock_ok && \
+       [ $(( $(date +%s) - $(date -d "$FIRST" +%s 2>/dev/null || date +%s) )) -gt $(( RETRY_MAX_DAYS * 86400 )) ]; then
+        write_status expired "$(status_get hostname)" "申請から${RETRY_MAX_DAYS}日たっても承認されなかったため、再試行をやめました。設定画面からもう一度申請できます。"
+        retry_timer_disable
+        log "Approval did not arrive within ${RETRY_MAX_DAYS} days. Stopped retrying."
+        exit 0
+    fi
 fi
 
 # ---------- 1. prerequisites ----------
@@ -125,9 +218,9 @@ print(json.dumps({
 }))
 " > "$BODY_FILE"
 
-    HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/claim" \
+    HTTP_CODE=$(curl -sS -m 30 -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/claim" \
         -H "Content-Type: application/json" \
-        --data-binary "@$BODY_FILE")
+        --data-binary "@$BODY_FILE") || HTTP_CODE=000
 
     if [ "$HTTP_CODE" = "200" ]; then
         log "  /claim succeeded with current hostname"
@@ -145,14 +238,32 @@ print(json.dumps({
 }))
 " > "$BODY_FILE"
 
-        HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/self-enroll" \
+        HTTP_CODE=$(curl -sS -m 30 -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/self-enroll" \
             -H "Content-Type: application/json" \
-            --data-binary "@$BODY_FILE")
+            --data-binary "@$BODY_FILE") || HTTP_CODE=000
 
+        resp_field() { python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get(sys.argv[2],''))" "$RESP_FILE" "$1" 2>/dev/null || true; }
+        if [ "$HTTP_CODE" = "202" ]; then
+            # 承認制: 管理者が承認するまで待つ。承認されたら再試行タイマーが加入させる
+            write_status pending "$(resp_field hostname)" "$(resp_field message)" "$(resp_field requested_at)"
+            [ "$RETRY" = 1 ] || retry_timer_enable
+            log "  Waiting for administrator approval ($(resp_field hostname))."
+            log "  承認待ちです。管理者が承認すると、自動で接続します（10分ごとに確認）。"
+            exit 0
+        fi
+        if [ "$HTTP_CODE" = "403" ] && [ "$(resp_field status)" = "rejected" ]; then
+            write_status rejected "$CATVPN_HOSTNAME.feeldscope.wg" "$(resp_field error)"
+            retry_timer_disable
+            log "  The registration request was rejected by the administrator. Stopped retrying."
+            exit 0
+        fi
         if [ "$HTTP_CODE" != "200" ]; then
             log "  /self-enroll also failed (HTTP $HTTP_CODE). Skipping auto-enrollment."
-            cat "$RESP_FILE" >&2
+            cat "$RESP_FILE" >&2 2>/dev/null || true
             echo >&2
+            # ネット不通など: 再試行タイマーで申請し直す(RETRY_MAX_DAYS 日まで)
+            write_status error "$CATVPN_HOSTNAME.feeldscope.wg" "HTTP $HTTP_CODE $(head -c 200 "$RESP_FILE" 2>/dev/null)"
+            [ "$RETRY" = 1 ] || retry_timer_enable
             exit 0
         fi
         log "  /self-enroll succeeded"
@@ -329,5 +440,8 @@ if ping -c 2 -W 2 "$CATVPN_DNS_SERVER" >/dev/null 2>&1; then
 else
     log "  WARNING: ping to hub failed (may take a moment to converge)"
 fi
+
+write_status enrolled "$CATVPN_HOSTNAME" "加入しました（$CATVPN_ASSIGNED_IP）"
+retry_timer_disable
 
 log "Done."

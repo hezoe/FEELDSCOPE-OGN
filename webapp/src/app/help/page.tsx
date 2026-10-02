@@ -513,6 +513,7 @@ function ManualContent() {
 
         <Section id="settings-remote-support" heading="3-12. リモートサポート（CATVPN）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>登録（トークン不要）</strong>: 新しくインストールした端末は、自動でサポート担当に登録を申請します（設定画面の「登録を申請する」でも申請できます）。サポート担当が<strong>承認すると自動で接続</strong>され、リモートサポートが ON になります（承認待ちの間は10分ごとに確認・14日で打ち切り。不要なら下のスイッチで OFF にできます）。急ぐときは、画面に出る申請名（例: <code>feeldscope-49f8e9</code>）をサポート担当にお伝えください。登録トークン（64桁の16進）を受け取った場合は「登録トークンをお持ちの場合」から登録することもできます。</li>
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
             <li><strong>ONにすると、自分でOFFにするまで有効なまま</strong>です。再起動してもONのままです。OFFにすれば即座に切れます。用が済んだらOFFに戻してください。</li>
             <li>ON の間は<strong>接続が切れても自動で復旧</strong>を試みます。通信が5分以上途切れるとトンネルを繋ぎ直します（再試行は10分間隔）。</li>
@@ -739,11 +740,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.24 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.24</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="リモートサポートの登録にトークンが不要になりました（承認制）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>新しくインストールした端末は、<strong>自動でサポート担当に登録を申請</strong>します。サポート担当が承認すると、<strong>10分以内に自動で接続</strong>されます（承認待ちの間は10分ごとに確認・14日で打ち切り）。トークンを受け取って入力する必要はありません。</li>
+          <li>設定画面のリモートサポートに「<strong>登録を申請する</strong>」ボタンと、承認待ち・却下などの状態を表示するようにしました。急ぐときは、画面に出る申請名（例: <code>feeldscope-49f8e9</code>）をサポート担当にお伝えください。</li>
+          <li>これまでは中継サーバー側の変更（2026年7月）以降、新しい端末の自動登録がすべて失敗していました。また、設定画面のトークン欄は32桁を求めていましたが、中継サーバーは64桁しか受け付けないため登録できませんでした。トークン欄は「登録トークンをお持ちの場合」に移し、64桁に直しました。</li>
+          <li>承認されて登録されると、リモートサポートは ON になります（不要なら OFF にできます）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.23 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.23</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-02</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="FEELDSCOPE 専用の SD カードイメージを公開しました（簡易インストール版）">

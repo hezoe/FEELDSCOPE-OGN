@@ -41,7 +41,10 @@ interface SystemStatus {
   network: NetworkStatus | null;
   version: { current: string; latest: string | null; updateAvailable: boolean } | null;
   auto_reboot: { enabled: boolean; hour: number; minute: number } | null;
-  remote_support: { configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string } | null;
+  remote_support: {
+    configured: boolean; enabled: boolean; active: boolean; catvpn_hostname?: string; assigned_ip?: string;
+    enroll?: { state: string; hostname?: string; message?: string; requested_at?: string; checked_at?: string };
+  } | null;
   /** true = デモ機(別サーバ上)。端末本体の設定は変更できないので該当カードを出さない */
   host_locked?: boolean;
 }
@@ -1491,26 +1494,39 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {status?.remote_support && !status.remote_support.configured ? (
                 <>
-                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                    CATVPN未登録です。管理者から発行された<strong>登録トークン</strong>を入力すると、
-                    リモートサポートを有効化できます。
-                  </p>
-                  <input
-                    type="text"
-                    value={enrollToken}
-                    onChange={(e) => setEnrollToken(e.target.value.trim())}
-                    placeholder="32桁の16進トークン"
-                    className="w-full px-3 py-1.5 text-sm rounded font-mono"
-                    style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-                  />
-                  <div className="flex gap-3 items-center">
+                  {(() => {
+                    // トークン不要の登録申請(承認制)の状況。catvpn-enroll が書く状態ファイルを /api/system が返す
+                    const en = status.remote_support.enroll;
+                    const when = (iso?: string) => {
+                      if (!iso) return "";
+                      const d = new Date(iso);
+                      return isNaN(d.getTime()) ? "" : d.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                    };
+                    const box = (color: string, body: React.ReactNode) => (
+                      <div className="rounded p-3 text-sm" style={{ border: `1px solid ${color}`, background: "var(--color-bg-secondary)", color: "var(--color-text-primary)" }}>{body}</div>
+                    );
+                    if (en?.state === "pending") return box("var(--color-accent)", <>
+                      <strong>承認待ちです</strong>（申請名 <code className="font-mono select-all">{en.hostname}</code>{en.requested_at ? `・${when(en.requested_at)} に申請` : ""}）。<br />
+                      管理者が承認すると、<strong>自動で接続します</strong>（10分ごとに確認）。急ぐときは管理者に申請名をお伝えください。
+                    </>);
+                    if (en?.state === "rejected") return box("var(--color-danger)", <>
+                      <strong>登録の申請は管理者が却下しました。</strong>心当たりがない場合は管理者にお問い合わせください。
+                    </>);
+                    if (en?.state === "expired") return box("var(--color-warning)", <>
+                      申請から14日たっても承認されなかったため、自動の申請を止めました。必要なら「登録を申請する」でもう一度申請してください。
+                    </>);
+                    if (en?.state === "error") return box("var(--color-warning)", <>
+                      登録を申請できませんでした（{en.message || "ネットワーク不通など"}）。10分ごとに自動で申請し直しています。
+                    </>);
+                    return (
+                      <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                        CATVPN未登録です。「登録を申請する」を押すと管理者に申請が届き、承認されると自動でリモートサポートにつながります（<strong>トークンは不要</strong>です）。
+                      </p>
+                    );
+                  })()}
+                  <div className="flex gap-3 items-center flex-wrap">
                     <button
                       onClick={async () => {
-                        if (!/^[a-f0-9]{32}$/i.test(enrollToken)) {
-                          setError("トークン形式が不正です (32桁の16進数)");
-                          return;
-                        }
-                        if (!confirm("CATVPNに登録します。よろしいですか?\n登録後はリモートサポート用の保守通信が許可されます。")) return;
                         setEnrolling(true);
                         setError(null);
                         setEnrollLog(null);
@@ -1518,38 +1534,82 @@ export default function SettingsPage() {
                           const res = await fetch("/api/system", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "catvpn-enroll", token: enrollToken }),
+                            body: JSON.stringify({ action: "catvpn-request" }),
                           });
                           const data = await res.json();
-                          if (!res.ok) {
-                            setError(data.error || "登録に失敗しました");
-                            setEnrollLog(data.log || null);
-                          } else {
-                            setEnrollLog(data.log || null);
-                            setEnrollToken("");
-                            remoteSupportSynced.current = false;
-                            await fetchStatus();
-                          }
+                          if (!res.ok || !data.ok) setError(data.message || data.error || "登録の申請に失敗しました");
+                          setEnrollLog(data.log || null);
+                          remoteSupportSynced.current = false;
+                          await fetchStatus();
                         } catch (err) {
-                          setError(err instanceof Error ? err.message : "登録通信に失敗しました");
+                          setError(err instanceof Error ? err.message : "登録の申請の通信に失敗しました");
                         }
                         setEnrolling(false);
                       }}
-                      disabled={enrolling || !enrollToken}
+                      disabled={enrolling}
                       className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
-                      style={{ background: "var(--color-accent)", color: "#fff", opacity: (enrolling || !enrollToken) ? 0.5 : 1, cursor: enrolling ? "wait" : "pointer" }}
+                      style={{ background: "var(--color-accent)", color: "#fff", opacity: enrolling ? 0.5 : 1, cursor: enrolling ? "wait" : "pointer" }}
                     >
-                      {enrolling ? "登録中..." : "登録する"}
+                      {enrolling ? "申請中..." : status.remote_support.enroll?.state === "pending" ? "今すぐ確認する" : "登録を申請する"}
                     </button>
                     <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      登録には10〜20秒程度かかります
+                      初回は WireGuard の導入で1〜2分かかることがあります
                     </span>
                   </div>
                   {enrollLog && (
                     <pre className="text-xs rounded p-2 max-h-48 overflow-auto" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>{enrollLog}</pre>
                   )}
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-xs" style={{ color: "var(--color-text-secondary)" }}>登録トークンをお持ちの場合</summary>
+                    <div className="space-y-2 mt-2">
+                      <input
+                        type="text"
+                        value={enrollToken}
+                        onChange={(e) => setEnrollToken(e.target.value.trim())}
+                        placeholder="64桁の16進トークン"
+                        className="w-full px-3 py-1.5 text-sm rounded font-mono"
+                        style={{ background: "var(--color-bg-primary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!/^[a-f0-9]{64}$/i.test(enrollToken)) {
+                            setError("トークン形式が不正です (64桁の16進数)");
+                            return;
+                          }
+                          if (!confirm("CATVPNに登録します。よろしいですか?\n登録後はリモートサポート用の保守通信が許可されます。")) return;
+                          setEnrolling(true);
+                          setError(null);
+                          setEnrollLog(null);
+                          try {
+                            const res = await fetch("/api/system", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "catvpn-enroll", token: enrollToken }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              setError(data.error || "登録に失敗しました");
+                              setEnrollLog(data.log || null);
+                            } else {
+                              setEnrollLog(data.log || null);
+                              setEnrollToken("");
+                              remoteSupportSynced.current = false;
+                              await fetchStatus();
+                            }
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "登録通信に失敗しました");
+                          }
+                          setEnrolling(false);
+                        }}
+                        disabled={enrolling || !enrollToken}
+                        className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+                        style={{ background: "var(--color-bg-tertiary)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)", opacity: (enrolling || !enrollToken) ? 0.5 : 1, cursor: enrolling ? "wait" : "pointer" }}
+                      >
+                        {enrolling ? "登録中..." : "トークンで登録する"}
+                      </button>
+                    </div>
+                  </details>
                   <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                    トークンは管理者にお問い合わせください。
                     登録すると WireGuard + SSH CA が自動セットアップされ、有効/無効の切替が可能になります。
                   </p>
                 </>

@@ -260,6 +260,41 @@ interface RemoteSupportStatus {
   active: boolean;           // systemctl is-active wg-quick@wg0
   catvpn_hostname?: string;  // FQDN like takikawa-01.feeldscope.wg (admin can ssh to this)
   assigned_ip?: string;      // CATVPN-assigned IP (e.g., 10.66.20.12)
+  enroll?: EnrollStatus;     // 未登録時の申請状況(catvpn-enroll が書く)
+}
+
+// トークン不要の登録申請(承認制)の状況。catvpn-enroll --auto が /var/lib/catvpn-client/enroll-status に書く。
+//   pending=承認待ち(承認されると再試行タイマーが自動で加入させる) / error=申請できなかった(再試行中)
+//   rejected=却下 / expired=14日たっても承認されず再試行をやめた / enrolled=加入済み
+interface EnrollStatus {
+  state: string;
+  hostname?: string;
+  message?: string;
+  requested_at?: string;
+  checked_at?: string;
+}
+
+const ENROLL_STATUS_PATH = "/var/lib/catvpn-client/enroll-status";
+
+async function getEnrollStatus(): Promise<EnrollStatus | undefined> {
+  try {
+    const data = await readFile(ENROLL_STATUS_PATH, "utf-8");
+    const kv: Record<string, string> = {};
+    for (const line of data.split("\n")) {
+      const m = line.match(/^(\w+)=(.*)$/);
+      if (m) kv[m[1]] = m[2].trim();
+    }
+    if (!kv.state) return undefined;
+    return {
+      state: kv.state,
+      hostname: kv.hostname || undefined,
+      message: kv.message || undefined,
+      requested_at: kv.requested_at || undefined,
+      checked_at: kv.checked_at || undefined,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
@@ -296,7 +331,8 @@ async function getRemoteSupportStatus(): Promise<RemoteSupportStatus> {
     }
   } catch { /* not enrolled yet */ }
 
-  return { configured, enabled, active, catvpn_hostname, assigned_ip };
+  const enroll = configured ? undefined : await getEnrollStatus();
+  return { configured, enabled, active, catvpn_hostname, assigned_ip, enroll };
 }
 
 async function setRemoteSupport(enable: boolean): Promise<void> {
@@ -625,15 +661,16 @@ export async function POST(request: Request) {
   // 認証ゲート: リモートサポート関連(ON/OFF・初回登録)以外の変更操作は
   // 「管理者ログイン or オペレーター(リモートサポート中の管理者)」が必須。
   // 閲覧(GET)は無認証。リモートサポートは失念時の唯一の解除導線なので、
-  //   トグル(remote-support-save)も初回登録(catvpn-enroll)も無認証で許可する。
+  //   トグル(remote-support-save)も初回登録(catvpn-enroll / catvpn-request)も無認証で許可する。
+  //   catvpn-request はハブへの「登録の申請」だけで、管理者が承認するまで VPN には入らない。
   // view-save = OpenなADS-B/OGN の表示ON/OFF。機微情報を含まない「表示設定」で、
   // 従来もブラウザ側で無認証に切替できていたため、端末保存化後も無認証で許可する。
-  const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll", "view-save"]);
+  const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll", "catvpn-request", "view-save"]);
 
   // 端末本体(OS)を操作するもの。デモ機ではサーバ自身を操作してしまうので、
   // 認証の有無に関係なく拒否する(無認証の remote-support-save も含む)。
   const HOST_ACTIONS = new Set([
-    "reboot", "shutdown", "hostname-save", "remote-support-save", "catvpn-enroll",
+    "reboot", "shutdown", "hostname-save", "remote-support-save", "catvpn-enroll", "catvpn-request",
     "auto-reboot-save", "wifi-save", "eth-save", "system-update", "overlay-enable", "overlay-disable",
   ]);
   if (HOST_ACTIONS.has(action) && isHostLocked()) {
@@ -784,11 +821,11 @@ export async function POST(request: Request) {
       }
 
       case "catvpn-enroll": {
-        const token = (body.token || "").trim();
-        // catvpn API のトークン仕様 (16進32文字)
-        if (!/^[a-f0-9]{32}$/i.test(token)) {
+        const token = (body.token || "").trim().toLowerCase();
+        // catvpn ハブ(/enroll)のトークン仕様は16進64文字(2026-10-02 まで画面側が32文字を要求していて登録できなかった)
+        if (!/^[a-f0-9]{64}$/.test(token)) {
           return NextResponse.json(
-            { error: "不正なトークン形式です。管理者から発行された32桁の16進文字列を入力してください。" },
+            { error: "不正なトークン形式です。管理者から発行された64桁の16進文字列を入力してください。" },
             { status: 400 }
           );
         }
@@ -819,6 +856,41 @@ export async function POST(request: Request) {
             { status: 500 }
           );
         }
+      }
+
+      case "catvpn-request": {
+        // トークン不要の登録申請(承認制)。ハブが「承認待ち」にして管理者に通知する。
+        // 承認待ちの間は catvpn-enroll が入れた再試行タイマーが10分ごとに申請し直し、承認されたら自動で加入する。
+        if (!existsSync("/usr/local/bin/catvpn-enroll")) {
+          return NextResponse.json(
+            { error: "登録スクリプトが見つかりません。先にシステムアップデートを実行してください。" },
+            { status: 500 }
+          );
+        }
+        let log = "";
+        try {
+          // WireGuard が未導入なら apt で入れるので長めに待つ
+          const { stdout, stderr } = await run(
+            "sudo",
+            ["-n", "/usr/local/bin/catvpn-enroll", "--auto"],
+            { maxBuffer: 4 * 1024 * 1024, timeout: 300_000 }
+          );
+          log = stdout + stderr;
+        } catch (e: unknown) {
+          const err = e as { stdout?: string; stderr?: string; message?: string };
+          return NextResponse.json(
+            { error: "登録の申請に失敗しました。ネットワークをご確認ください。", log: (err.stdout || "") + (err.stderr || "") || err.message || "" },
+            { status: 500 }
+          );
+        }
+        const st = await getRemoteSupportStatus();
+        const state = st.configured ? "enrolled" : st.enroll?.state;
+        const message =
+          state === "enrolled" ? "CATVPNに登録しました。リモートサポートが有効になりました。"
+          : state === "pending" ? "登録を申請しました。管理者が承認すると、自動で接続します（10分ごとに確認）。"
+          : state === "rejected" ? "この端末の登録申請は管理者が却下しました。"
+          : "申請できませんでした。ネットワークを確認してください（10分ごとに自動で申請し直します）。";
+        return NextResponse.json({ ok: state === "enrolled" || state === "pending", state, message, log });
       }
 
       case "auto-reboot-save": {
