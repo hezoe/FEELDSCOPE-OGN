@@ -219,7 +219,7 @@ function ManualContent() {
         </Section>
         <Section id="map-wind" heading="風の流れ（気象庁アメダス・MSM）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li>設定 → マップ表示の<strong>「風の流れ（気象庁）」</strong>で、風に乗って流れる<strong>粒子</strong>を地形が透ける濃さで地図に重ねます（既定は非表示）。粒子の<strong>色は風速</strong>（青＝弱い → 青緑 → 緑 → 黄 → 橙 → 赤 → 赤紫＝約40kt 以上）。</li>
+            <li>設定 → マップ表示の<strong>「風の流れ（気象庁）」</strong>で、風に乗って流れる<strong>粒子</strong>を地形が透ける濃さで地図に重ねます（既定は非表示）。ON/OFF と高さは<strong>機体（受信機）ごとに保存</strong>され、どのブラウザで開いても同じ表示になります。粒子の<strong>色は風速</strong>（青＝弱い → 青緑 → 緑 → 黄 → 橙 → 赤 → 赤紫＝約40kt 以上）。</li>
             <li><strong>高さ</strong>を選べます：<strong>地上</strong>＝気象庁アメダスの<strong>実測</strong>（10分平均の風向・風速、10分毎更新）を約10km の格子に補間したもの（観測点から離れた海上などには粒子を出しません）／<strong>1,000ft・2,000ft・5,000ft</strong>＝気象庁 MSM の<strong>予報</strong>（975／950／850hPa の気圧面の風・約10km 格子・3時間毎の予報。実際の高さは気圧によって変わります）。</li>
             <li>地図の<strong>左下</strong>に時刻（JST・観測／予報）と<strong>滑空場の風</strong>（風向＝吹いてくる方角・10°単位、風速 kt と m/s）を表示します。地上は<strong>近くのアメダス（30km 以内）の実測値</strong>をそのまま表示します。雨雲レーダーと両方表示するときは、雨雲レーダーの凡例が上・風の凡例が下になります。</li>
             <li>データは <strong>ogn.ezoe.net</strong> が気象庁から取り込んで整形したものを、この端末が中継して滑空場の周辺だけ表示します（表示には<strong>インターネット接続</strong>が必要）。アメダスは気象庁ホームページの公開データで公式の配信サービスではないため、気象庁の都合で止まることがあります（凡例に「取得できません」）。</li>
@@ -750,11 +750,23 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.26 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.26</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-03</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="風の流れの設定を機体ごとに保存">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>「風の流れ（気象庁）」の ON/OFF と高さを、OpenなADS-B／OGN と同じく<strong>機体（受信機）ごとに保存</strong>するようにしました。一度 ON にすると、クラブのどのブラウザ・端末で開いても風が表示されます（これまではブラウザごとの設定でした）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.25 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.25</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-03</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="風の流れを地図に表示（地上＝アメダス実測・上空＝MSM 予報）">

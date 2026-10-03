@@ -690,7 +690,7 @@ export default function SettingsPage() {
                   </div>
                 )}
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  風に乗って流れる粒子を地図に重ねます（色＝風速）。<strong>地上</strong>は気象庁アメダスの実測（10分平均・10分毎）、<strong>1,000ft／2,000ft／5,000ft</strong>は気象庁 MSM の予報（975／950／850hPa）です。左下に時刻と滑空場の風（地上は近くのアメダスの実測値）を表示します。データは ogn.ezoe.net 経由で取得します（インターネット接続が必要）。
+                  風に乗って流れる粒子を地図に重ねます（色＝風速）。<strong>地上</strong>は気象庁アメダスの実測（10分平均・10分毎）、<strong>1,000ft／2,000ft／5,000ft</strong>は気象庁 MSM の予報（975／950／850hPa）です。左下に時刻と滑空場の風（地上は近くのアメダスの実測値）を表示します。データは ogn.ezoe.net 経由で取得します（インターネット接続が必要）。<strong>この設定は機体（受信機）ごとに保存</strong>され、別のブラウザやURLで開いても同じ表示になります。
                 </p>
               </div>
             </div>

@@ -58,14 +58,15 @@ const UnitContext = createContext<UnitContextType>({
 });
 
 /**
- * OpenなADS-B/OGN の表示ON/OFF を端末(機体)側へ保存する。表示専用の非機微設定で、
+ * OpenなADS-B/OGN・風の流れ の表示設定を端末(機体)側へ保存する。表示専用の非機微設定で、
  * サーバ側 view-save も無認証で受ける。失敗は無視（ネットワーク不通でも表示は継続）。
  */
-function persistViewConfig(openAdsb: boolean, openOgn: boolean): void {
+type ViewKeys = "openAdsb" | "openOgn" | "windFlow" | "windLevel";
+function persistViewConfig(u: Pick<UnitPreferences, ViewKeys>): void {
   fetch("/api/system", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "view-save", openAdsb, openOgn }),
+    body: JSON.stringify({ action: "view-save", openAdsb: u.openAdsb, openOgn: u.openOgn, windFlow: u.windFlow, windLevel: u.windLevel }),
   }).catch(() => {});
 }
 
@@ -82,18 +83,18 @@ export function UnitProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         // Server airfield is the source of truth. Display-only unit prefs stay in localStorage.
         const airfield: AirfieldConfig = data.airfield_config ?? local.airfield;
-        // OpenなADS-B/OGN は「端末(機体)ごとの設定」。端末に保存があればそれを正本に採用。
-        // 無ければ(未設定/旧版) localStorage 値を尊重し、その値で端末を初期化(seed)する。
-        const view = data.view_config as { openAdsb?: boolean; openOgn?: boolean } | null | undefined;
+        // OpenなADS-B/OGN・風の流れ は「端末(機体)ごとの設定」。端末に保存があればそれを正本に採用
+        // (どのブラウザ・URL で開いても同じ表示)。無ければ(未設定/旧版) localStorage 値を尊重し、その値で端末を初期化(seed)する。
+        const view = data.view_config as { openAdsb?: boolean; openOgn?: boolean; windFlow?: boolean; windLevel?: WindLevel } | null | undefined;
         const merged: UnitPreferences = {
           ...local,
           airfield,
-          ...(view ? { openAdsb: !!view.openAdsb, openOgn: !!view.openOgn } : {}),
+          ...(view ? { openAdsb: !!view.openAdsb, openOgn: !!view.openOgn, windFlow: !!view.windFlow, windLevel: view.windLevel || "sfc" } : {}),
         };
         setUnits(merged);
         saveUnits(merged);
         setUnitsLoaded(true);
-        if (!view) persistViewConfig(merged.openAdsb, merged.openOgn);
+        if (!view) persistViewConfig(merged);
       })
       .catch(() => {
         setUnits(local);
@@ -107,13 +108,13 @@ export function UnitProvider({ children }: { children: ReactNode }) {
     saveUnits(next);
   }
 
-  // OpenなADS-B/OGN のトグル。ローカル即時反映(地図が即反応)に加え、端末側へ保存して
+  // OpenなADS-B/OGN・風の流れ のトグル。ローカル即時反映(地図が即反応)に加え、端末側へ保存して
   // 別ブラウザ/別URL/再訪でも維持されるようにする（オリジン単位の localStorage 依存を解消）。
-  function updateView(partial: Partial<Pick<UnitPreferences, "openAdsb" | "openOgn">>) {
+  function updateView(partial: Partial<Pick<UnitPreferences, ViewKeys>>) {
     const next = { ...units, ...partial };
     setUnits(next);
     saveUnits(next);
-    persistViewConfig(next.openAdsb, next.openOgn);
+    persistViewConfig(next);
   }
 
   function updateAirfield(airfield: AirfieldConfig) {
@@ -158,8 +159,8 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setOpenOgn: (openOgn: boolean) => updateView({ openOgn }),
         setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
         setRainRadar: (rainRadar: boolean) => update({ rainRadar }),
-        setWindFlow: (windFlow: boolean) => update({ windFlow }),
-        setWindLevel: (windLevel: WindLevel) => update({ windLevel }),
+        setWindFlow: (windFlow: boolean) => updateView({ windFlow }),
+        setWindLevel: (windLevel: WindLevel) => updateView({ windLevel }),
         setMapSource: (mapSource: MapSource) => update({ mapSource }),
       }}
     >

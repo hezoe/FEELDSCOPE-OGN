@@ -52,7 +52,8 @@ export interface UnitPreferences {
   rangeRings: boolean;
   /** 雨雲レーダー: 気象庁の高解像度降水ナウキャスト(5分毎・約1km)を地図に半透明で重ねる(既定ON・要インターネット) */
   rainRadar: boolean;
-  /** 風の流れ: 気象庁の風(地上=アメダス実測・上空=MSM 予報)を粒子で重ねる(既定OFF・要インターネット) */
+  /** 風の流れ: 気象庁の風(地上=アメダス実測・上空=MSM 予報)を粒子で重ねる(既定OFF・要インターネット)。
+   *  v1.4.26 から端末(機体)ごとの設定(view-config.json)。どのブラウザで開いても同じ表示 */
   windFlow: boolean;
   windLevel: WindLevel;
 }

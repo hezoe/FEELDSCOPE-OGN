@@ -81,7 +81,13 @@ async function saveAirfieldConfig(config: AirfieldConfig): Promise<void> {
 interface ViewConfig {
   openAdsb: boolean;
   openOgn: boolean;
+  // 風の流れ(v1.4.26 から端末保存): ON/OFF と高さ。旧版の view-config に無ければ OFF・地上
+  windFlow: boolean;
+  windLevel: WindLevelValue;
 }
+type WindLevelValue = "sfc" | "975" | "950" | "850";
+const WIND_LEVEL_VALUES: WindLevelValue[] = ["sfc", "975", "950", "850"];
+const toWindLevel = (v: unknown): WindLevelValue => (WIND_LEVEL_VALUES.includes(v as WindLevelValue) ? (v as WindLevelValue) : "sfc");
 
 // 端末に保存が無ければ null を返す（未設定と「明示的にOFF」を区別するため）。
 // クライアントは null のとき localStorage 値を尊重し、その値で端末を初期化(seed)する。
@@ -92,6 +98,8 @@ async function loadViewConfig(): Promise<ViewConfig | null> {
     return {
       openAdsb: parsed.openAdsb === true,
       openOgn: parsed.openOgn === true,
+      windFlow: parsed.windFlow === true,
+      windLevel: toWindLevel(parsed.windLevel),
     };
   } catch {
     return null;
@@ -663,7 +671,7 @@ export async function POST(request: Request) {
   // 閲覧(GET)は無認証。リモートサポートは失念時の唯一の解除導線なので、
   //   トグル(remote-support-save)も初回登録(catvpn-enroll / catvpn-request)も無認証で許可する。
   //   catvpn-request はハブへの「登録の申請」だけで、管理者が承認するまで VPN には入らない。
-  // view-save = OpenなADS-B/OGN の表示ON/OFF。機微情報を含まない「表示設定」で、
+  // view-save = OpenなADS-B/OGN・風の流れ の表示設定。機微情報を含まない「表示設定」で、
   // 従来もブラウザ側で無認証に切替できていたため、端末保存化後も無認証で許可する。
   const OPEN_ACTIONS = new Set(["remote-support-save", "catvpn-enroll", "catvpn-request", "view-save"]);
 
@@ -789,10 +797,12 @@ export async function POST(request: Request) {
       }
 
       case "view-save": {
-        // OpenなADS-B / OpenなOGN の表示ON/OFF を端末に保存（機体ごとの設定）。
+        // OpenなADS-B / OpenなOGN / 風の流れ の表示設定を端末に保存（機体ごとの設定）。
         const view: ViewConfig = {
           openAdsb: !!body.openAdsb,
           openOgn: !!body.openOgn,
+          windFlow: !!body.windFlow,
+          windLevel: toWindLevel(body.windLevel),
         };
         await saveViewConfig(view);
         return NextResponse.json({ ok: true, view });
