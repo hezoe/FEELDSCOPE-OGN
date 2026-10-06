@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import HelpHint from "@/components/HelpHint";
 
 interface OgnConfig {
@@ -73,8 +73,16 @@ interface OgnStatus {
   positionsLastMinute?: string;
 }
 
+/** OGN-receiver.conf の直接編集を受信機へ反映した記録（/api/ogn の receiverSync） */
+interface ReceiverSync {
+  lastApplied?: { at: string; changes: string[]; restart: string };
+  error?: { at: string; message: string };
+}
+
 export default function OgnPage() {
   const [config, setConfig] = useState<OgnConfig | null>(null);
+  const [receiverSync, setReceiverSync] = useState<ReceiverSync | null>(null);
+  const appliedAtRef = useRef<string | undefined>(undefined);
   const [status, setStatus] = useState<OgnStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -89,7 +97,14 @@ export default function OgnPage() {
     try {
       const res = await fetch("/api/ogn");
       const data = await res.json();
-      if (refreshConfig) setConfig(data.config);
+      const sync: ReceiverSync | null = data.receiverSync || null;
+      // 画面を開いている間に OGN-receiver.conf の変更が反映されたら、入力欄も読み直す
+      // （古い値のまま保存して元に戻さないため）
+      const appliedAt = sync?.lastApplied?.at;
+      const appliedNow = !refreshConfig && appliedAt !== undefined && appliedAt !== appliedAtRef.current;
+      appliedAtRef.current = appliedAt;
+      setReceiverSync(sync);
+      if (refreshConfig || appliedNow) setConfig(data.config);
       setStatus(data.status);
     } catch {
       setError("OGN情報の取得に失敗しました");
@@ -297,7 +312,24 @@ export default function OgnPage() {
           </div>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
             アンテナの実際の設置位置を入力してください。OGNネットワーク上の受信局位置として公開されます。
+            Google マップなどの座標（10進数の度）をそのまま入力できます。
           </p>
+          <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+            ここで保存すると <code>/boot/OGN-receiver.conf</code> も同じ値に書き換えます。
+            <code>OGN-receiver.conf</code> を直接書き換えた場合も、受信機名・緯度・経度・標高を
+            1分以内（SDカードをパソコンで書き換えた場合は次の起動時）に受信機へ反映します。
+          </p>
+          {receiverSync?.error && (
+            <div className="text-xs mt-2 px-3 py-2 rounded" style={{ background: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.5)", color: "var(--color-text-primary)" }}>
+              <b>OGN-receiver.conf の値を受信機に反映していません</b>（{fmtTime(receiverSync.error.at)}）: {receiverSync.error.message}
+            </div>
+          )}
+          {receiverSync?.lastApplied && Date.now() - Date.parse(receiverSync.lastApplied.at) < 7 * 86400_000 && (
+            <div className="text-xs mt-2 px-3 py-2 rounded" style={{ background: "rgba(37,99,235,0.10)", border: "1px solid rgba(37,99,235,0.4)", color: "var(--color-text-primary)" }}>
+              OGN-receiver.conf の変更を受信機に反映しました（{fmtTime(receiverSync.lastApplied.at)}）:{" "}
+              {receiverSync.lastApplied.changes.join("、")} — {receiverSync.lastApplied.restart}
+            </div>
+          )}
         </Card>
 
         {/* RF Settings (basic) */}
@@ -550,6 +582,11 @@ function Card({ title, children, helpId }: { title: string; children: React.Reac
 
 function fmt(v: number | undefined): string {
   return typeof v === "number" && Number.isFinite(v) ? String(v) : "—";
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function ReportCard({ report }: { report: SaveReport }) {

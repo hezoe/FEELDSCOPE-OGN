@@ -322,18 +322,45 @@ log_info "[6/9] Configuring OGN for Japan FLARM..."
 OGN_CONF="/home/pi/rtlsdr-ogn.conf"
 OGN_CONF_BOOT="/boot/rtlsdr-ogn.conf"
 
-# Pull receiver name and position from /boot/OGN-receiver.conf if user already set them
-EXISTING_NAME=""
-EXISTING_LAT=""
-EXISTING_LON=""
+# Pull receiver name, position and altitude from /boot/OGN-receiver.conf.
+# OGN の設定マネージャと同じ読み方（CR を除いて bash で source）で読む。以前は grep '^Longitude='
+# で読んでいたため、bash では読める書き方（行頭の空白など）で読めず、経度だけ既定値の
+# 139.7548（東京駅）が入って ogn.ezoe.net に栃木県付近と表示された（2026-10 長野の受信局）。
+# 読めない値を東京駅などの既定値で黙って埋めない。インストール後に OGN-receiver.conf を
+# 書き換えても、FEELDSCOPE が受信機へ反映する（webapp の ogn-receiver-sync）。
+is_num() { [[ "$1" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; }
+EXISTING_NAME=""; EXISTING_LAT=""; EXISTING_LON=""; EXISTING_ALT=""
 if [ -f /boot/OGN-receiver.conf ]; then
-    EXISTING_NAME=$(grep -i '^ReceiverName=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
-    EXISTING_LAT=$(grep -i '^Latitude=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
-    EXISTING_LON=$(grep -i '^Longitude=' /boot/OGN-receiver.conf 2>/dev/null | head -1 | cut -d'"' -f2)
+    IFS='|' read -r EXISTING_NAME EXISTING_LAT EXISTING_LON EXISTING_ALT < <(
+        env -i PATH=/usr/bin:/bin bash --noprofile --norc -c \
+          'source <(tr -d "\r" < /boot/OGN-receiver.conf) >/dev/null 2>&1; printf "%s|%s|%s|%s\n" "$ReceiverName" "$Latitude" "$Longitude" "$Altitude"'
+    ) || true
 fi
-RECV_NAME="${EXISTING_NAME:-NEWRECV01}"
-LAT_VAL="${EXISTING_LAT:-35.6977}"
-LON_VAL="${EXISTING_LON:-139.7548}"
+# 公式の設定マネージャが一度動いていれば /home/pi/rtlsdr-ogn.conf に座標がある（読めなかった項目の控え）
+prev_conf_value() { grep -E "^[[:space:]{]*$1[[:space:]]*=" /home/pi/rtlsdr-ogn.conf 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*([-+0-9.]+).*/\1/'; }
+
+RECV_NAME="$EXISTING_NAME"
+if ! [[ "$RECV_NAME" =~ ^[A-Za-z0-9]{1,9}$ ]]; then
+    log_warn "受信機名（ReceiverName）が読めないか英数字9文字を超えています: '${EXISTING_NAME}' → 仮の名前 NEWRECV01 で設定します"
+    RECV_NAME="NEWRECV01"
+fi
+LAT_VAL="$EXISTING_LAT"; LON_VAL="$EXISTING_LON"
+if ! is_num "$LAT_VAL" || ! is_num "$LON_VAL"; then
+    log_warn "座標（Latitude/Longitude）が /boot/OGN-receiver.conf から読めません: '${EXISTING_LAT}' / '${EXISTING_LON}'"
+    LAT_VAL="$(prev_conf_value Latitude)"; LON_VAL="$(prev_conf_value Longitude)"
+    if is_num "$LAT_VAL" && is_num "$LON_VAL"; then
+        log_warn "→ OGN 公式の設定で使っていた座標 ${LAT_VAL} / ${LON_VAL} を引き継ぎます"
+    else
+        log_warn "→ 座標を 0 / 0 で仮置きします。OGN-receiver.conf の Latitude/Longitude を書くか、FEELDSCOPE の設定画面（OGN設定）で入力してください"
+        LAT_VAL="0"; LON_VAL="0"
+    fi
+fi
+ALT_VAL="$EXISTING_ALT"
+if ! is_num "$ALT_VAL"; then
+    ALT_VAL="$(prev_conf_value Altitude)"
+    is_num "$ALT_VAL" || ALT_VAL="0"
+fi
+log_info "受信機名 ${RECV_NAME} / 緯度 ${LAT_VAL} / 経度 ${LON_VAL} / 標高 ${ALT_VAL}m"
 
 # Check whether existing /boot/rtlsdr-ogn.conf already has the Japan-tuned settings
 # (including the 2026-05-04 weak-signal AGC tuning: MinNoise=5.0 / DetectSNR=3.0).
@@ -378,7 +405,7 @@ Demodulator:
 Position:
 { Latitude  = ${LAT_VAL};
   Longitude = ${LON_VAL};
-  Altitude  = 23;
+  Altitude  = ${ALT_VAL};
 };
 
 APRS:

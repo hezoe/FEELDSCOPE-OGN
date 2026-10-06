@@ -539,6 +539,11 @@ function ManualContent() {
           OGN受信機（rtlsdr-ogn）の全設定をWeb GUIから変更できます。保存時は <code>/home/pi/rtlsdr-ogn.conf</code> と
           <code>/boot/OGN-receiver.conf</code> の両方を更新し、rtlsdr-ognサービスを自動再起動します（受信が数秒中断）。
         </p>
+        <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+          <code>/boot/OGN-receiver.conf</code> を直接書き換えた場合も、<strong>受信機名・緯度・経度・標高</strong>を受信機へ反映します
+          （SSH で書き換えたときは1分以内、SDカードをパソコンで書き換えたときは次の起動時）。空欄やコメントアウトの項目は今の値のままです。
+          値がおかしいとき（英数字9文字を超える受信機名、範囲外や数字でない座標など）は反映せず、この画面の「アンテナ設置位置」に理由を表示します。
+        </p>
 
         <Section id="ogn-status" heading="受信機ステータス（リアルタイム）">
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
@@ -555,7 +560,7 @@ function ManualContent() {
 
         <Section id="ogn-position" heading="アンテナ設置位置">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li><strong>緯度・経度（°）</strong> — アンテナの実際の設置位置。OGNネットワーク上の受信局位置として公開されます</li>
+            <li><strong>緯度・経度（°）</strong> — アンテナの実際の設置位置。OGNネットワーク上の受信局位置として公開されます。Google マップなどの座標（10進数の度・世界測地系 WGS84）をそのまま入力できます（座標系の変換はしません）</li>
             <li><strong>高度（m）</strong> — アンテナ高度</li>
           </ul>
         </Section>
@@ -750,11 +755,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.27 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.27</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-07</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="受信機名・座標が ogn.ezoe.net で違って表示される問題を修正（OGN-receiver.conf の直接編集も反映）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li><strong>原因</strong>: OGN の設定は、FEELDSCOPE が作る <code>/boot/rtlsdr-ogn.conf</code> があるとそれだけを使い、<code>/boot/OGN-receiver.conf</code> の受信機名・座標・標高を無視します。そのため、インストール後に <code>OGN-receiver.conf</code> を直しても受信機に届かず、古い名前・座標のまま表示されていました（座標系の問題ではありません）。</li>
+          <li><strong>OGN-receiver.conf を直接書き換えた場合も、受信機名・緯度・経度・標高を受信機へ反映</strong>するようにしました（SSH なら1分以内、SDカードをパソコンで書き換えたなら次の起動時）。空欄・コメントアウトの項目は今の値のまま。値がおかしいときは反映せず、OGN設定画面に理由を表示します。設定画面で保存したときは、これまでどおり両方のファイルを書き換えます。</li>
+          <li>この版に更新したとき、2つのファイルの値が食い違っていれば、<code>OGN-receiver.conf</code> のほうが新しい（インストール後に書き換えた）場合だけ反映します。</li>
+          <li><strong>簡易インストール版（SD カードイメージ）</strong>: インストーラーが座標を読めないと、経度に東京駅の値（139.7548）を入れていた問題を修正。OGN の設定と同じ読み方にし、読めないときは既定値で黙って埋めずに警告します。標高も <code>OGN-receiver.conf</code> から読むようにしました（以前は 23m 固定）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.26 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.26</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-03</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="風の流れの設定を機体ごとに保存">
