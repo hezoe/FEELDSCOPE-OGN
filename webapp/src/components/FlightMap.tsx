@@ -2208,7 +2208,7 @@ export default function FlightMap() {
                                 distUnit={units.distance}
                                 onChange={(newDist) => {
                                   const updated = [...flightLog];
-                                  // releaseInferred は離脱高度が曳航機由来かを表す印なので、
+                                  // releaseInferred は離脱高度が曳航の相手由来かを表す印なので、
                                   // 距離だけを直したときは触らない（※の意味が変わってしまう）
                                   updated[i] = { ...updated[i], releaseDist: newDist };
                                   flightLogRef.current = updated;
@@ -2627,7 +2627,7 @@ function ReleaseAltInput({
         <span
           className="text-[10px] ml-0.5"
           style={{ color: "var(--color-text-secondary)" }}
-          title="曳航機の離脱高度から推定した値です（この機体自身の離脱は検知できませんでした）"
+          title="曳航の相手（曳航機またはグライダー）の離脱高度を写した値です"
         >
           ※
         </span>

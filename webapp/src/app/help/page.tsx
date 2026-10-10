@@ -242,7 +242,7 @@ function ManualContent() {
             <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
-            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航機の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則こちら。手で直すと※は消えます）</li>
+            <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航の相手の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則、曳航機の値を写します。曳航機の離脱が受信の途切れで見えなかったときは、反対にグライダーの値を曳航機へ写します。手で直すと※は消えます）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
             <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）</li>
             <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
@@ -266,6 +266,7 @@ function ManualContent() {
             <li><strong>離脱検知（グライダー・ウィンチ）</strong> — 離陸から60秒以内に上昇率 <strong>7 m/s</strong> 以上が5秒続いたらウィンチ発航とみなし、そのあと上昇率が <strong>2 m/s</strong> 以下に落ちた瞬間を離脱とします。速度は見ません</li>
             <li><strong>離脱検知（曳航機）</strong> — 対地300m以上で、高度ピークから50m以上の降下</li>
             <li><strong>離脱高度の補完（曳航）</strong> — 曳航機とグライダーが60秒以内に離陸し、水平200m・垂直100m以内で3回以上並んで上がったら曳航ペアとみなします。曳航機の離脱を検知したら、<strong>グライダーにもすぐ同じ離脱高度・距離を写します</strong>（※印付き）。索が外れた瞬間は、左旋回で一気に降下する曳航機のほうが確実に分かるためです。グライダー自身の離脱検知は、曳航ペアが分からない便（ウィンチ・単独など）と、曳航機より先に自分で検知できた便にだけ使います</li>
+            <li><strong>曳航機の離脱が見えなかったとき（曳航）</strong> — 曳航機だけ受信が20秒以上途切れて離脱の瞬間が見えなくても、<strong>グライダーの航跡が途切れずに離脱の前後を捉えていれば</strong>、グライダーの最高高度（途切れの区間とその後15秒）を離脱高度とし、<strong>曳航機にも同じ値を写します</strong>（曳航機側に※印）。グライダーも途切れていたときは、誤った値を入れないよう両方とも空欄のままです</li>
             <li><strong>ウィンチ発航との区別</strong> — 上昇率が <strong>6 m/s</strong> を超える機体は索で曳かれていないとみなし、曳航ペアに入れません</li>
           </ul>
         </Section>
@@ -755,11 +756,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.28 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.28</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="曳航機だけ受信が途切れても、グライダーの航跡から離脱高度を記録">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>曳航機の離脱の瞬間が受信の途切れ（20秒以上）に重なると、誤った値を入れないよう<strong>曳航機・グライダーとも離脱高度を空欄</strong>にしていました。曳航機の FLARM が機体の陰になるなどで、空欄の便がよく出ていました。</li>
+          <li><strong>グライダーの航跡が途切れずに離脱の前後を捉えていれば、離脱したと判断</strong>し、グライダーの最高高度（途切れの区間とその後15秒）を離脱高度として記録して、<strong>曳航機にも同じ値を写す</strong>ようにしました（曳航機側に※印）。グライダーが先に自分で離脱を検知していたときも、その値を曳航機へ写します。</li>
+          <li>グライダーも同じ時間に途切れていた便は、これまでどおり両方とも空欄です（必要なら手で入力してください）。</li>
+          <li>たきかわの 9/21〜10/9 の記録（17日分）を再生して、空欄だった離脱高度 29件に値が入り、ほかの記録は変わらないことを確認しました。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.27 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.27</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-07</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="受信機名・座標が ogn.ezoe.net で違って表示される問題を修正（OGN-receiver.conf の直接編集も反映）">

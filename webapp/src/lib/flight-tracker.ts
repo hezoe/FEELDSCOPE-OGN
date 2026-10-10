@@ -142,6 +142,17 @@ const RELEASE_WINDOW_SEC = 6;
 const RELEASE_SPEED_DROP_MS = 5;
 /** 離陸からこの時間を過ぎたら、もう曳航・ウィンチではない */
 const RELEASE_MAX_AGE_SEC = 20 * 60;
+/**
+ * 曳航機が離脱の瞬間を受信できていなくても（途切れの中で離脱した）、索の相手のグライダーが
+ * その間を途切れなく受信できていれば、グライダーの航跡で離脱を取り、曳航機の離脱高度にも
+ * その値を使う（2026-10-10 運航者指示。たきかわ同日: R5 11:51・KH 12:39 はグライダーが
+ * ほぼ連続して受信できていたのに、曳航機の 21〜30秒の途切れで両機とも空欄だった）。
+ * 離脱高度はグライダーが自分で検知したときと同じく、離脱後の引き起こしを含む最高高度。
+ * 引き起こしが終わるまでこれだけ待ってから決める。
+ */
+const GLIDER_RELEASE_SETTLE_SEC = 15;
+/** グライダー側の航跡で離脱を探すために残す、飛行中の位置の履歴 */
+const AIR_HISTORY_KEEP_MS = 10 * 60_000;
 
 // ── 曳航ペアからの離脱高度の補完 ────────────────────────────────────────
 // 曳航機の離脱は「最高高度からの降下」で確実に取れるが、グライダー側は
@@ -223,7 +234,7 @@ export interface FlightLogEntry {
   landingTime: string | null;
   releaseAlt: number | null;
   releaseDist: number | null;
-  /** 離脱高度を曳航機から写した場合に true。自分で測れた値には付かない */
+  /** 離脱高度を曳航の相手(グライダーは曳航機・曳航機はグライダー)から写した場合に true。自分で測れた値には付かない */
   releaseInferred?: boolean;
   /**
    * 飛行中（landingTime === null）のまま受信が長く途切れている。画面では「飛行中」の
@@ -341,6 +352,13 @@ interface TrackingState {
   /** 飛行中に直前に受けた位置の時刻と上昇率 */
   prevAirFixMs: number | null;
   prevAirClimbMs: number | null;
+  /** 飛行中に受けた位置（高度の信頼できるもの）の直近の履歴。曳航機が見ていない離脱をグライダー側で探す */
+  airHist: { t: number; agl: number; lat: number; lon: number }[];
+  /**
+   * 索の相手の曳航機が、離脱の瞬間を受信できていなかった。離脱はこの時間窓
+   * （曳航機の途切れ）の中にある。グライダー側の航跡で探し、取れたら曳航機の飛行にも写す
+   */
+  towUnseen: { fromMs: number; toMs: number; towFlightId: string; towDeviceId: string } | null;
 }
 
 interface Airfield {
@@ -552,6 +570,8 @@ function toGround(tr: TrackingState, agl: number): void {
   tr.maxAltClimbBeforeMs = null;
   tr.prevAirFixMs = null;
   tr.prevAirClimbMs = null;
+  tr.airHist = [];
+  tr.towUnseen = null;
   clearPair(tr);
 }
 
@@ -592,6 +612,8 @@ function openFlight(
   tr.lateSinceMs = null;
   tr.lateTowId = null;
   tr.lateTowSamples = 0;
+  tr.airHist = [];
+  tr.towUnseen = null;
   clearPair(tr);
 }
 
@@ -804,6 +826,7 @@ function sweepStaleTracks(): void {
     const fix = tr.lastFix;
     if (!fix) continue;
     applyPendingRelease(tr);
+    resolveTowUnseen(deviceId, tr, nowMs);
     const silenceSec = (nowMs - fix.timeMs) / 1000;
     if (silenceSec < SIGNAL_LOST_SEC) continue;
 
@@ -881,6 +904,55 @@ function updateTowPair(
     tr.pairConfirmed = true;
     console.log(`[flight-tracker] tow pair ${deviceId} + ${found[0]}`);
   }
+}
+
+/** 飛行記録に離脱高度・距離を書く（既に入っていれば上書きしない） */
+function setRelease(flightId: string, alt: number, dist: number | null, inferred: boolean): void {
+  const s = S();
+  s.flights = s.flights.map((f) =>
+    f.id === flightId && f.releaseAlt == null
+      ? { ...f, releaseAlt: alt, releaseDist: dist, ...(inferred ? { releaseInferred: true } : {}) }
+      : f);
+}
+
+/**
+ * 曳航機が離脱の瞬間を受信できていなかったグライダーの離脱を、グライダー自身の航跡から取る。
+ * 離脱は曳航機の途切れ（fromMs〜toMs）の中にある。グライダーがその間を RELEASE_UNSEEN_GAP_SEC を
+ * 超える途切れなしに受信できていれば「離脱が見えている」とみなし、引き起こしが終わる
+ * （toMs から GLIDER_RELEASE_SETTLE_SEC 後）までの最高高度を離脱高度にする。
+ * グライダーと曳航機の両方に同じ値を書く（曳航機は相手から写した値なので releaseInferred）。
+ * グライダーも途切れていたら、従来どおり両機とも空欄のまま手で入れてもらう。
+ */
+function resolveTowUnseen(deviceId: string, tr: TrackingState, nowMs: number): void {
+  const u = tr.towUnseen;
+  if (!u) return;
+  const s = S();
+  const gapMs = RELEASE_UNSEEN_GAP_SEC * 1000;
+  const settleEnd = u.toMs + GLIDER_RELEASE_SETTLE_SEC * 1000;
+  const pts = tr.airHist;
+  const lastT = pts.length ? pts[pts.length - 1].t : 0;
+  // 引き起こしが終わるまで待つ。受信が途切れたままなら、ある分で決める
+  if (lastT < settleEnd && nowMs < settleEnd + SIGNAL_LOST_SEC * 1000) return;
+  tr.towUnseen = null;
+
+  let before: (typeof pts)[number] | undefined;
+  for (const p of pts) if (p.t <= u.fromMs) before = p;
+  const win = pts.filter((p) => p.t > u.fromMs && p.t <= settleEnd);
+  let seen = !!before && u.fromMs - before.t <= gapMs && win.some((p) => p.t >= u.toMs);
+  const seq = before ? [before, ...win] : win;
+  for (let i = 1; seen && i < seq.length && seq[i - 1].t < u.toMs; i++) {
+    if (seq[i].t - seq[i - 1].t > gapMs) seen = false;
+  }
+  if (!seen || !win.length) {
+    console.log(`[flight-tracker] ${deviceId}: release not observed by the glider either, left blank`);
+    return;
+  }
+  const best = win.reduce((m, p) => (p.agl > m.agl ? p : m));
+  const alt = Math.round(best.agl);
+  const dist = haversineM(s.airfield.latitude, s.airfield.longitude, best.lat, best.lon);
+  if (tr.flightId) setRelease(tr.flightId, alt, dist, false);
+  setRelease(u.towFlightId, alt, dist, true);
+  console.log(`[flight-tracker] release ${deviceId} ${alt}m (glider track; also for tow plane ${u.towDeviceId})`);
 }
 
 /**
@@ -1050,6 +1122,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       maxAltClimbBeforeMs: null,
       prevAirFixMs: null,
       prevAirClimbMs: null,
+      airHist: [],
+      towUnseen: null,
     };
     s.tracking.set(deviceId, tr);
   }
@@ -1238,6 +1312,12 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   } else if (tr.afterMaxGapMs === null && tr.maxAltAtMs !== null) {
     tr.afterMaxGapMs = nowMs - tr.maxAltAtMs;
   }
+  if (gpsAltitudeTrusted(pos)) {
+    tr.airHist.push({ t: nowMs, agl, lat: pos.latitude, lon: pos.longitude });
+    const cut = nowMs - AIR_HISTORY_KEEP_MS;
+    while (tr.airHist.length && tr.airHist[0].t < cut) tr.airHist.shift();
+  }
+  resolveTowUnseen(deviceId, tr, nowMs);
   tr.prevAirFixMs = nowMs;
   tr.prevAirClimbMs = climbMs;
   if (agl > AIRBORNE_CONFIRM_AGL_M) tr.wasHigh = true;
@@ -1339,17 +1419,29 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
       if (unseen) {
         const gapSec = Math.round(((lostWhileClimbing ? tr.afterMaxGapMs : tr.maxAltGapBeforeMs) ?? 0) / 1000);
         console.log(`[flight-tracker] ${deviceId}: release not observed (no signal for ${gapSec}s ${lostWhileClimbing ? "after climbing at" : "before descending from"} ${alt}m), left blank`);
-        // 索の相手も離脱は済んでいる。「飛行中」のまま残すと、あとでサーマルを抜けたときの
-        // 減速を離脱と読んでしまう（たきかわ 2026-09-12 実測: 実際 約640m の便に 1134m）。
         if (tr.pairConfirmed && tr.pairDeviceId) {
           const mate = s.tracking.get(tr.pairDeviceId);
-          if (mate && mate.phase === "airborne" && mate.flightId) {
+          const mateFlight = mate?.flightId ? s.flights.find((f) => f.id === mate.flightId) : undefined;
+          if (mateFlight && mateFlight.releaseAlt != null && !mateFlight.releaseInferred) {
+            // グライダーが先に自分で離脱を測れていた。曳航機の離脱高度にもその値を使う
+            setRelease(flight.id, mateFlight.releaseAlt, mateFlight.releaseDist, true);
+            console.log(`[flight-tracker] release ${deviceId} ${mateFlight.releaseAlt}m (from glider ${tr.pairDeviceId})`);
+          } else if (mate && mate.phase === "airborne" && mate.flightId) {
+            // 索の相手も離脱は済んでいる。「飛行中」のまま残すと、あとでサーマルを抜けたときの
+            // 減速を離脱と読んでしまう（たきかわ 2026-09-12 実測: 実際 約640m の便に 1134m）。
             mate.phase = "released";
             mate.winchLaunch = false;
             mate.pendingReleaseAlt = null;
             mate.pendingReleaseDist = null;
             mate.pendingSinceMs = null;
-            console.log(`[flight-tracker] ${tr.pairDeviceId}: released with ${deviceId}, altitude left blank`);
+            // 離脱は曳航機の途切れの中にある。グライダーがその間を途切れなく受信できていれば、
+            // 引き起こしが終わるのを待ってグライダーの航跡から取り、曳航機にも写す（resolveTowUnseen）
+            const maxAt = tr.maxAltAtMs ?? nowMs;
+            mate.towUnseen = lostWhileClimbing
+              ? { fromMs: maxAt, toMs: maxAt + (tr.afterMaxGapMs ?? 0), towFlightId: flight.id, towDeviceId: deviceId }
+              : { fromMs: maxAt - (tr.maxAltGapBeforeMs ?? 0), toMs: maxAt, towFlightId: flight.id, towDeviceId: deviceId };
+            console.log(`[flight-tracker] ${tr.pairDeviceId}: released with ${deviceId}, looking for the release in the glider's track`);
+            resolveTowUnseen(tr.pairDeviceId, mate, nowMs);
           }
         }
       } else {
