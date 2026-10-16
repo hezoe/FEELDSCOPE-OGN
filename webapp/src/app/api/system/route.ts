@@ -4,6 +4,7 @@ import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
+import { parseConfiguredSsid, parseOgnWifiName, parseScanResults, parseWpaStatus, type WifiNetwork } from "@/lib/wifi-status";
 
 
 const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
@@ -410,7 +411,12 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
 
 interface NetworkStatus {
   hostname: string;
-  wifi: { ssid: string; connected: boolean };
+  /**
+   * ssid/connected = 接続中の SSID(従来どおり)。
+   * configured_ssid = 保存済みの SSID(つながっていなくても出す。以前は接続中しか出さず、設定が消えたように見えた)。
+   * state = wpa_supplicant の状態(COMPLETED=接続済み / SCANNING=探している…)、ip/freq = 接続中の IP・周波数(MHz)
+   */
+  wifi: { ssid: string; connected: boolean; configured_ssid: string; state: string; ip: string; freq: number | null };
   eth: {
     connected: boolean;
     method: "dhcp" | "static";
@@ -468,6 +474,19 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
     wifiSsid = stdout.trim();
     wifiConnected = wifiSsid.length > 0;
   } catch { /* ignore */ }
+  let wifiState = "", wifiIp = "", wifiFreq: number | null = null, configuredSsid = "";
+  try {
+    const { stdout } = await run("sudo", ["-n", "wpa_cli", "-i", "wlan0", "status"]);
+    const st = parseWpaStatus(stdout);
+    wifiState = st.state; wifiIp = st.ip; wifiFreq = st.freq;
+  } catch { /* wlan0 や wpa_supplicant が無い環境(VPS 等) */ }
+  try {
+    const { stdout } = await run("sudo", ["-n", "cat", WPA_SUPPLICANT_CONF]);   // root だけが読める(600)
+    configuredSsid = parseConfiguredSsid(stdout);
+  } catch { /* ignore */ }
+  if (!configuredSsid) {
+    try { configuredSsid = parseOgnWifiName(await readFile(OGN_RECEIVER_CONF, "utf-8")); } catch { /* ignore */ }
+  }
 
   // Ethernet
   let ethConnected = false;
@@ -521,7 +540,7 @@ async function getNetworkStatus(): Promise<NetworkStatus> {
 
   return {
     hostname,
-    wifi: { ssid: wifiSsid, connected: wifiConnected },
+    wifi: { ssid: wifiSsid, connected: wifiConnected, configured_ssid: configuredSsid, state: wifiState, ip: wifiIp, freq: wifiFreq },
     eth: { connected: ethConnected, method: ethMethod, ip: ethIp, subnet: ethSubnet, gateway: ethGateway, dns: ethDns },
   };
 }
@@ -557,6 +576,15 @@ async function syncOgnReceiverWifi(ssid: string, password: string): Promise<void
   } catch {
     // /boot/OGN-receiver.conf が無い環境（VPS 等）では何もしない
   }
+}
+
+// 周辺の Wi-Fi を探す(設定画面の「近くの Wi-Fi を探す」)。探索を頼んでから数秒待って結果を読む。
+// 探索中(FAIL-BUSY)や結果が少ないときも、その時点で wpa_supplicant が持っている結果を返す。
+async function scanWifi(): Promise<WifiNetwork[]> {
+  await run("sudo", ["-n", "wpa_cli", "-i", "wlan0", "scan"]).catch(() => {});
+  await new Promise((r) => setTimeout(r, 4000));
+  const { stdout } = await run("sudo", ["-n", "wpa_cli", "-i", "wlan0", "scan_results"]);
+  return parseScanResults(stdout);
 }
 
 async function applyWifiConfig(ssid: string, password: string): Promise<void> {
@@ -679,7 +707,7 @@ export async function POST(request: Request) {
   // 認証の有無に関係なく拒否する(無認証の remote-support-save も含む)。
   const HOST_ACTIONS = new Set([
     "reboot", "shutdown", "hostname-save", "remote-support-save", "catvpn-enroll", "catvpn-request",
-    "auto-reboot-save", "wifi-save", "eth-save", "system-update", "overlay-enable", "overlay-disable",
+    "auto-reboot-save", "wifi-save", "wifi-scan", "eth-save", "system-update", "overlay-enable", "overlay-disable",
   ]);
   if (HOST_ACTIONS.has(action) && isHostLocked()) {
     return NextResponse.json({ error: HOST_LOCKED_MESSAGE, hostLocked: true }, { status: 403 });
@@ -916,6 +944,14 @@ export async function POST(request: Request) {
             ? `毎日 ${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")} に自動再起動するよう設定しました。`
             : "自動再起動を無効にしました。",
         });
+      }
+
+      case "wifi-scan": {
+        try {
+          return NextResponse.json({ ok: true, networks: await scanWifi() });
+        } catch {
+          return NextResponse.json({ error: "Wi-Fi の探索に失敗しました（Wi-Fi が無効か、無線の装置がありません）" }, { status: 500 });
+        }
       }
 
       case "wifi-save": {

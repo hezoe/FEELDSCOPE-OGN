@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
 import AuthPanel from "@/components/AuthPanel";
+import type { WifiNetwork } from "@/lib/wifi-status";
 
 interface IGCFile {
   name: string;
@@ -19,7 +20,8 @@ interface AdsbSavedConfig {
 
 interface NetworkStatus {
   hostname: string;
-  wifi: { ssid: string; connected: boolean };
+  // configured_ssid 以降は v1.4.29 から(古い版の API には無い)
+  wifi: { ssid: string; connected: boolean; configured_ssid?: string; state?: string; ip?: string; freq?: number | null };
   eth: {
     connected: boolean;
     method: "dhcp" | "static";
@@ -86,6 +88,9 @@ export default function SettingsPage() {
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [wifiSaving, setWifiSaving] = useState(false);
+  const [wifiScan, setWifiScan] = useState<WifiNetwork[] | null>(null);   // 「近くの Wi-Fi を探す」の結果
+  const [wifiScanning, setWifiScanning] = useState(false);
+  const [wifiNote, setWifiNote] = useState<{ ok: boolean; text: string } | null>(null);   // 保存後の接続結果
   const [ethMethod, setEthMethod] = useState<"dhcp" | "static">("dhcp");
   const [ethIp, setEthIp] = useState("");
   const [ethSubnet, setEthSubnet] = useState("255.255.255.0");
@@ -181,7 +186,9 @@ export default function SettingsPage() {
     networkSynced.current = true;
     const net = status.network;
     if (net.hostname) setHostname(net.hostname);
-    if (net.wifi.ssid) setWifiSsid(net.wifi.ssid);
+    // 保存済みの SSID を入れる(つながっていなくても。以前は接続中の SSID だけで、つながらないと空になり設定が消えたように見えた)
+    const savedSsid = net.wifi.configured_ssid || net.wifi.ssid;
+    if (savedSsid) setWifiSsid(savedSsid);
     setEthMethod(net.eth.method);
     if (net.eth.ip) setEthIp(net.eth.ip);
     if (net.eth.subnet) setEthSubnet(net.eth.subnet);
@@ -925,37 +932,84 @@ export default function SettingsPage() {
 
               {/* Wi-Fi */}
               <div>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>
+                <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--color-text-primary)" }}>
                   Wi-Fi 設定
-                  {status?.network?.wifi.connected && (
-                    <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}>
-                      接続中: {status.network.wifi.ssid}
-                    </span>
-                  )}
                 </h3>
+                {/* 状態: 保存済みの SSID と接続状態を分けて出す(つながらないときの手がかりも) */}
+                {(() => {
+                  const w = status?.network?.wifi;
+                  if (!w) return null;
+                  const v = wifiStateView(w);
+                  return (
+                    <div className="mb-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: v.bg, color: v.color }}>{v.label}</span>
+                        {v.detail && <span style={{ color: "var(--color-text-primary)" }}>{v.detail}</span>}
+                      </div>
+                      {w.configured_ssid && (
+                        <div className="mt-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                          保存済みの SSID: <code style={{ color: "var(--color-text-primary)" }}>{w.configured_ssid}</code>
+                        </div>
+                      )}
+                      {v.hint && <div className="mt-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>{v.hint}</div>}
+                      {wifiScan && (() => {
+                        const d = wifiDiagnosis(w, wifiScan);
+                        return d ? <div className="mt-1 text-xs font-medium" style={{ color: d.ok ? "var(--color-success)" : "var(--color-warning)" }}>{d.text}</div> : null;
+                      })()}
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                      SSID
+                      SSID <span className="text-xs font-normal">（大文字・小文字も区別されます）</span>
                     </label>
-                    <input
-                      type="text"
-                      value={wifiSsid}
-                      onChange={(e) => setWifiSsid(e.target.value)}
-                      placeholder="Wi-FiネットワークのSSID"
-                      className="w-full px-3 py-1.5 text-sm rounded"
-                      style={{
-                        background: "var(--color-bg-primary)",
-                        border: "1px solid var(--color-border)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={wifiSsid}
+                        onChange={(e) => setWifiSsid(e.target.value)}
+                        placeholder="Wi-FiネットワークのSSID"
+                        className="w-full px-3 py-1.5 text-sm rounded"
+                        style={{
+                          background: "var(--color-bg-primary)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-text-primary)",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setWifiScanning(true);
+                          setError(null);
+                          try {
+                            const res = await fetch("/api/system", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "wifi-scan" }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error);
+                            setWifiScan(data.networks || []);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Wi-Fi の探索に失敗しました");
+                          }
+                          setWifiScanning(false);
+                        }}
+                        disabled={wifiScanning}
+                        className="px-3 py-1.5 rounded text-xs font-medium whitespace-nowrap"
+                        style={{ background: "var(--color-bg-tertiary)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", cursor: wifiScanning ? "wait" : "pointer" }}
+                      >
+                        {wifiScanning ? "探しています…" : "近くの Wi-Fi を探す"}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
                       パスワード
                     </label>
                     <input
+                      id="wifiPasswordInput"
                       type="password"
                       value={wifiPassword}
                       onChange={(e) => setWifiPassword(e.target.value)}
@@ -969,10 +1023,49 @@ export default function SettingsPage() {
                     />
                   </div>
                 </div>
+                {/* 近くの Wi-Fi の一覧(押すと SSID 欄にそのまま入る=綴り違いを防ぐ) */}
+                {wifiScan && (
+                  <div className="mt-2 rounded" style={{ border: "1px solid var(--color-border)", maxHeight: 240, overflowY: "auto" }}>
+                    {wifiScan.length === 0 ? (
+                      <div className="px-3 py-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>近くに Wi-Fi が見つかりませんでした。</div>
+                    ) : wifiScan.map((n) => {
+                      const saved = n.ssid === status?.network?.wifi.configured_ssid;
+                      const picked = n.ssid === wifiSsid;
+                      return (
+                        <button
+                          key={n.ssid}
+                          type="button"
+                          disabled={!n.supported}
+                          onClick={() => {
+                            setWifiSsid(n.ssid);
+                            setWifiNote(null);
+                            document.getElementById("wifiPasswordInput")?.focus();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left"
+                          style={{
+                            borderBottom: "1px solid var(--color-border)",
+                            background: picked ? "var(--color-accent-light)" : "transparent",
+                            color: n.supported ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                            cursor: n.supported ? "pointer" : "not-allowed",
+                          }}
+                          title={n.supported ? "押すと SSID 欄に入ります" : unsupportedReason(n)}
+                        >
+                          <SignalBars dbm={n.signal} />
+                          <span className="flex-1 truncate" style={{ fontWeight: picked ? 700 : 400 }}>{n.ssid}</span>
+                          {saved && <span className="text-xs" style={{ color: "var(--color-success)" }}>保存済み</span>}
+                          <span className="text-xs whitespace-nowrap" style={{ color: "var(--color-text-secondary)" }}>
+                            {n.bands.join("・")} {n.security}{!n.supported ? `（${unsupportedReason(n)}）` : ""} {n.signal}dBm
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <button
                   onClick={async () => {
                     setWifiSaving(true);
                     setError(null);
+                    setWifiNote(null);
                     try {
                       const res = await fetch("/api/system", {
                         method: "POST",
@@ -982,6 +1075,20 @@ export default function SettingsPage() {
                       const data = await res.json();
                       if (!res.ok) throw new Error(data.error);
                       setWifiPassword("");
+                      // つながるまで最大30秒待って結果を出す(つながらなければ理由の手がかりを出す)
+                      const target = wifiSsid;
+                      let ok = false, ip = "";
+                      for (let i = 0; i < 10 && !ok; i++) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                        try {
+                          const st = await (await fetch("/api/system", { cache: "no-store" })).json();
+                          const w = st?.network?.wifi;
+                          if (w && (w.state === "COMPLETED" || w.connected) && w.ssid === target) { ok = true; ip = w.ip || ""; }
+                        } catch { /* 次の回へ */ }
+                      }
+                      setWifiNote(ok
+                        ? { ok: true, text: `「${target}」に接続しました${ip ? `（IP ${ip}）` : ""}。設定は保存され、再起動後も自動で接続します。` }
+                        : { ok: false, text: `設定は保存しましたが、30秒たってもまだ「${target}」に接続できていません。「近くの Wi-Fi を探す」で SSID の綴り（大文字・小文字）と電波を確認し、パスワードも確かめてください。` });
                       networkSynced.current = false;
                       await fetchStatus();
                     } catch (err) {
@@ -998,8 +1105,11 @@ export default function SettingsPage() {
                     cursor: wifiSaving ? "wait" : "pointer",
                   }}
                 >
-                  {wifiSaving ? "適用中..." : "Wi-Fi 設定を適用"}
+                  {wifiSaving ? "適用して接続を確かめています…" : "Wi-Fi 設定を適用"}
                 </button>
+                {wifiNote && (
+                  <p className="text-xs mt-2 font-medium" style={{ color: wifiNote.ok ? "var(--color-success)" : "var(--color-warning)" }}>{wifiNote.text}</p>
+                )}
               </div>
 
               {/* Divider */}
@@ -1894,3 +2004,59 @@ function UnitButton({
   );
 }
 
+// ── Wi-Fi 表示の補助 ──
+type WifiInfo = NetworkStatus["wifi"];
+/** 接続状態のバッジと説明。wpa_supplicant の状態(state)を言葉にする */
+function wifiStateView(w: WifiInfo): { label: string; color: string; bg: string; detail?: string; hint?: string } {
+  const ok = { color: "var(--color-success)", bg: "var(--color-success-dim)" };
+  const warn = { color: "var(--color-warning)", bg: "var(--color-warning-dim)" };
+  const bad = { color: "var(--color-danger)", bg: "var(--color-danger-dim)" };
+  const gray = { color: "var(--color-text-secondary)", bg: "var(--color-bg-tertiary)" };
+  const band = w.freq ? (w.freq >= 4900 ? "5GHz" : "2.4GHz") : "";
+  if (w.state === "COMPLETED" || (w.connected && !w.state)) {
+    return { label: "接続済み", ...ok, detail: `${w.ssid}${band || w.ip ? `（${[band, w.ip].filter(Boolean).join("・")}）` : ""}` };
+  }
+  if (w.state === "INTERFACE_DISABLED") {
+    return { label: "Wi-Fi が無効", ...bad, hint: "無線の装置が止まっています。再起動しても直らない場合はお問い合わせください。" };
+  }
+  if (!w.configured_ssid) {
+    return { label: "未設定", ...gray, hint: "Wi-Fi は設定されていません（有線 LAN だけで使う場合はこのままで構いません）。" };
+  }
+  if (["ASSOCIATING", "ASSOCIATED", "AUTHENTICATING", "4WAY_HANDSHAKE", "GROUP_HANDSHAKE"].includes(w.state || "")) {
+    return { label: "接続中…", ...warn, hint: "パスワードが違うと、ここから先へ進まずに「探しています」へ戻ります。" };
+  }
+  if (["SCANNING", "DISCONNECTED", "INACTIVE"].includes(w.state || "")) {
+    return {
+      label: "探しています（つながっていません）", ...warn,
+      hint: "保存済みの SSID の電波が見つからないか、パスワードが違います。SSID は大文字・小文字も区別されます。「近くの Wi-Fi を探す」で一覧から選び直してください。",
+    };
+  }
+  return { label: "状態を取得できません", ...gray };
+}
+/** 探索結果と保存済み SSID を突き合わせた手がかり(つながっていないときだけ) */
+function wifiDiagnosis(w: WifiInfo, nets: WifiNetwork[]): { ok: boolean; text: string } | null {
+  const want = w.configured_ssid;
+  if (!want || w.state === "COMPLETED") return null;
+  const exact = nets.find((n) => n.ssid === want);
+  if (exact && !exact.supported) return { ok: false, text: `「${want}」は${unsupportedReason(exact)}のため接続できません。${exact.security === "WPA3" ? "ルーターの設定を WPA2/WPA3 混在（WPA2 互換）にしてください。" : ""}` };
+  if (exact) return { ok: true, text: `「${want}」の電波は届いています（${exact.signal}dBm）。つながらない場合はパスワードを確認してください。` };
+  const near = nets.find((n) => n.ssid.toLowerCase() === want.toLowerCase());
+  if (near) return { ok: false, text: `保存済みの「${want}」と、近くにある「${near.ssid}」は大文字・小文字が違います。一覧の「${near.ssid}」を選んで設定し直してください。` };
+  return { ok: false, text: `「${want}」の電波が見つかりません。ルーターの電源・距離、または SSID の綴りを確認してください。` };
+}
+function unsupportedReason(n: WifiNetwork): string {
+  if (n.security === "WPA3") return "WPA3 専用";
+  if (n.security === "WEP") return "古い暗号化方式（WEP）";
+  return "パスワード無しのネットワーク";
+}
+/** 電波の強さの棒(4本)。文字で描くとフォントで幅が変わり SSID に重なったので、小さな図形で描く */
+function SignalBars({ dbm }: { dbm: number }) {
+  const n = dbm >= -55 ? 4 : dbm >= -67 ? 3 : dbm >= -75 ? 2 : 1;
+  return (
+    <span aria-label={`電波の強さ ${dbm}dBm`} style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, width: 20, height: 13, flex: "none" }}>
+      {[1, 2, 3, 4].map((i) => (
+        <span key={i} style={{ width: 3, height: 2 + i * 2.6, borderRadius: 1, background: i <= n ? "currentColor" : "var(--color-border)" }} />
+      ))}
+    </span>
+  );
+}

@@ -441,8 +441,10 @@ function ManualContent() {
         <Section id="settings-network" heading="3-6. ネットワーク設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>ホスト名（mDNS）</strong> — 英数字とハイフンのみ、63文字以内。設定後 <code>&lt;name&gt;.local</code> でアクセス可能</li>
-            <li><strong>Wi-Fi SSID</strong> — 接続先Wi-Fiネットワーク名</li>
-            <li><strong>Wi-Fi パスワード</strong> — WPA2パスワード（8文字以上）</li>
+            <li><strong>Wi-Fi の状態</strong> — 見出しの下に<strong>接続状態</strong>（接続済み／探しています（つながっていません）／接続中…／未設定）と<strong>保存済みの SSID</strong> を表示します。つながっていなくても保存済みの SSID は残っています（つながらないときの手がかりも表示）</li>
+            <li><strong>Wi-Fi SSID</strong> — 接続先Wi-Fiネットワーク名。<strong>大文字・小文字も区別</strong>されます（例 <code>Starlink_wifi01</code> と <code>starlink_wifi01</code> は別物で、違うといつまでもつながりません）</li>
+            <li><strong>近くの Wi-Fi を探す</strong> — 周辺の Wi-Fi を電波の強さ順に一覧表示します（強さの棒・2.4GHz/5GHz・暗号化方式）。<strong>押すと SSID 欄に正しい綴りで入る</strong>ので、打ち間違いを防げます。保存済みの SSID と大文字・小文字だけ違う電波があれば知らせます。<strong>WPA3 専用</strong>やパスワード無しのネットワークには接続できないため、選べません（WPA2/WPA3 混在なら接続できます）</li>
+            <li><strong>Wi-Fi パスワード</strong> — WPA2パスワード（8文字以上）。<strong>適用</strong>すると最大30秒、接続できたかを確かめて結果を表示します</li>
             <li><strong>有線LAN: DHCP（自動）</strong> — ルーターから自動取得</li>
             <li><strong>有線LAN: 固定IP</strong> — IPアドレス・サブネットマスク・ゲートウェイ・DNSを手動指定</li>
             <li><strong>適用</strong>ボタン — 各設定の保存と即時反映</li>
@@ -756,11 +758,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.29 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.29</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-16</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="Wi-Fi 設定: 保存済みの SSID と接続状態を表示・近くの Wi-Fi を一覧から選べるように">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Wi-Fi の SSID 欄は「いま接続中の SSID」だけを表示していたため、<strong>つながらないと空欄になり、保存した設定が消えたように見えていました</strong>（関宿 2026-10-16: 入力した SSID の大文字・小文字が実際の電波と違い、接続できていなかった）。</li>
+          <li>見出しの下に<strong>接続状態</strong>（接続済み／探しています（つながっていません）／接続中…／未設定）と<strong>保存済みの SSID</strong> を表示し、つながらないときは手がかりを出すようにしました。保存済みの SSID は入力欄にも残ります。</li>
+          <li><strong>「近くの Wi-Fi を探す」</strong>で周辺の Wi-Fi を電波の強い順に一覧表示（強さ・2.4GHz/5GHz・暗号化方式）。<strong>押すと SSID 欄に正しい綴りで入ります</strong>。保存済みの SSID と大文字・小文字だけ違う電波があれば知らせます。</li>
+          <li><strong>WPA3 専用</strong>やパスワード無しのネットワークは接続できないため、理由を表示して選べないようにしました（WPA2/WPA3 混在なら接続できます）。</li>
+          <li>「Wi-Fi 設定を適用」の後、最大30秒<strong>接続できたかを確かめて結果を表示</strong>します。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.28 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.28</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="曳航機だけ受信が途切れても、グライダーの航跡から離脱高度を記録">
