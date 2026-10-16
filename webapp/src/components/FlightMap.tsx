@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
+import { WindLinesLayer } from "@/lib/wind-lines";
 import mqtt from "mqtt";
 import {
   MQTT_WS_URL,
@@ -9,7 +10,7 @@ import {
   topicFor,
 } from "@/lib/mqtt-config";
 import { useUnits } from "@/lib/UnitContext";
-import { formatAltitude, formatSpeed, formatClimbRate, type DisplayNameMode, type DistanceUnit } from "@/lib/units";
+import { formatAltitude, formatSpeed, formatClimbRate, LABEL_SCALE, type DisplayNameMode, type DistanceUnit } from "@/lib/units";
 import type {
   AircraftPosition,
   AircraftList,
@@ -1632,8 +1633,16 @@ export default function FlightMap() {
     return () => { cancelled = true; clearInterval(timer); if (layer) map.removeLayer(layer); };
   }, [mapReady, units.rainRadar]);
 
+  // ── 機体アイコンの文字の大きさ(設定「アイコンの文字の大きさ」)。CSS 変数 --ac-scale を変えるだけなので、
+  // アイコンを作り直さずにすぐ切り替わる(.ac-top/.ac-bot の font-size が標準×倍率になる・globals.css)
+  useEffect(() => {
+    document.documentElement.style.setProperty("--ac-scale", String(LABEL_SCALE[units.labelSize] ?? 1));
+  }, [units.labelSize]);
+
   // ── 風の流れ。設定「風の流れ」でON/OFF(既定OFF)、高さは 地上(アメダス実測)/1,000/2,000/5,000ft(MSM 予報) ──
-  // 粒子は leaflet-velocity(同梱)。windPane(320)= 雨雲(300)の上・滑空場/同心円(350)/航跡/機体の下、地形が透ける濃さ。
+  // 風速で色分けした流線(矢じり=風下)の静止表示(src/lib/wind-lines.ts・ogn.ezoe.net v0.22 と同じ)。地図を動かし終えたとき・
+  // データ更新時だけ描き直す(v1.4.29 までの粒子アニメーションはブラウザの負荷が大きかった)。
+  // windPane(320)= 雨雲(300)の上・滑空場/同心円(350)/航跡/機体の下。半透明(0.45)で地図が透ける。
   // 5分毎に /api/wind/meta を確認し、時刻が変わっていれば格子を取り直す(地上は10分毎・上空は3時間毎に更新される)。
   const [windInfo, setWindInfo] = useState<{ title: string; time: string; at: string } | null>(null);
   useEffect(() => {
@@ -1643,14 +1652,13 @@ export default function FlightMap() {
       const pane = map.createPane("windPane");
       pane.style.zIndex = "320";
       pane.style.pointerEvents = "none";
-      pane.style.opacity = "0.75";
+      pane.style.opacity = "0.45";
     }
     const level = units.windLevel;
     const lat = units.airfield.latitude, lon = units.airfield.longitude, afName = units.airfield.name;
     const title = WIND_LABEL[level] || level;
     let cancelled = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let layer: any = null;
+    let layer: WindLinesLayer | null = null;
     let key = "";
     let grid: WindGrid | null = null;
     let stations: AmedasStation[] | null = null;
@@ -1674,9 +1682,6 @@ export default function FlightMap() {
     };
     const load = async () => {
       try {
-        // leaflet-velocity はグローバルの L に velocityLayer を足す
-        (window as unknown as { L: typeof L }).L = L;
-        await import("@/lib/vendor/leaflet-velocity.min.js");
         const rm = await fetch("/api/wind/meta", { cache: "no-store" });
         if (!rm.ok) throw new Error(String(rm.status));
         const meta = (await rm.json()) as { levels?: Record<string, { valid: string; kind?: string }> };
@@ -1696,15 +1701,10 @@ export default function FlightMap() {
           if (cancelled) return;
           grid = data; stations = st; key = k;
           if (!layer) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            layer = (L as any).velocityLayer({
-              data, displayValues: false, paneName: "windPane",
-              minVelocity: 0, maxVelocity: WIND_MAX_MS, colorScale: WIND_COLORS,
-              velocityScale: 0.007, particleAge: 64, lineWidth: 1.5, particleMultiplier: 1 / 320, frameRate: 20, opacity: 0.95,
-            });
+            layer = new WindLinesLayer({ pane: "windPane", colors: WIND_COLORS, maxMs: WIND_MAX_MS, grid: data });
             layer.addTo(map);
           } else {
-            layer.setData(data);
+            layer.setGrid(data);
           }
         }
         if (cancelled) return;

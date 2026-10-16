@@ -219,8 +219,8 @@ function ManualContent() {
         </Section>
         <Section id="map-wind" heading="風の流れ（気象庁アメダス・MSM）">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            <li>設定 → マップ表示の<strong>「風の流れ（気象庁）」</strong>で、風に乗って流れる<strong>粒子</strong>を地形が透ける濃さで地図に重ねます（既定は非表示）。ON/OFF と高さは<strong>機体（受信機）ごとに保存</strong>され、どのブラウザで開いても同じ表示になります。粒子の<strong>色は風速</strong>（青＝弱い → 青緑 → 緑 → 黄 → 橙 → 赤 → 赤紫＝約40kt 以上）。</li>
-            <li><strong>高さ</strong>を選べます：<strong>地上</strong>＝気象庁アメダスの<strong>実測</strong>（10分平均の風向・風速、10分毎更新）を約10km の格子に補間したもの（観測点から離れた海上などには粒子を出しません）／<strong>1,000ft・2,000ft・5,000ft</strong>＝気象庁 MSM の<strong>予報</strong>（975／950／850hPa の気圧面の風・約10km 格子・3時間毎の予報。実際の高さは気圧によって変わります）。</li>
+            <li>設定 → マップ表示の<strong>「風の流れ（気象庁）」</strong>で、風の流れを<strong>流線</strong>（風に沿った線）で地図に半透明に重ねます（既定は非表示）。線上の<strong>矢じりは風が吹いていく向き</strong>（風下）です。動かない表示なので端末の負荷はほとんどかかりません（地図を動かし終えたとき・データの更新時だけ描き直します）。ON/OFF と高さは<strong>機体（受信機）ごとに保存</strong>され、どのブラウザで開いても同じ表示になります。線の<strong>色は風速</strong>（青＝弱い → 青緑 → 緑 → 黄 → 橙 → 赤 → 赤紫＝約40kt 以上）。</li>
+            <li><strong>高さ</strong>を選べます：<strong>地上</strong>＝気象庁アメダスの<strong>実測</strong>（10分平均の風向・風速、10分毎更新）を約10km の格子に補間したもの（観測点から離れた海上などには流線を引きません）／<strong>1,000ft・2,000ft・5,000ft</strong>＝気象庁 MSM の<strong>予報</strong>（975／950／850hPa の気圧面の風・約10km 格子・3時間毎の予報。実際の高さは気圧によって変わります）。</li>
             <li>地図の<strong>左下</strong>に時刻（JST・観測／予報）と<strong>滑空場の風</strong>（風向＝吹いてくる方角・10°単位、風速 kt と m/s）を表示します。地上は<strong>近くのアメダス（30km 以内）の実測値</strong>をそのまま表示します。雨雲レーダーと両方表示するときは、雨雲レーダーの凡例が上・風の凡例が下になります。</li>
             <li>データは <strong>ogn.ezoe.net</strong> が気象庁から取り込んで整形したものを、この端末が中継して滑空場の周辺だけ表示します（表示には<strong>インターネット接続</strong>が必要）。アメダスは気象庁ホームページの公開データで公式の配信サービスではないため、気象庁の都合で止まることがあります（凡例に「取得できません」）。</li>
             <li>予報・補間した値なので、山や海岸の細かい風、サーマル・ローター等は表現されません。飛行の判断には公式の気象情報と現地の観測を使ってください。</li>
@@ -430,6 +430,7 @@ function ManualContent() {
         <Section id="settings-display" heading="3-5. 表示設定">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <li><strong>機体ラベル表示名</strong>（ブラウザ） — コンテスト番号 / 登録番号 / パイロット名 切替</li>
+            <li><strong>アイコンの文字の大きさ</strong>（ブラウザ） — 地図の機体アイコンの上下に出す文字（機番・高度・速度）の大きさ。小 / 標準 / 大 / 特大 / 最大（既定 標準）。大きなモニターや離れて見るときは「特大」「最大」</li>
             <li><strong>高度</strong>（ブラウザ） — m / ft</li>
             <li><strong>速度</strong>（ブラウザ） — km/h / knot</li>
             <li><strong>上昇率</strong>（ブラウザ） — m/s / knot/s</li>
@@ -758,11 +759,32 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.30 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.30</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-16</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="風の流れを動かない「流線」表示に（ブラウザの負荷を大幅に軽減）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>風の流れを、粒子のアニメーションから、ogn.ezoe.net と同じ<strong>静止の流線</strong>（風に沿った線）に変えました。線の<strong>色は風速</strong>、線上の<strong>矢じりは風が吹いていく向き</strong>（風下）で、地図が透ける半透明です。</li>
+          <li>粒子表示は画面全体を毎秒20回描き直しており、ブラウザの処理能力をほぼ使い切っていました（計測: 使用率100%・描画11回/秒 → 流線で 31%・60回/秒。風なしでも28%なので、流線で増える負荷は約3%）。サイネージや古い端末でも地図・機体が滑らかに動きます。</li>
+          <li>描き直すのは、地図を動かし終えたとき・拡大縮小・データの更新時だけです。凡例（滑空場の風）と出典の表示はこれまでどおりです。</li>
+        </ul>
+      </Card>
+
+      <Card title="機体アイコンの文字の大きさを選べるように">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定 →「表示設定」に<strong>「アイコンの文字の大きさ」</strong>を追加しました。地図の機体アイコンの上下に出す文字（機番・高度・速度）を <strong>小／標準／大／特大／最大</strong> から選べます（既定は標準＝従来の大きさ）。</li>
+          <li>選ぶとすぐ切り替わり、<strong>ブラウザごとに保存</strong>されます。滑空場の大きなモニターでは「特大」「最大」、スマホでは「標準」のように使い分けられます。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.29 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.29</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-16</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="Wi-Fi 設定: 保存済みの SSID と接続状態を表示・近くの Wi-Fi を一覧から選べるように">

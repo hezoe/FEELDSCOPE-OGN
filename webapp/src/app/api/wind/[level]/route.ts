@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 //   上空 = 気象庁 MSM の予報(975hPa≈1,000ft / 950hPa≈2,000ft / 850hPa≈5,000ft、約10km 格子)
 // 気象庁(の非公式 JSON)や Open-Meteo へは ogn.ezoe.net だけが取りに行く(各機から直接は取らない)。
 //   GET /api/wind/meta                       各高さの時刻・種別(obs=観測 / forecast=予報)
-//   GET /api/wind/<sfc|975|950|850>?lat=&lon= leaflet-velocity 用の U/V 格子(滑空場の周辺)
+//   GET /api/wind/<sfc|975|950|850>?lat=&lon= 流線描画用の U/V 格子(grib2json 形式・滑空場の周辺)
 //   GET /api/wind/amedas?lat=&lon=           アメダス観測点ごとの風(凡例の「近くのアメダス」用)
 // 外向き通信は radar / open-adsb と同じく node:https + IPv4 直行(Next.js の fetch は Happy Eyeballs で失敗しうるため)。
 

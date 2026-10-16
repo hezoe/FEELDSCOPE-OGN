@@ -33,6 +33,11 @@ export const DEFAULT_ADSB: AdsbConfig = {
 
 /** 風の流れの高さ: 地上=アメダス実測 / 975・950・850hPa=MSM 予報(約1,000/2,000/5,000ft) */
 export type WindLevel = "sfc" | "975" | "950" | "850";
+/** 機体アイコンの上下の文字(機番・高度/速度)の大きさ。m=標準(従来の大きさ)。ogn.ezoe.net の「文字の大きさ」と同じ5段階 */
+export type LabelSize = "s" | "m" | "l" | "xl" | "xxl";
+/** 標準(上10px・下9px)に掛ける倍率 */
+export const LABEL_SCALE: Record<LabelSize, number> = { s: 0.85, m: 1, l: 1.3, xl: 1.7, xxl: 2.2 };
+export const LABEL_SIZE_NAMES: Record<LabelSize, string> = { s: "小", m: "標準", l: "大", xl: "特大", xxl: "最大" };
 
 export interface UnitPreferences {
   altitude: AltitudeUnit;
@@ -52,10 +57,12 @@ export interface UnitPreferences {
   rangeRings: boolean;
   /** 雨雲レーダー: 気象庁の高解像度降水ナウキャスト(5分毎・約1km)を地図に半透明で重ねる(既定ON・要インターネット) */
   rainRadar: boolean;
-  /** 風の流れ: 気象庁の風(地上=アメダス実測・上空=MSM 予報)を粒子で重ねる(既定OFF・要インターネット)。
+  /** 風の流れ: 気象庁の風(地上=アメダス実測・上空=MSM 予報)を流線で重ねる(既定OFF・要インターネット。v1.4.30 で粒子アニメーションから静止の流線に)。
    *  v1.4.26 から端末(機体)ごとの設定(view-config.json)。どのブラウザで開いても同じ表示 */
   windFlow: boolean;
   windLevel: WindLevel;
+  /** 機体アイコンの文字の大きさ(ブラウザ保存。大きなモニターとスマホで見やすさが違うため) */
+  labelSize: LabelSize;
 }
 
 export const DEFAULT_UNITS: UnitPreferences = {
@@ -74,6 +81,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
   rainRadar: true,
   windFlow: false,
   windLevel: "sfc",
+  labelSize: "m",
 };
 
 const STORAGE_KEY = "ogn-unit-preferences";

@@ -12,6 +12,7 @@ import {
   DistanceUnit,
   DisplayNameMode,
   WindLevel,
+  LabelSize,
   AirfieldConfig,
   AdsbConfig,
   MapSource,
@@ -31,6 +32,7 @@ interface UnitContextType {
   setOpenAdsb: (v: boolean) => void;
   setOpenOgn: (v: boolean) => void;
   setRangeRings: (v: boolean) => void;
+  setLabelSize: (v: LabelSize) => void;
   setRainRadar: (v: boolean) => void;
   setWindFlow: (v: boolean) => void;
   setWindLevel: (v: WindLevel) => void;
@@ -51,6 +53,7 @@ const UnitContext = createContext<UnitContextType>({
   setOpenAdsb: () => {},
   setOpenOgn: () => {},
   setRangeRings: () => {},
+  setLabelSize: () => {},
   setRainRadar: () => {},
   setWindFlow: () => {},
   setWindLevel: () => {},
@@ -158,6 +161,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         setOpenAdsb: (openAdsb: boolean) => updateView({ openAdsb }),
         setOpenOgn: (openOgn: boolean) => updateView({ openOgn }),
         setRangeRings: (rangeRings: boolean) => update({ rangeRings }),
+        setLabelSize: (labelSize: LabelSize) => update({ labelSize }),
         setRainRadar: (rainRadar: boolean) => update({ rainRadar }),
         setWindFlow: (windFlow: boolean) => updateView({ windFlow }),
         setWindLevel: (windLevel: WindLevel) => updateView({ windLevel }),

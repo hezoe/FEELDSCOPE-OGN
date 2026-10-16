@@ -78,8 +78,9 @@ button, [role="button"] {
     -1px 1px 0 var(--color-bg-primary), 1px 1px 0 var(--color-bg-primary),
     0 0 3px var(--color-bg-primary);
 }
-.ac-top { bottom: 100%; margin-bottom: 2px; font-size: 10px; font-weight: 700; }
-.ac-bot { top: 100%; margin-top: 2px; font-size: 9px; font-weight: 600; opacity: 0.95; }
+/* 文字の大きさは設定「アイコンの文字の大きさ」(--ac-scale・FlightMap が設定)。標準=上10px・下9px */
+.ac-top { bottom: 100%; margin-bottom: 2px; font-size: calc(10px * var(--ac-scale, 1)); font-weight: 700; }
+.ac-bot { top: 100%; margin-top: 2px; font-size: calc(9px * var(--ac-scale, 1)); font-weight: 600; opacity: 0.95; }
 
 /* 機首の回転をCSSで滑らかに(DOMを保ったまま transform だけ更新する。FlightMap の applyIconSmooth 参照)。
    タブ非表示中は JS 側が transition:none を当ててスナップさせる(復帰時のくるくる回転防止)。 */

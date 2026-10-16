@@ -5,6 +5,7 @@ import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
 import AuthPanel from "@/components/AuthPanel";
 import type { WifiNetwork } from "@/lib/wifi-status";
+import { LABEL_SIZE_NAMES } from "@/lib/units";
 
 interface IGCFile {
   name: string;
@@ -113,7 +114,7 @@ export default function SettingsPage() {
       .catch(() => { /* 取得失敗時は安全側=変更不可のまま */ });
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setRainRadar, setWindFlow, setWindLevel, setMapSource } = useUnits();
+  const { units, unitsLoaded, setAltitudeUnit, setSpeedUnit, setClimbRateUnit, setDistanceUnit, setDisplayNameMode, setSafeGlideRatio, setAirfield, setAdsb, setOpenAdsb, setOpenOgn, setRangeRings, setRainRadar, setWindFlow, setWindLevel, setMapSource, setLabelSize } = useUnits();
   const speedChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 発射順と反映順。/api/system は重いことがあり、5秒ごとのポーリングと
@@ -697,7 +698,7 @@ export default function SettingsPage() {
                   </div>
                 )}
                 <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                  風に乗って流れる粒子を地図に重ねます（色＝風速）。<strong>地上</strong>は気象庁アメダスの実測（10分平均・10分毎）、<strong>1,000ft／2,000ft／5,000ft</strong>は気象庁 MSM の予報（975／950／850hPa）です。左下に時刻と滑空場の風（地上は近くのアメダスの実測値）を表示します。データは ogn.ezoe.net 経由で取得します（インターネット接続が必要）。<strong>この設定は機体（受信機）ごとに保存</strong>され、別のブラウザやURLで開いても同じ表示になります。
+                  風の流れを流線（風に沿った線・矢じり＝風下）で地図に半透明に重ねます（色＝風速）。動かない表示なので端末の負荷はほとんどかかりません。<strong>地上</strong>は気象庁アメダスの実測（10分平均・10分毎）、<strong>1,000ft／2,000ft／5,000ft</strong>は気象庁 MSM の予報（975／950／850hPa）です。左下に時刻と滑空場の風（地上は近くのアメダスの実測値）を表示します。データは ogn.ezoe.net 経由で取得します（インターネット接続が必要）。<strong>この設定は機体（受信機）ごとに保存</strong>され、別のブラウザやURLで開いても同じ表示になります。
                 </p>
               </div>
             </div>
@@ -734,6 +735,21 @@ export default function SettingsPage() {
                 {units.displayName === "competition_id" && "マップとサイドバーにコンテスト番号（CN）を表示します"}
                 {units.displayName === "registration" && "マップとサイドバーに登録番号（JA番号）を表示します"}
                 {units.displayName === "pilot" && "マップとサイドバーにパイロット名を表示します"}
+              </p>
+            </div>
+
+            {/* 機体アイコンの文字の大きさ(このブラウザに保存) */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text-secondary)" }}>
+                アイコンの文字の大きさ
+              </label>
+              <div className="flex rounded overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+                {(["s", "m", "l", "xl", "xxl"] as const).map((v) => (
+                  <UnitButton key={v} label={LABEL_SIZE_NAMES[v]} active={units.labelSize === v} onClick={() => setLabelSize(v)} />
+                ))}
+              </div>
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                地図の機体アイコンの上下に出す文字（機番・高度・速度）の大きさ。大きなモニターや離れて見るときは「特大」「最大」。このブラウザに保存されます
               </p>
             </div>
 
