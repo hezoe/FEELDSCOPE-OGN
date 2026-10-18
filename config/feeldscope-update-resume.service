@@ -1,0 +1,14 @@
+[Unit]
+Description=FEELDSCOPE update requested while OverlayFS was on (runs once after OverlayFS has been turned off)
+ConditionPathExists=/boot/feeldscope/update-pending
+RequiresMountsFor=/boot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feeldscope-update-resume
+TimeoutStartSec=60min
+
+[Install]
+WantedBy=multi-user.target

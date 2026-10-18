@@ -239,7 +239,7 @@ function ManualContent() {
             <li><strong>#</strong> — 行番号</li>
             <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）。コンテストナンバーが登録されていれば <strong>JA03KH (KH)</strong> のように括弧で併記します</li>
             <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）。<strong>空欄</strong>は「離陸を観測できなかった」場合（外来機の飛来や、離陸後に FLARM の電源を入れた等）で、着陸を検知した時点で<strong>着陸のみの記録</strong>が作られます</li>
-            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
+            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。橙の時刻に<strong>「推定」</strong>と付いているのは、本体の停止（電源断・再起動）や受信の途切れのあいだに降りていて、着陸の瞬間を見ていない場合です。地上で見つかった時刻（＝この時刻までに着陸した）か、受信が切れる直前に滑空場の近くの低空で見た時刻が入ります。分かれば手で直してください（直すと「推定」は消えます）。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航の相手の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則、曳航機の値を写します。曳航機の離脱が受信の途切れで見えなかったときは、反対にグライダーの値を曳航機へ写します。手で直すと※は消えます）</li>
@@ -290,6 +290,9 @@ function ManualContent() {
         </Section>
 
         <Section id="status-ogn-receiver" heading="OGN受信機">
+          <p className="text-xs mb-2" style={{ color: "var(--color-text-secondary)" }}>
+            起動直後は、<strong>時計が合うまで（最大3分）受信を始めません</strong>（v1.4.31 から）。FLARM の電波は時刻で暗号化されていて、時計が狂ったまま受信すると位置がでたらめに解読され、OGN 全体へ配信されてしまうためです（Raspberry Pi には時計の電池が無く、電源断のあとは古い時刻から動き出します）。3分で合わなければいったん停止のままにし、受信機の見張り（2分ごと）が時計が合ってから起動します。ネットの無い場所で時計を待たずに受信したい場合は、SD カードの起動用の区画に <code>feeldscope-no-time-wait</code> という空のファイルを置いてください。
+          </p>
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
             <ManualRow label="ソフトウェア" desc="rtlsdr-ognのバージョンとビルド日" />
@@ -343,6 +346,20 @@ function ManualContent() {
             <ManualRow label="rtlsdr-ogn (init.d)" desc="OGNのRF受信・デコードプロセス（init.d管理）。応答が無くなると2分ごとの見回りが自動で起動し直します" />
             <ManualRow label="稼働時間" desc="各サービスの起動からの経過時間" />
           </tbody></table>
+        </Section>
+
+        <Section id="status-boot-history" heading="再起動の記録">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
+            <ManualRow label="今日の起動" desc="今日（日本時間）起動した回数" />
+            <ManualRow label="今日の電源断・固まり" desc="今日の起動のうち、前回が正常に止まらなかった回数（電源が切れた、または本体が固まって自動でリセットされた）。1回以上なら電源アダプター・ケーブルを確認してください" />
+            <ManualRow label="起動" desc="起動した時刻（時計が合ってから記録）" />
+            <ManualRow label="前回の止まり方" desc="正常に停止・再起動（画面の再起動・毎朝の自動再起動など）／電源断・固まり／不明（記録を始めた最初の起動）" />
+            <ManualRow label="前回最後に動いていた時刻" desc="前の起動で最後に動いていた時刻（5分ごとに記録）。電源断なら、このあと5分以内に電源が切れています" />
+          </tbody></table>
+          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            固定化（OverlayFS）が有効でも消えないよう、SD カードの起動用の区画（<code>/boot/feeldscope</code>）に残します。新しい200回分を保持。
+            v1.4.31 以降の機体で表示されます。
+          </p>
         </Section>
 
         <Section id="status-flight-log-stats" heading="フライトログ統計（本日）">
@@ -413,6 +430,7 @@ function ManualContent() {
             <li><strong>OpenなADS-Bを追加（adsb.lol）</strong>（ブラウザ） — 公開データ <code>adsb.lol</code> から<strong>滑空場中心・半径20海里</strong>の ADS-B / Mode-S 機を取得して<span style={{ color: "#1565c0", fontWeight: 600 }}>青</span>で表示します。ADS-B受信機や tar1090 は不要です。5秒ごとに更新し、過去10分の航跡も描きます。
               <ul className="list-[circle] ml-5 mt-1 space-y-1">
                 <li>ローカル受信（上の「ADS-B 受信を有効にする」）と<strong>同じ機体は二重に表示しません</strong>。ローカル受信側を優先します。</li>
+                <li>トランスポンダ付きのグライダーなど、<strong>FLARM（OGN）でも見えている機体</strong>は、ICAO アドレスが同じなら ADS-B 側を出しません（v1.4.31 から。以前は同じ機体が2機に見えました）。</li>
                 <li>ONにした時点で取得を開始します。OFFにすると表示中の機体も消えます。</li>
               </ul>
             </li>
@@ -467,7 +485,8 @@ function ManualContent() {
             <li><strong>他の端末で開いたままの画面</strong> — 1分ごとに機体の版数を確認し、更新されていれば自動で再読み込み（地図タブ表示中・入力操作中でないときのみ。v1.4.16以降）</li>
           </ul>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
-            <strong>⚠ 注意:</strong> 固定化(OverlayFS)がONの場合はアップデートできません。先に固定化をOFFにして再起動してください。
+            <strong>固定化(OverlayFS)が ON のとき</strong>（v1.4.31 以降）: アップデートを押すと、<strong>固定化を外して再起動 → 起動後に自動で更新 → 固定化を戻して再起動</strong>を自動で行います（再起動 2回・10〜20分）。その間は受信と画面が止まるので、運行中は避けてください。経過は <code>/boot/feeldscope/update.log</code> に残り、終わってから画面を開き直すと新しい版になっています。<br />
+            （v1.4.30 以前の機体は、固定化 ON だと断られます。先に固定化を OFF にして再起動してから更新してください。）
           </div>
         </Section>
 
@@ -478,21 +497,19 @@ function ManualContent() {
             <li><strong>「固定化を解除して再起動」</strong>ボタン — OverlayFSを解除して再起動を1アクションで実行</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-            <strong>固定化ON</strong>: SDカード書き込みが保護され、再起動で変更がリセット。電源断時のSDカード破損防止。<br />
+            <strong>固定化ON</strong>: SDカード書き込みが保護され、電源断時のSDカード破損を防ぐ。画面で変えた設定は SD にも書き写すので残る（下記）。<br />
             <strong>固定化OFF</strong>: 全変更が恒久保存されるが、電源断時にSDカード破損リスクあり。
           </p>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-success-dim)", color: "var(--color-success)", border: "1px solid var(--color-success)" }}>
             <strong>推奨:</strong> 通常運用では固定化ONを推奨。設定変更が必要な時のみOFFに切替。
           </div>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
-            <strong>⚠ 機体情報を残したい場合は固定化をOFFにしてください。</strong><br />
-            固定化中に残らないもの（再起動でリセット）:
-            <strong>機体情報</strong>（登録番号・コンテストID・機種・曳航機の指定）、
-            飛行場設定、ADS-B設定、管理者パスワード、ネットワーク設定。<br />
-            固定化中でも残るもの: <strong>OGN受信機の設定</strong>（受信機名・位置・周波数補正・AGC）。
-            これらは <code>/boot</code> にあり固定化の対象外です。<br />
-            機体の顔ぶれが変わる間は固定化をOFFのまま運用し、落ち着いてから固定化してください。
-            固定化後に機体を追加するときは「固定化を解除して再起動」→ 登録 → 「固定化を有効にして再起動」の順です。
+            <strong>固定化中も残るもの（v1.4.31 以降）:</strong> 画面で変えた
+            <strong>機体情報</strong>（登録番号・コンテストID・機種・曳航機の指定）、飛行場設定、表示の設定、ADS-B設定、管理者パスワード、
+            Wi-Fi・有線LANの設定、自動再起動の時刻。保存した直後に SD にも書き写します（固定化を外さずに機体を登録できます）。<br />
+            もともと残るもの: <strong>OGN受信機の設定</strong>（受信機名・位置・周波数補正・AGC）＝ <code>/boot</code> にあり固定化の対象外。<br />
+            再起動で元に戻るもの: SSH で直接変えたファイルなど、画面以外の変更。<br />
+            （v1.4.30 以前の機体では、画面で変えた設定も再起動で元に戻ります。機体の登録は「固定化を解除して再起動」→ 登録 → 「固定化を有効にして再起動」の順で行ってください。）
           </div>
         </Section>
 
@@ -759,11 +776,60 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
+      {/* v1.4.31 */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.31</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        関宿（Sekiyado1）の OGN 受信機 運用開始日（2026-10-18）に見つかった問題の修正です。
+      </p>
+
+      <Card title="時計が合うまで OGN の受信を始めない（壊れた位置を配信しない）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>電源断のあとの起動で、<strong>時計が狂ったまま受信を始め、FLARM の位置を壊して解読した約60件</strong>（高度 8,800m・経度142度など）が OGN 全体へ配信されました。FLARM の電波は時刻で暗号化されているため、時計が狂うと位置も壊れます。</li>
+          <li>起動時は<strong>時計が合うまで（最大3分）受信を始めない</strong>ようにしました。合わなければ受信機の見張りが、時計が合ってから起動します。</li>
+        </ul>
+      </Card>
+
+      <Card title="固定化（OverlayFS）中でも、画面で変えた設定が再起動後に残る">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>固定化中は、登録した登録番号などが再起動で消え、右の一覧が FLARM/ICAO の ID のままになっていました。</li>
+          <li>画面で保存した<strong>機体情報・滑空場・表示・ADS-B・パスワード・Wi-Fi・有線LAN・自動再起動の時刻</strong>を、保存した直後に SD にも書き写すようにしました。固定化を外さずに機体を登録できます。</li>
+        </ul>
+      </Card>
+
+      <Card title="固定化中でもアップデートできる">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>アップデートを押すと、<strong>固定化を外して再起動 → 自動で更新 → 固定化を戻して再起動</strong>を自動で行います（再起動 2回・10〜20分）。これまでは手で固定化を外す必要がありました（この版を入れる最初の1回だけは、従来どおり手で外してください）。</li>
+        </ul>
+      </Card>
+
+      <Card title="再起動の記録（電源断・固まりが分かる）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>状態の画面に<strong>「再起動の記録」</strong>を追加しました。起動した時刻、前回が<strong>正常に止まったか（電源断・固まりではないか）</strong>、前回最後に動いていた時刻（5分ごと）を表示します。今日の電源断・固まりが1回以上なら、電源の確認を案内します。</li>
+          <li>固定化中でも消えないよう、SD カードの起動用の区画に残します。</li>
+        </ul>
+      </Card>
+
+      <Card title="停止中・受信の途切れ中に降りた便の着陸時刻を「推定」で入れる">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>本体の停止（電源断・再起動）や受信の途切れのあいだに着陸した便は、着陸時刻が空欄でした。地上で見つかった時刻（＝この時刻までに着陸した）などを<strong>橙の「推定」</strong>付きで入れるようにしました。手で直すと「推定」は消えます。</li>
+        </ul>
+      </Card>
+
+      <Card title="表示の修正">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報を登録・変更したら、右の「上空／地上」の一覧と地図のラベルに<strong>すぐ登録番号が出る</strong>ようにしました（次の位置を待たない。表示設定を変えたときに ID に戻ることもなくなりました）。</li>
+          <li>トランスポンダ付きのグライダーが、<strong>FLARM と OpenなADS-B で2機に見えていた</strong>のを修正しました（ICAO アドレスが同じなら ADS-B 側を出さない）。</li>
+        </ul>
+      </Card>
+
       {/* v1.4.30 */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.30</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-16</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="風の流れを動かない「流線」表示に（ブラウザの負荷を大幅に軽減）">

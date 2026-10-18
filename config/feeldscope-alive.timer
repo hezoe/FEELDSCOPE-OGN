@@ -1,0 +1,11 @@
+[Unit]
+Description=Write the FEELDSCOPE alive mark every 5 minutes (and the boot record once the clock is set)
+
+[Timer]
+# 起動1分後(時計が合っていれば起動の記録もここで書く)、以後5分ごと
+OnBootSec=60
+OnUnitActiveSec=300
+AccuracySec=30
+
+[Install]
+WantedBy=timers.target

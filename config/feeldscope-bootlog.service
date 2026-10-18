@@ -1,0 +1,14 @@
+[Unit]
+Description=FEELDSCOPE boot record (boot time and whether the previous shutdown was clean, kept on /boot outside OverlayFS)
+RequiresMountsFor=/boot
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/feeldscope-bootlog boot
+# 正常な停止・再起動のときだけ印を書く（電源断・固まりでは書かれない）
+ExecStop=/usr/local/sbin/feeldscope-bootlog shutdown
+
+[Install]
+WantedBy=multi-user.target

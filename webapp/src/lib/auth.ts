@@ -6,6 +6,7 @@
 //     隔離ポリシー上オペレーターだけ。よって送信元IP=10.66.10.x は本人証明になる。
 import { readFile, writeFile } from "fs/promises";
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from "crypto";
+import { persistFiles } from "./persist";
 
 const AUTH_PATH = process.env.FEELDSCOPE_AUTH_CONFIG
   || `${process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE"}/auth.json`;
@@ -55,6 +56,7 @@ async function loadAuth(): Promise<AuthConfig> {
 
 async function saveAuth(cfg: AuthConfig): Promise<void> {
   await writeFile(AUTH_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  await persistFiles(AUTH_PATH);   // 固定化中も操作パスワードを残す
   cache = cfg;
 }
 

@@ -67,6 +67,12 @@ interface FlightLogStats {
   signal_lost?: number;
 }
 
+interface BootRecord {
+  boot: string;
+  prev: "clean" | "unclean" | "unknown";
+  prev_alive: string;
+}
+
 interface StatusPayload {
   receiver_id: string;
   system: SystemSummary | null;
@@ -74,6 +80,16 @@ interface StatusPayload {
   adsb_status: AdsbStatus | null;
   services: ServiceState[];
   flight_log: FlightLogStats;
+  /** 起動の記録(/boot に残す)。古い版のサーバ・記録の仕組みが無い機体は null/未定義 */
+  boot_history?: { boots: BootRecord[]; last_alive: string | null } | null;
+}
+
+/** ISO 時刻 → 「10/18 11:16」(端末の時刻帯=日本時間で表示) */
+function fmtBootTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso || "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** /api/open-adsb の受信状態(設定ONでも実際に取得できているかの確認用) */
@@ -345,6 +361,54 @@ export default function StatusPage() {
             ))}
           </div>
         </Card>
+
+        {/* Boot history */}
+        {data?.boot_history && (
+          <Card title="再起動の記録" helpId="status-boot-history">
+            {(() => {
+              const boots = data.boot_history.boots;
+              const today = new Date().toDateString();
+              const todayBoots = boots.filter((b) => new Date(b.boot).toDateString() === today);
+              const todayUnclean = todayBoots.filter((b) => b.prev === "unclean").length;
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Stat label="今日の起動" value={`${todayBoots.length} 回`} mono />
+                    <Stat label="今日の電源断・固まり" value={`${todayUnclean} 回`} mono accent={todayUnclean > 0 ? "warning" : undefined} />
+                  </div>
+                  {todayUnclean > 0 && (
+                    <p className="text-xs mt-2" style={{ color: "var(--color-warning)" }}>
+                      正常に止まらずに再起動しています（電源が切れた、または本体が固まって自動でリセットされた）。電源アダプター・ケーブルを確認してください。
+                    </p>
+                  )}
+                  <table className="w-full text-xs mt-3">
+                    <thead>
+                      <tr style={{ color: "var(--color-text-secondary)" }}>
+                        <th className="text-left font-normal py-1">起動</th>
+                        <th className="text-left font-normal py-1">前回の止まり方</th>
+                        <th className="text-left font-normal py-1">前回最後に動いていた時刻</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {boots.slice(0, 10).map((b) => (
+                        <tr key={b.boot} style={{ borderTop: "1px solid var(--color-border)" }}>
+                          <td className="py-1 tabular-nums">{fmtBootTime(b.boot)}</td>
+                          <td className="py-1" style={{ color: b.prev === "unclean" ? "var(--color-warning)" : undefined }}>
+                            {b.prev === "clean" ? "正常に停止・再起動" : b.prev === "unclean" ? "電源断・固まり" : "不明（記録の開始）"}
+                          </td>
+                          <td className="py-1 tabular-nums">{b.prev_alive ? fmtBootTime(b.prev_alive) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+                    固定化(OverlayFS)が有効でも消えないよう、SD カードの起動用の区画に残しています。時刻は時計が合ってから記録します（最後に動いていた時刻は5分ごと）。
+                  </p>
+                </>
+              );
+            })()}
+          </Card>
+        )}
 
         {/* Flight Log */}
         <Card title="フライトログ統計（本日）" helpId="status-flight-log-stats">

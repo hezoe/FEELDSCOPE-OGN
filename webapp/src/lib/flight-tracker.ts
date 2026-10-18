@@ -241,6 +241,13 @@ export interface FlightLogEntry {
    * 代わりに「信号途絶」と表示する。受信が戻るか着陸を記録したら外れる。
    */
   signalLost?: boolean;
+  /**
+   * 着陸時刻が推定(true)。本体の停止(電源断・再起動)や受信の途切れのあいだに降りていて、
+   * 実際の着陸の瞬間は見ていない。landingTime は「この時刻までに着陸した」上限
+   * (地上で見つかった時刻)か、受信が切れる直前に低空で見た時刻。画面では「推定」と出す。
+   * 手で時刻を直したら外す。2026-10-18 関宿: 停止中に降りた3便が着陸空欄のまま残った。
+   */
+  landingEstimated?: boolean;
 }
 
 interface Sample {
@@ -473,14 +480,20 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 /**
  * この機体の「飛行中」のまま残っている記録を閉じる。
  * time に "" を渡すと着陸時刻は空欄になる（何時に降りたか分からない場合）。
+ * estimated=true なら着陸時刻を「推定」として入れる（この時刻までに着陸した、の上限）。
  */
-function closeOpenFlights(deviceId: string, time: string, exceptId?: string): void {
+function closeOpenFlights(deviceId: string, time: string, exceptId?: string, estimated = false): void {
   const s = S();
   let changed = false;
   const next = s.flights.map((f) => {
     if (f.deviceId !== deviceId || f.landingTime !== null || f.id === exceptId) return f;
     changed = true;
-    return withoutSignalLost({ ...f, landingTime: time });
+    const closed = withoutSignalLost({ ...f, landingTime: time });
+    if (estimated && time) {
+      console.log(`[flight-tracker] landing ${deviceId} by ${time} (estimated: landed while unseen)`);
+      return { ...closed, landingEstimated: true };
+    }
+    return closed;
   });
   if (changed) s.flights = next;
 }
@@ -517,14 +530,20 @@ function trackerRegistration(deviceId: string): string {
   return rec?.registration || rec?.competition_id || deviceId;
 }
 
-/** 着陸を記録する。追っていた飛行に時刻を入れ、取り残しがあれば空欄で閉じる */
-function recordLanding(deviceId: string, tr: TrackingState, time: string): void {
+/**
+ * 着陸を記録する。追っていた飛行に時刻を入れ、取り残しがあれば空欄で閉じる。
+ * estimated=true は着陸の瞬間を見ていない(受信が途切れているあいだに降りた)ときで、時刻を「推定」にする。
+ */
+function recordLanding(deviceId: string, tr: TrackingState, time: string, estimated = false): void {
   const s = S();
   const id = tr.flightId;
   if (id) {
-    s.flights = s.flights.map((f) =>
-      f.id === id && f.landingTime === null ? withoutSignalLost({ ...f, landingTime: time }) : f);
-    console.log(`[flight-tracker] landing ${deviceId} ${time}`);
+    s.flights = s.flights.map((f) => {
+      if (f.id !== id || f.landingTime !== null) return f;
+      const closed = withoutSignalLost({ ...f, landingTime: time });
+      return estimated ? { ...closed, landingEstimated: true } : closed;
+    });
+    console.log(`[flight-tracker] landing ${deviceId} ${time}${estimated ? " (estimated)" : ""}`);
   } else {
     // 離陸を観測していない機体（外来機の飛来、離陸後に FLARM の電源を入れた等）。
     // 着陸を検知した時点で、離陸欄を空欄にした「着陸のみ」の記録を残す
@@ -835,7 +854,7 @@ function sweepStaleTracks(): void {
       const distM = haversineM(
         s.airfield.latitude, s.airfield.longitude, fix.lat, fix.lon);
       if (aglAtFix < SIGNAL_LOST_AGL_M && distM < SIGNAL_LOST_NEAR_FIELD_M) {
-        recordLanding(deviceId, tr, clockStr(fix.timeMs));
+        recordLanding(deviceId, tr, clockStr(fix.timeMs), true);
         toGround(tr, aglAtFix);
       } else if (silenceSec >= SIGNAL_LOST_SHOW_SEC) {
         // 上空で途切れた。着陸にはしないが、「飛行中」と言い続けず信号途絶と表示する
@@ -1128,6 +1147,8 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
     s.tracking.set(deviceId, tr);
   }
 
+  // 直前に受け取った位置の時刻。着陸の瞬間を見られたか(受信が途切れていなかったか)の判断に使う
+  const prevFixMs = tr.lastFix ? tr.lastFix.timeMs : null;
   const cur: LastFix = {
     lat: pos.latitude,
     lon: pos.longitude,
@@ -1238,10 +1259,11 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   // ── 離陸 ──
   if (tr.phase === "ground") {
     // 地上にいるのに「飛行中」の記録が残っているなら、それはもう終わった飛行。
-    // 着陸を取りこぼしたか、その飛行の途中でサービスが起動し直されたかなので、
-    // 着陸時刻を空欄にして閉じる（時刻は分からないので手で入れてもらう）。
+    // 着陸を取りこぼしたか、その飛行の途中で本体が止まった(電源断・再起動)かなので、
+    // 地上で見つかったこの時刻を「この時刻までに着陸した」推定として入れて閉じる
+    // (以前は空欄。2026-10-18 関宿で停止中に降りた便が空欄のまま残った)。手で直せる。
     if (agl < ON_GROUND_AGL_M && speedMs < TAKEOFF_SPEED_MS) {
-      closeOpenFlights(deviceId, "");
+      closeOpenFlights(deviceId, clockStr(nowMs), undefined, true);
     }
     // GPS が測位できていない位置（屋内・電源投入直後）は、速度も高度もでたらめに跳ねる。
     // 滑走の始まりにも、離陸を確定する数にも入れない（数え直しもしない＝本物の滑走中に
@@ -1495,7 +1517,9 @@ export function handlePosition(deviceId: string, pos: AircraftPosition): void {
   // 高く上がらなかった飛行（低い場周、離陸中止）でも、離陸を観測できていれば
   // その飛行の終わりとして着陸を記録する。
   if ((tr.wasHigh || tr.takeoffMs !== null) && (stopped || rolledOut)) {
-    recordLanding(deviceId, tr, clockStr());
+    // 受信が途切れていて、次に見えたときにはもう地上にいた → 着陸の瞬間は見ていないので推定
+    const unseen = prevFixMs !== null && nowMs - prevFixMs > SIGNAL_LOST_SEC * 1000;
+    recordLanding(deviceId, tr, clockStr(), unseen);
     toGround(tr, agl);
     return;
   }

@@ -53,6 +53,15 @@ alive && exit 0
 sleep 5
 alive && exit 0
 
+# 時計が合うまでは起こさない。狂った時計で受信を始めると FLARM の位置がでたらめに
+# 解読され、OGN 全体へ配信される（2026-10-18 関宿）。起動時の rtlsdr-ogn も同じ理由で
+# 待ってから失敗にしてあり、ここ（2分ごと）が時計が合ったあとの起動役になる。
+if [ -x /usr/local/sbin/feeldscope-wait-time.sh ] &&
+   ! /usr/local/sbin/feeldscope-wait-time.sh 30 >/dev/null 2>&1; then
+  echo "受信機は停止中ですが、時計がまだ合っていないので起動しません（次の確認で再試行）"
+  exit 0
+fi
+
 now=$(date +%s)
 if [ -f "$STAMP" ]; then
   age=$(( now - $(stat -c %Y "$STAMP" 2>/dev/null || echo 0) ))

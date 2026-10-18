@@ -652,6 +652,23 @@ function resolveLabel(pos: AircraftPosition, deviceId: string, mode: DisplayName
   return pos.competition_id || pos.glider_id || deviceId;
 }
 
+/**
+ * 機体DBの登録(登録番号・機種・パイロット・コンテスト番号)を反映した表示名。
+ * 新しい位置が来たときも、表示設定を変えて描き直すときも、機体DBが更新されたときも
+ * この1か所で決める(描き直しだけ OGN の生データで決めていたため、登録番号を入れても
+ * ID に戻ることがあった=2026-10-18 関宿)。
+ */
+function dbAwareLabel(pos: AircraftPosition, deviceId: string, mode: DisplayNameMode, dbRec: AircraftRecord | undefined): string {
+  const labelPos = {
+    ...pos,
+    glider_id: dbRec?.registration || pos.glider_id || pos.competition_id,
+    glider_type: dbRec?.glider_type || pos.glider_type,
+    pilot: dbRec?.pilot || pos.pilot,
+    competition_id: dbRec?.competition_id || pos.competition_id,
+  };
+  return resolveLabel(labelPos, deviceId, mode);
+}
+
 /** Look up aircraft DB record by deviceId, falling back to registration match */
 function lookupDbRecord(db: AircraftDatabase, deviceId: string, gliderId?: string): AircraftRecord | undefined {
   // 接頭辞違いでも同じアドレスなら同じ機体（flight-tracker と同じ扱い）
@@ -770,6 +787,16 @@ export default function FlightMap() {
 
   // Aircraft database
   const aircraftDbRef = useRef<AircraftDatabase>({});
+  const aircraftDbJsonRef = useRef("{}");
+  const redrawAllRef = useRef<() => void>(() => {});
+  /** 機体DBを差し替える。中身が変わったときだけ全機の表示名・アイコンを描き直す */
+  const setAircraftDb = useCallback((data: AircraftDatabase) => {
+    const json = JSON.stringify(data);
+    if (json === aircraftDbJsonRef.current) return;
+    aircraftDbJsonRef.current = json;
+    aircraftDbRef.current = data;
+    redrawAllRef.current();
+  }, []);
   const pendingAutoRegister = useRef<Set<string>>(new Set());
 
   // Open ADS-B (公開 adsb.lol) の独立レイヤ。MQTT の aircraft_adsb とは別管理。
@@ -897,8 +924,7 @@ export default function FlightMap() {
     async function loadAircraftDb() {
       try {
         const res = await fetch("/api/aircraft-db");
-        const data = await res.json();
-        aircraftDbRef.current = data;
+        setAircraftDb(await res.json());
       } catch { /* ignore */ }
     }
     loadAircraftDb();
@@ -909,7 +935,7 @@ export default function FlightMap() {
       clearInterval(dbInterval);
       clearInterval(logPollId);
     };
-  }, []);
+  }, [setAircraftDb]);   // setAircraftDb は不変(useCallback [])
 
   const airfield = units.airfield;
   const fieldMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -1083,8 +1109,9 @@ export default function FlightMap() {
   }, [airfield]);
 
   const unitsRef = useRef(units);
-  useEffect(() => {
-    unitsRef.current = units;
+  // 全機のアイコンと表示名を今の設定・機体DBで描き直す(新しい位置は待たない)
+  const redrawAllAircraft = useCallback(() => {
+    const units = unitsRef.current;
     for (const [id, ac] of aircraftRef.current) {
       if (ac.adsb) {
         ac.label = ac.position.flight || ac.position.hex || id;
@@ -1095,7 +1122,8 @@ export default function FlightMap() {
         applyIconSmooth(ac, key, hdg, lbls.top, lbls.bot,
           () => makeAircraftIcon(hdg, color, false, undefined, true, undefined, undefined, undefined, lbls));
       } else {
-        ac.label = resolveLabel(ac.position, id, units.displayName);
+        const dbRec = lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id);
+        ac.label = dbAwareLabel(ac.position, id, units.displayName, dbRec);
         const { airfield: af } = units;
         const alert = getAlert(ac.position, units.safeGlideRatio, af.latitude, af.longitude, af.elevation_m);
         let color = alertColor(alert);
@@ -1104,7 +1132,6 @@ export default function FlightMap() {
         if (phasesRef.current[id] && phasesRef.current[id] !== "ground" && alert === "normal" && ac.position.altitude_m < GROUND_ALT_M + af.elevation_m) {
           color = COLOR_LOW;
         }
-        const dbRec = lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id);
         const reg = dbRec?.registration || ac.position.glider_id || ac.position.competition_id;
         const lbls = iconLabels(ac.label, ac.position, units);
         const key = [color, blink ? 1 : 0, 0, dbRec?.aircraft_type || "", ac.position.glider_type || "", reg || "", ac.position.aircraft_type || ""].join("|");
@@ -1113,7 +1140,12 @@ export default function FlightMap() {
           () => makeAircraftIcon(hdg, color, blink, ac.position.glider_type, false, reg, ac.position.aircraft_type, dbRec?.aircraft_type, lbls));
       }
     }
-  }, [units]);
+  }, []);
+  redrawAllRef.current = redrawAllAircraft;
+  useEffect(() => {
+    unitsRef.current = units;
+    redrawAllAircraft();
+  }, [units, redrawAllAircraft]);
 
   const handlePosition = useCallback(
     (deviceId: string, pos: AircraftPosition) => {
@@ -1179,15 +1211,12 @@ export default function FlightMap() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ device_ids: [deviceId] }),
         }).then(() => fetch("/api/aircraft-db").then(r => r.json()).then(data => {
-          aircraftDbRef.current = data;
+          setAircraftDb(data);
         })).catch(() => {}).finally(() => pendingAutoRegister.current.delete(deviceId));
       }
 
       // Override pos fields from DB if available
       const effectiveRegistration = dbRec?.registration || pos.glider_id || pos.competition_id;
-      const effectiveGliderType = dbRec?.glider_type || pos.glider_type;
-      const effectivePilot = dbRec?.pilot || pos.pilot;
-      const effectiveCompId = dbRec?.competition_id || pos.competition_id;
 
       let label: string;
       let color: string;
@@ -1198,8 +1227,7 @@ export default function FlightMap() {
         color = adsbColor(pos);
       } else {
         // Use DB info for label resolution
-        const labelPos = { ...pos, glider_id: effectiveRegistration, glider_type: effectiveGliderType, pilot: effectivePilot, competition_id: effectiveCompId };
-        label = resolveLabel(labelPos, deviceId, u.displayName);
+        label = dbAwareLabel(pos, deviceId, u.displayName, dbRec);
         const alert = getAlert(pos, u.safeGlideRatio, u.airfield.latitude, u.airfield.longitude, u.airfield.elevation_m);
         color = alertColor(alert);
         blink = alert === "danger";
@@ -1266,7 +1294,7 @@ export default function FlightMap() {
       setAircraftCount(aircraft.size);
       setUpdateTick((t) => t + 1);
     },
-    []
+    [setAircraftDb]
   );
 
   const handleAircraftList = useCallback((list: AircraftList) => {
@@ -1359,10 +1387,19 @@ export default function FlightMap() {
       if (stopped) return;
       const list = data.aircraft || [];
       const seen = new Set<string>();
+      // ローカル受信(FLARM/OGN・ローカル ADS-B)のアドレス。トランスポンダ付きのグライダーは
+      // FLARM(ICA84CD2B)と ADS-B(ADSB84CD2B)の両方で見えるので、ID ではなくアドレスで照合する
+      // (2026-10-18 関宿 JA2747 が2機に見えた)。
+      const localHex = new Set<string>();
+      for (const [id, ac] of aircraftRef.current) {
+        const h = hexAddress(id) || (ac.position.hex ? ac.position.hex.toUpperCase() : null);
+        if (h) localHex.add(h);
+      }
       for (const a of list) {
         if (a.latitude == null || a.longitude == null) continue;
-        // ローカル ADS-B(MQTT) に同一機が居れば表示しない(二重回避)
+        // ローカル受信に同一機が居れば表示しない(二重回避)
         if (aircraftRef.current.has(a.device_id)) continue;
+        if (a.hex && localHex.has(a.hex.toUpperCase())) continue;
         seen.add(a.device_id);
         const latlng = L.latLng(a.latitude, a.longitude);
         const label = a.flight || a.reg || (a.hex ? a.hex.toUpperCase() : a.device_id);
@@ -2163,6 +2200,7 @@ export default function FlightMap() {
                         </td>
                         <td className="px-1 py-0.5 tabular-nums whitespace-nowrap text-left" style={{ borderBottom: "1px solid var(--color-border)", borderRight: "1px solid var(--color-border)" }}>
                           {entry.landingTime != null ? (
+                            <>
                             <input
                               type="text"
                               value={entry.landingTime}
@@ -2170,14 +2208,23 @@ export default function FlightMap() {
                                 const val = e.target.value;
                                 if (/^\d{0,2}:?\d{0,2}$/.test(val) || val === "") {
                                   const updated = [...flightLog];
-                                  updated[i] = { ...updated[i], landingTime: val };
+                                  // 手で直した時刻は推定ではない
+                                  const { landingEstimated: _est, ...rest } = updated[i];
+                                  void _est;
+                                  updated[i] = { ...rest, landingTime: val };
                                   flightLogRef.current = updated;
                                   setFlightLog(updated);
                                 }
                               }}
                               className="tabular-nums bg-transparent border-b px-0 py-0 text-xs w-[3.2em]"
-                              style={{ borderColor: "var(--color-border)", outline: "none", color: "inherit" }}
+                              style={{ borderColor: "var(--color-border)", outline: "none", color: entry.landingEstimated ? "var(--color-warning)" : "inherit" }}
+                              title={entry.landingEstimated ? "推定: 本体の停止や受信の途切れのあいだに着陸したため、着陸の瞬間は見ていません。この時刻までに着陸しています。分かれば直してください" : undefined}
                             />
+                            {entry.landingEstimated && (
+                              <span className="ml-0.5 text-[10px]" style={{ color: "var(--color-warning)" }}
+                                title="推定: 本体の停止や受信の途切れのあいだに着陸したため、着陸の瞬間は見ていません。この時刻までに着陸しています">推定</span>
+                            )}
+                            </>
                           ) : entry.signalLost ? (
                             // 上空で受信が5分以上途切れている（着陸したとは限らない。受信が戻れば「飛行中」に戻る）
                             <span className="font-semibold" style={{ color: "var(--color-warning)" }}

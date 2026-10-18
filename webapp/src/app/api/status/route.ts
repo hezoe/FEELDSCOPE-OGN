@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { isSafeServiceName, run, runQuiet, runQuietStdout, runShell } from "@/lib/run";
+import { readBootHistory } from "@/lib/boot-history";
 
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
 
@@ -213,6 +214,7 @@ export async function GET() {
     ognMqttStatus,
     services,
     flightLogStats,
+    bootHistory,
   ] = await Promise.all([
     getSystemSummary(),
     getOgnReceiverStatus(),
@@ -228,6 +230,7 @@ export async function GET() {
       isInitdActive("rtlsdr-ogn").then(active => ({ name: "rtlsdr-ogn (init.d)", active, uptime: null as string | null })),
     ]),
     getFlightLogStats(),
+    readBootHistory(),
   ]);
 
   // サービス状態と retained を整合させる:
@@ -257,5 +260,6 @@ export async function GET() {
     adsb_status: adsbStatusOut,
     services,
     flight_log: flightLogStats,
+    boot_history: bootHistory,
   });
 }

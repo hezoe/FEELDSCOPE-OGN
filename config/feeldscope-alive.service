@@ -1,0 +1,7 @@
+[Unit]
+Description=FEELDSCOPE alive mark (last time the unit was running, kept on /boot)
+RequiresMountsFor=/boot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feeldscope-bootlog alive

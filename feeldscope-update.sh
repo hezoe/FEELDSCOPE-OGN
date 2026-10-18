@@ -30,14 +30,41 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Check OverlayFS
-if command -v overlayctl &>/dev/null; then
-    overlay_status=$(overlayctl status 2>/dev/null || echo "unknown")
-    if echo "$overlay_status" | grep -qi "enabled"; then
-        log_error "OverlayFS is enabled. Please run:"
-        log_error "  sudo overlayctl disable && sudo reboot"
+# 固定化(OverlayFS)が働いている（今の起動で有効）と、ここで書いた更新は RAM にしか残らず再起動で消える。
+# そのときは「固定化を外して再起動 → 起動後に自動で更新(feeldscope-update-resume) → 固定化を戻して
+# 再起動」を自動で行う（再起動 2回）。以前はエラーで止まり、手で外して再起動する必要があった。
+# 「次の起動から有効」なだけ（まだ働いていない）なら、SD に直接書けるので普通に更新する。
+OVERLAY_BASE=/overlay/robase
+if command -v overlayctl &>/dev/null && [ -e "$OVERLAY_BASE/overlay" ]; then
+    reenable=0
+    overlayctl status 2>/dev/null | grep -q "overlay enabled for next boot" && reenable=1
+    log_warn "固定化(OverlayFS)が有効です。固定化を外して再起動し、起動後に自動で更新してから、"
+    log_warn "固定化を戻してもう一度再起動します（再起動 2回・10〜20分。経過は /boot/feeldscope/update.log）"
+    mkdir -p /boot/feeldscope
+    printf 'requested=%s\nreenable_overlay=%s\nrepo=%s\n' "$(date -Is)" "$reenable" "$SCRIPT_DIR" > /boot/feeldscope/update-pending
+    # 再起動のあとを受け持つ仕組みを、固定化の下の SD に置く（ここで普通に入れても RAM にしか残らない）。
+    # 画面の設定の書き写し(feeldscope-persist)と同じロックで、SD の読み書き切り替えが重ならないようにする
+    exec 9>/run/feeldscope-persist.lock
+    flock -w 60 9 || true
+    if ! mount -o remount,rw "$OVERLAY_BASE"; then
+        rm -f /boot/feeldscope/update-pending
+        log_error "SD を書き込み可能にできませんでした。手で sudo overlayctl disable && sudo reboot してから更新してください"
         exit 1
     fi
+    install -m 755 "$SCRIPT_DIR/feeldscope-update-resume.sh" "$OVERLAY_BASE/usr/local/sbin/feeldscope-update-resume"
+    install -m 644 "$SCRIPT_DIR/config/feeldscope-update-resume.service" "$OVERLAY_BASE/etc/systemd/system/feeldscope-update-resume.service"
+    mkdir -p "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants"
+    ln -sf /etc/systemd/system/feeldscope-update-resume.service \
+        "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants/feeldscope-update-resume.service"
+    sync
+    mount -o remount,ro "$OVERLAY_BASE"
+    flock -u 9 || true
+    overlayctl disable
+    echo "=== $(date -Is) 固定化中に更新を頼まれました。固定化を外して再起動します ===" >> /boot/feeldscope/update.log
+    sync
+    log_info "再起動します..."
+    systemctl reboot
+    exit 0
 fi
 
 echo ""
@@ -357,5 +384,7 @@ echo "  ogn-mqtt:     $(systemctl is-active ogn-mqtt 2>/dev/null || echo 'unknow
 echo "  webapp:       $(systemctl is-active feeldscope-webapp 2>/dev/null || echo 'unknown')"
 echo "  mosquitto:    $(systemctl is-active mosquitto 2>/dev/null || echo 'unknown')"
 echo ""
-echo "Re-enable OverlayFS: sudo overlayctl enable && sudo reboot"
+if command -v overlayctl &>/dev/null && ! overlayctl status 2>/dev/null | grep -q "overlay enabled for next boot"; then
+    echo "固定化(OverlayFS)を使う場合: sudo overlayctl enable && sudo reboot"
+fi
 echo ""

@@ -22,6 +22,7 @@ import { mkdir, readFile, rmdir, stat, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { isHostLocked } from "@/lib/host-guard";
 import { run } from "@/lib/run";
+import { persistFiles } from "./persist";
 import {
   OGN_RECEIVER_CONF_PATH, RTLSDR_OGN_CONF_AUTHORITY, RTLSDR_OGN_CONF_PATHS,
   errMsg, extractField, normalizeNewlines, restartOgnReceiver, writeConfFile,
@@ -139,6 +140,7 @@ export async function loadSyncState(): Promise<SyncState> {
 async function saveSyncState(s: SyncState): Promise<void> {
   try {
     await writeFile(STATE_PATH, JSON.stringify(s, null, 2));
+    await persistFiles(STATE_PATH);
   } catch (e) {
     console.error("[ogn-receiver-sync] 状態を保存できません", errMsg(e));
   }

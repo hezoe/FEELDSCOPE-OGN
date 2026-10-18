@@ -4,6 +4,7 @@ import { run } from "@/lib/run";
 import type { AircraftDatabase, AircraftRecord, AircraftTypeCode } from "@/lib/types";
 import { findKeyByAddress, hexAddress } from "@/lib/aircraft-id";
 import { clientIpFromRequest } from "@/lib/auth";
+import { persistFiles } from "@/lib/persist";
 
 const DB_PATH = process.env.FEELDSCOPE_AIRCRAFT_DB || "/home/pi/FEELDSCOPE/aircraft-db.json";
 
@@ -47,6 +48,8 @@ async function writeDb(db: AircraftDatabase): Promise<void> {
     await unlink(tmp).catch(() => { /* 後始末失敗は無視 */ });
     throw e;
   }
+  // 固定化(OverlayFS)中は下の SD にも書き写す(電源断・再起動で登録が消えないように)
+  await persistFiles(DB_PATH);
 }
 
 

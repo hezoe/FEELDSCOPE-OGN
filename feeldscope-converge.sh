@@ -10,6 +10,15 @@
 #     端末でのみ作動／SDRが無ければ何もしない」ので、SkyLens機・ADS-B専用機に
 #     入れても無害）。
 #
+#   - OGN の受信を時計が合ってから始める（feeldscope-wait-time.sh + rtlsdr-ogn の
+#     drop-in）。時計が狂ったまま始めると FLARM の位置がでたらめに解読され OGN 全体へ
+#     配信される（2026-10-18 関宿）。
+#
+#   - 固定化(OverlayFS)中も画面で変えた設定を SD に書き写す（feeldscope-persist）。
+#
+#   - 起動の記録（feeldscope-bootlog・feeldscope-alive.timer）。再起動の回数・前回は正常に
+#     止まったか・最後に動いていた時刻を /boot に残す（固定化中も消えない）。
+#
 #   - ※ rtlsdr-ogn の enable はしない。受信方式（rtlsdr-ogn / SkyLens / ADS-B専用）
 #     は端末ごとの意図的な正本なので、ここでは触らない。一律 enable すると
 #     SkyLens/ADS-B 機で ogn-rf が SDR を奪い合い受信停止する（既知事故）。
@@ -46,9 +55,31 @@ inst "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh"             /usr/local/sbin/feelds
 inst "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/feeldscope-ogn-watchdog.service 644
 inst "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/feeldscope-ogn-watchdog.timer   644
 
+# --- OGN の受信を時計が合ってから始める（狂った時計で壊れた位置を配信しない） ---
+inst "$SCRIPT_DIR/feeldscope-wait-time.sh"                /usr/local/sbin/feeldscope-wait-time.sh             755
+mkdir -p /etc/systemd/system/rtlsdr-ogn.service.d
+inst "$SCRIPT_DIR/config/rtlsdr-ogn-wait-time.conf"       /etc/systemd/system/rtlsdr-ogn.service.d/feeldscope-wait-time.conf 644
+
+# --- 固定化(OverlayFS)中も画面で変えた設定を SD に書き写す ---
+inst "$SCRIPT_DIR/feeldscope-persist.sh"                  /usr/local/sbin/feeldscope-persist                  755
+
+# --- 起動の記録（再起動の回数・前回は正常に止まったか・最後に動いていた時刻を /boot に残す） ---
+inst "$SCRIPT_DIR/feeldscope-bootlog.sh"                  /usr/local/sbin/feeldscope-bootlog                  755
+inst "$SCRIPT_DIR/config/feeldscope-bootlog.service"      /etc/systemd/system/feeldscope-bootlog.service      644
+inst "$SCRIPT_DIR/config/feeldscope-alive.service"        /etc/systemd/system/feeldscope-alive.service        644
+inst "$SCRIPT_DIR/config/feeldscope-alive.timer"          /etc/systemd/system/feeldscope-alive.timer          644
+
+# --- 固定化中に頼まれた更新を、固定化を外した起動のあとで行う（/boot/feeldscope/update-pending があるときだけ動く） ---
+inst "$SCRIPT_DIR/feeldscope-update-resume.sh"            /usr/local/sbin/feeldscope-update-resume            755
+inst "$SCRIPT_DIR/config/feeldscope-update-resume.service" /etc/systemd/system/feeldscope-update-resume.service 644
+
 [ "$changed" -eq 1 ] && systemctl daemon-reload
 # 受信機の監視は常に ON。止めたいときは /boot/feeldscope-ogn-watchdog.disabled を置く。
 systemctl enable --now feeldscope-ogn-watchdog.timer >/dev/null 2>&1 || true
+# 起動の記録。bootlog は「正常に止めたときだけ印を書く」ため、起動中(active)にしておく必要がある
+systemctl enable --now feeldscope-bootlog.service >/dev/null 2>&1 || true
+systemctl enable --now feeldscope-alive.timer     >/dev/null 2>&1 || true
+systemctl enable feeldscope-update-resume.service >/dev/null 2>&1 || true   # 起動時だけ(印があるときだけ)動く
 
 wd="$(systemctl is-active feeldscope-ogn-watchdog.timer 2>/dev/null)/$(systemctl is-enabled feeldscope-ogn-watchdog.timer 2>/dev/null)"
 ro="$(systemctl is-enabled rtlsdr-ogn 2>/dev/null | tail -1)"

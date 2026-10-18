@@ -464,6 +464,24 @@ cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh" /usr/local/sbin/feeldscope-ogn-watchdog.sh
 
+# OGN の受信は時計が合ってから始める（狂った時計だと FLARM の位置が壊れて配信される）
+install -m 755 "$SCRIPT_DIR/feeldscope-wait-time.sh" /usr/local/sbin/feeldscope-wait-time.sh
+mkdir -p /etc/systemd/system/rtlsdr-ogn.service.d
+cp "$SCRIPT_DIR/config/rtlsdr-ogn-wait-time.conf" /etc/systemd/system/rtlsdr-ogn.service.d/feeldscope-wait-time.conf
+
+# 固定化(OverlayFS)中も画面で変えた設定を SD に書き写す
+install -m 755 "$SCRIPT_DIR/feeldscope-persist.sh" /usr/local/sbin/feeldscope-persist
+
+# 起動の記録（再起動の回数・前回は正常に止まったか・最後に動いていた時刻を /boot に残す）
+install -m 755 "$SCRIPT_DIR/feeldscope-bootlog.sh" /usr/local/sbin/feeldscope-bootlog
+cp "$SCRIPT_DIR/config/feeldscope-bootlog.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-alive.service"   /etc/systemd/system/
+cp "$SCRIPT_DIR/config/feeldscope-alive.timer"     /etc/systemd/system/
+
+# 固定化中に頼まれた更新を、固定化を外した起動のあとで行う
+install -m 755 "$SCRIPT_DIR/feeldscope-update-resume.sh" /usr/local/sbin/feeldscope-update-resume
+cp "$SCRIPT_DIR/config/feeldscope-update-resume.service" /etc/systemd/system/
+
 # wpa_supplicant.conf の重複除去（OGN 設定マネージャが毎起動で追記するため）
 cp "$SCRIPT_DIR/config/feeldscope-wpa-dedupe.service" /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-wpa-dedupe.sh" /usr/local/sbin/feeldscope-wpa-dedupe
@@ -477,6 +495,9 @@ systemctl disable wg-quick@wg0 >/dev/null 2>&1 || true
 systemctl daemon-reload
 systemctl enable --now feeldscope-remote-support.timer >/dev/null 2>&1 || true
 systemctl enable --now feeldscope-ogn-watchdog.timer   >/dev/null 2>&1 || true
+systemctl enable --now feeldscope-bootlog.service      >/dev/null 2>&1 || true
+systemctl enable --now feeldscope-alive.timer          >/dev/null 2>&1 || true
+systemctl enable feeldscope-update-resume.service      >/dev/null 2>&1 || true
 
 # =============================================================================
 # Step 9: Enable and start services

@@ -864,8 +864,7 @@ export default function SettingsPage() {
               >
                 {status?.overlay_enabled ? (
                   <>
-                    <strong>固定化 ON:</strong> ネットワーク設定の変更は一時的に適用されますが、再起動時にリセットされます。
-                    恒久的に変更するには、先に固定化をOFFにしてください。
+                    <strong>固定化 ON:</strong> ここで変えたネットワーク設定は SD にも書き写すので、再起動後も残ります。
                   </>
                 ) : (
                   <>
@@ -1305,7 +1304,9 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={async () => {
-                    if (!confirm("システムをアップデートしますか？\nアップデート中はWebアプリが一時的に利用できなくなります。")) return;
+                    if (!confirm(status?.overlay_enabled
+                      ? "システムをアップデートしますか？\n\n固定化が有効なので、固定化を外して再起動し、自動で更新してから、固定化を戻してもう一度再起動します（再起動 2回・10〜20分）。\nその間は受信と画面が止まります。運行中は避けてください。"
+                      : "システムをアップデートしますか？\nアップデート中はWebアプリが一時的に利用できなくなります。")) return;
                     setUpdating(true);
                     setUpdateLog(null);
                     setUpdateComplete(false);
@@ -1319,6 +1320,12 @@ export default function SettingsPage() {
                       });
                       const data = await res.json();
                       if (!res.ok) throw new Error(data.error);
+                      if (data.overlay) {
+                        // 再起動をはさむので、この画面での経過表示はしない（開き直すと版と更新の記録が見える）
+                        setUpdateLog(data.message);
+                        setUpdateProgress(5);
+                        return;
+                      }
                       const startTime = Date.now();
                       // Poll for update log
                       const poll = setInterval(async () => {
@@ -1360,21 +1367,21 @@ export default function SettingsPage() {
                       setUpdating(false);
                     }
                   }}
-                  disabled={updating || status?.overlay_enabled === true || (status?.version != null && !status.version.updateAvailable)}
+                  disabled={updating || (status?.version != null && !status.version.updateAvailable)}
                   className="px-4 py-1.5 rounded text-sm font-medium transition-colors"
                   style={{
                     background: status?.version?.updateAvailable ? "var(--color-accent)" : "var(--color-bg-card)",
                     color: status?.version?.updateAvailable ? "#fff" : "var(--color-text-secondary)",
                     border: status?.version?.updateAvailable ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
-                    opacity: updating || status?.overlay_enabled ? 0.5 : 1,
-                    cursor: updating ? "wait" : (updating || status?.overlay_enabled || (status?.version != null && !status.version.updateAvailable)) ? "default" : "pointer",
+                    opacity: updating ? 0.5 : 1,
+                    cursor: updating ? "wait" : (status?.version != null && !status.version.updateAvailable) ? "default" : "pointer",
                   }}
                 >
                   {updating ? "アップデート中..." : "アップデート実行"}
                 </button>
                 {status?.overlay_enabled && (
                   <span className="text-xs" style={{ color: "var(--color-warning)" }}>
-                    固定化が有効です。アップデートするには先に固定化をOFFにして再起動してください。
+                    固定化が有効です。アップデートすると、固定化を外して再起動し、自動で更新してから固定化を戻して再起動します（再起動 2回）。
                   </span>
                 )}
               </div>
@@ -1502,9 +1509,9 @@ export default function SettingsPage() {
                     onClick={async () => {
                       if (!confirm(
                         "システムを固定化して再起動しますか？\n" +
-                        "再起動後、設定変更は再起動時にリセットされるモードになります。\n\n" +
-                        "機体情報（登録番号・機種・曳航機の指定）も同じです。\n" +
-                        "未登録の機体がある場合は、先に登録してから固定化してください。"
+                        "再起動後、SD カードへの書き込みを止めて電源断に強いモードになります。\n\n" +
+                        "画面で変えた設定（機体情報・滑空場・表示・Wi-Fi・有線LAN・自動再起動・パスワード）は\n" +
+                        "SD にも書き写すので、固定化中でも再起動後に残ります。"
                       )) return;
                       setOverlayAction(true);
                       setError(null);
@@ -1543,7 +1550,7 @@ export default function SettingsPage() {
 
               {status?.overlay_enabled ? (
                 <p className="text-xs" style={{ color: "var(--color-warning)" }}>
-                  固定化が有効です。設定変更は再起動までの間有効ですが、再起動時にリセットされます。
+                  固定化が有効です。SD カードへの書き込みを止めて電源断に強くしています。画面で変えた設定（機体情報・滑空場・表示・Wi-Fi・有線LAN・自動再起動・パスワード）は SD にも書き写すので、再起動後も残ります。それ以外（SSH での変更など）は再起動で元に戻ります。
                 </p>
               ) : (
                 <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>

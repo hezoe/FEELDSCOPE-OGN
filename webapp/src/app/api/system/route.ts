@@ -5,6 +5,7 @@ import { existsSync } from "fs";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
 import { parseConfiguredSsid, parseOgnWifiName, parseScanResults, parseWpaStatus, type WifiNetwork } from "@/lib/wifi-status";
+import { persistFiles } from "@/lib/persist";
 
 
 const FEELDSCOPE_DIR = process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE";
@@ -31,6 +32,8 @@ async function writeRootFile(target: string, content: string): Promise<void> {
   } finally {
     await run("sudo", ["-n", "rm", "-f", tmp]).catch(() => {});
   }
+  // /etc の設定(Wi-Fi・有線)は固定化中だと RAM にしか残らないので SD にも書き写す。/boot は固定化の外
+  if (target.startsWith("/etc/")) await persistFiles(target);
 }
 
 /** root 所有のディレクトリを作る */
@@ -77,6 +80,7 @@ async function loadAirfieldConfig(): Promise<AirfieldConfig> {
 
 async function saveAirfieldConfig(config: AirfieldConfig): Promise<void> {
   await writeFile(AIRFIELD_CONFIG_PATH, JSON.stringify(config, null, 2));
+  await persistFiles(AIRFIELD_CONFIG_PATH);
 }
 
 interface ViewConfig {
@@ -109,6 +113,7 @@ async function loadViewConfig(): Promise<ViewConfig | null> {
 
 async function saveViewConfig(config: ViewConfig): Promise<void> {
   await writeFile(VIEW_CONFIG_PATH, JSON.stringify(config, null, 2));
+  await persistFiles(VIEW_CONFIG_PATH);
 }
 
 async function detectReceiverId(): Promise<string> {
@@ -148,6 +153,7 @@ async function loadAdsbConfig(): Promise<AdsbSavedConfig> {
 
 async function saveAdsbConfig(config: AdsbSavedConfig): Promise<void> {
   await writeFile(ADSB_CONFIG_PATH, JSON.stringify(config, null, 2));
+  await persistFiles(ADSB_CONFIG_PATH);
 }
 
 async function isOverlayEnabled(): Promise<boolean> {
@@ -402,6 +408,7 @@ async function saveAutoRebootConfig(cfg: AutoRebootConfig): Promise<void> {
   await writeFile(tmp, newCron.endsWith("\n") ? newCron : newCron + "\n", { mode: 0o600 });
   try {
     await run("sudo", ["-n", "crontab", tmp]);
+    await persistFiles("/var/spool/cron/crontabs/root");   // 自動再起動の時刻(固定化中も残す)
   } finally {
     await run("sudo", ["-n", "rm", "-f", tmp]).catch(() => {});
   }
@@ -979,10 +986,9 @@ export async function POST(request: Request) {
         // 更新をかけたらバージョンの控えは当てにならない
         invalidateVersionCache();
         // Run the update script in the background; it will restart the webapp
-        const overlayActive = await isOverlayEnabled();
-        if (overlayActive) {
-          return NextResponse.json({ error: "固定化(OverlayFS)が有効です。先に固定化をOFFにして再起動してください。" }, { status: 400 });
-        }
+        // 固定化(OverlayFS)が働いているときは、update.sh が「固定化を外して再起動→起動後に自動で更新→
+        // 固定化を戻して再起動」を行う(以前はここで断っていた)。
+        const overlayWorking = existsSync("/overlay/robase/overlay");
         // Remove stale log and launch updater as independent systemd transient unit
         await run("sudo", ["-n", "rm", "-f", "/tmp/feeldscope-update.log"]);
         await run("sudo", ["-n", "touch", "/tmp/feeldscope-update.log"]);
@@ -996,13 +1002,21 @@ export async function POST(request: Request) {
         // Reset any previous failed unit before starting new one
         await runShell("sudo -n systemctl reset-failed feeldscope-update 2>/dev/null || true");
         await run("sudo", ["-n", "systemd-run", "--unit=feeldscope-update", "--description=FEELDSCOPE Update", "/tmp/feeldscope-do-update.sh"]);
+        if (overlayWorking) {
+          return NextResponse.json({ ok: true, overlay: true, message: "固定化が有効なので、固定化を外して再起動し、自動で更新してから固定化を戻して再起動します（再起動 2回・10〜20分）。終わったら画面を開き直してください。" });
+        }
         return NextResponse.json({ ok: true, message: "アップデートを開始しました。完了後にWebアプリが自動再起動します。" });
       }
 
       case "update-log": {
         try {
           const log = await readFile("/tmp/feeldscope-update.log", "utf-8");
-          return NextResponse.json({ ok: true, log });
+          if (log.trim()) return NextResponse.json({ ok: true, log });
+        } catch { /* 再起動で消えた → 下の記録を見る */ }
+        // 固定化中の更新(再起動をはさむ)の経過は /boot に残る
+        try {
+          const boot = await readFile("/boot/feeldscope/update.log", "utf-8");
+          return NextResponse.json({ ok: true, log: boot.slice(-20000), boot: true });
         } catch {
           return NextResponse.json({ ok: true, log: "" });
         }
