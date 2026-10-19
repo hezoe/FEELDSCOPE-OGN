@@ -548,8 +548,26 @@ function ManualContent() {
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
             <li><strong>ONにすると、自分でOFFにするまで有効なまま</strong>です。再起動してもONのままです。OFFにすれば即座に切れます。用が済んだらOFFに戻してください。</li>
             <li>ON の間は<strong>接続が切れても自動で復旧</strong>を試みます。通信が5分以上途切れるとトンネルを繋ぎ直します（再試行は10分間隔）。</li>
-            <li>ONにしても、その端末に入れるのは<strong>サポート担当のみ</strong>で、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
+            <li>ONにしても、その端末に入れるのは<strong>サポート担当</strong>と、下の「リモートアクセス」で<strong>許可した端末</strong>（画面だけ）のみで、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
+            <li>OFF にすると、リモートアクセスで許可した端末も<strong>つながらなくなります</strong>（リモートアクセスはこのトンネルを使います）。</li>
             <li>サポート担当はリモートサポート中、パスワードなしで設定変更・パスワードリセットが可能です（VPN上の本人性で認可）。</li>
+          </ul>
+        </Section>
+
+        <Section id="settings-remote-access" heading="3-13. リモートアクセス（自宅などから見る）">
+          <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
+            （v1.4.32 から）滑空場に Wi-Fi が無く LAN から見られないときでも、<strong>許可した PC・スマホ</strong>から、インターネット経由でこの FEELDSCOPE の画面を見られます。
+            リモートサポートと同じ暗号化トンネル（CATVPN）を使うので、<strong>リモートサポートが ON のときだけ</strong>使えます。
+          </p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>つながる先</strong>: 許可した端末は<strong>この FEELDSCOPE の画面とライブデータだけ</strong>に入れます。ほかのクラブの FEELDSCOPE、この機の保守用の入口（SSH）、ほかの登録端末、インターネットへは出られません（中継するサーバーで遮断します）。</li>
+            <li><strong>できること</strong>: 滑空場の LAN から見るのと同じです。地図・飛行記録などは誰でも見られ、<strong>設定の変更には管理者ログイン</strong>が必要です。</li>
+            <li><strong>一覧</strong>: 許可している端末を「氏名・端末名・状態（接続中／有効／一時停止中）・最終接続・追加日」で表示します。一覧の表示と変更には管理者ログインが必要です（氏名は個人情報のため）。</li>
+            <li><strong>追加</strong>: 氏名（必須）と端末名を入れて「追加」。<strong>すぐに使えます</strong>。1人の端末1台ごとに追加します（PC とスマホなら2つ）。1台の FEELDSCOPE に20台まで。追加した記録はサポート担当にも届きます。</li>
+            <li><strong>設定の受け渡し</strong>: 追加すると、その端末用の設定（QR コードと設定ファイル）が<strong>一度だけ</strong>表示されます。閉じたあとは表示できません。なくしたら削除して追加し直してください。設定には鍵が入っているので、本人以外に渡さないでください。</li>
+            <li><strong>端末側の準備</strong>: 無料の <strong>WireGuard</strong> アプリ（wireguard.com/install・App Store・Google Play）を入れ、スマホは「QR コードから作成」で読み取り、PC は「ファイルからトンネルをインポート」で設定ファイルを読み込みます。トンネルを有効にして、画面に表示されるアドレス（例: <code>http://10.66.20.10/</code>）をブラウザで開きます。</li>
+            <li><strong>一時停止・再開・削除</strong>: いつでもできます。一時停止・削除するとその端末はすぐにつながらなくなります。端末をなくした・人が辞めたときは削除してください。</li>
+            <li>端末側でトンネルを有効にしている間も、その端末のふだんのインターネット通信はトンネルを通りません（FEELDSCOPE 宛てだけが通ります）。</li>
           </ul>
         </Section>
       </Card>
@@ -776,11 +794,29 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.31 */}
+      {/* v1.4.32 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.32</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-19</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        滑空場に Wi-Fi が無く LAN から見られない、という声に応えた新機能です。
+      </p>
+
+      <Card title="NEW: リモートアクセス（自宅などから、許可した PC・スマホで見る）">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>設定画面に<strong>「リモートアクセス」</strong>を追加しました。許可した PC・スマホから、インターネット経由でこの FEELDSCOPE の画面を見られます（リモートサポートと同じ暗号化トンネル CATVPN を使います。リモートサポートが ON のときだけ使えます）。</li>
+          <li>許可した端末は<strong>この FEELDSCOPE の画面とライブデータだけ</strong>に入れます。ほかのクラブの FEELDSCOPE・保守用の入口（SSH）・インターネットへは出られません（中継するサーバーで遮断）。できることは滑空場の LAN と同じで、設定の変更には管理者ログインが必要です。</li>
+          <li>許可している端末を<strong>氏名・端末名・状態（接続中／有効／一時停止中）・最終接続・追加日</strong>で一覧表示し、いつでも<strong>一時停止・再開・削除・追加</strong>できます。追加はすぐに有効です（1台あたり20台まで）。</li>
+          <li>追加すると、その端末用の設定（<strong>QR コードと設定ファイル</strong>）を一度だけ表示します。端末に無料の WireGuard アプリを入れ、スマホは QR を読み取り、PC はファイルを読み込みます。鍵はこの機で作り、どこにも残しません。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.31 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.31</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-18</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         関宿（Sekiyado1）の OGN 受信機 運用開始日（2026-10-18）に見つかった問題の修正です。

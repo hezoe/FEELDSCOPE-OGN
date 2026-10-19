@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useUnits } from "@/lib/UnitContext";
 import HelpHint from "@/components/HelpHint";
 import AuthPanel from "@/components/AuthPanel";
+import RemoteAccessPanel from "@/components/RemoteAccessPanel";
 import type { WifiNetwork } from "@/lib/wifi-status";
 import { LABEL_SIZE_NAMES } from "@/lib/units";
 
@@ -1852,6 +1853,13 @@ export default function SettingsPage() {
                 </>
               )}
             </div>
+          </Card>
+          )}
+
+          {/* Remote Access — メンバーの PC・スマホ → この FEELDSCOPE の画面だけ(リモートサポートの VPN を使う) */}
+          {!hostLocked && (
+          <Card title="リモートアクセス" helpId="settings-remote-access">
+            <RemoteAccessPanel canMutate={canMutate} />
           </Card>
           )}
 
