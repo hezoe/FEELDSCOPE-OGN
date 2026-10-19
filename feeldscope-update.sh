@@ -46,18 +46,31 @@ if command -v overlayctl &>/dev/null && [ -e "$OVERLAY_BASE/overlay" ]; then
     # 画面の設定の書き写し(feeldscope-persist)と同じロックで、SD の読み書き切り替えが重ならないようにする
     exec 9>/run/feeldscope-persist.lock
     flock -w 60 9 || true
-    if ! mount -o remount,rw "$OVERLAY_BASE"; then
+    # 下の SD がもう書き込み可能なこともある(画面の設定の書き写しが読み取り専用に戻せなかったときなど)。
+    # そのときに remount すると「busy」で失敗し、set -e で途中終了して予約の印だけが残った(2026-10-19 関宿)。
+    # 書き写し(feeldscope-persist)と同じく、読み取り専用のときだけ切り替え、自分で切り替えたときだけ戻す
+    was_ro=1
+    grep -q " $OVERLAY_BASE ext4 rw," /proc/mounts && was_ro=0
+    if [ "$was_ro" -eq 1 ] && ! mount -o remount,rw "$OVERLAY_BASE"; then
         rm -f /boot/feeldscope/update-pending
         log_error "SD を書き込み可能にできませんでした。手で sudo overlayctl disable && sudo reboot してから更新してください"
         exit 1
     fi
-    install -m 755 "$SCRIPT_DIR/feeldscope-update-resume.sh" "$OVERLAY_BASE/usr/local/sbin/feeldscope-update-resume"
-    install -m 644 "$SCRIPT_DIR/config/feeldscope-update-resume.service" "$OVERLAY_BASE/etc/systemd/system/feeldscope-update-resume.service"
-    mkdir -p "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants"
-    ln -sf /etc/systemd/system/feeldscope-update-resume.service \
-        "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants/feeldscope-update-resume.service"
+    if ! { install -m 755 "$SCRIPT_DIR/feeldscope-update-resume.sh" "$OVERLAY_BASE/usr/local/sbin/feeldscope-update-resume" \
+        && install -m 644 "$SCRIPT_DIR/config/feeldscope-update-resume.service" "$OVERLAY_BASE/etc/systemd/system/feeldscope-update-resume.service" \
+        && mkdir -p "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants" \
+        && ln -sf /etc/systemd/system/feeldscope-update-resume.service \
+            "$OVERLAY_BASE/etc/systemd/system/multi-user.target.wants/feeldscope-update-resume.service"; }; then
+        rm -f /boot/feeldscope/update-pending
+        [ "$was_ro" -eq 1 ] && mount -o remount,ro "$OVERLAY_BASE" 2>/dev/null || true
+        log_error "再起動のあとを受け持つ仕組みを SD に置けませんでした。手で sudo overlayctl disable && sudo reboot してから更新してください"
+        exit 1
+    fi
     sync
-    mount -o remount,ro "$OVERLAY_BASE"
+    # 戻せなくても続ける(このあと固定化を外して再起動するので、読み取り専用かどうかは問題にならない)
+    if [ "$was_ro" -eq 1 ] && ! mount -o remount,ro "$OVERLAY_BASE" 2>/dev/null; then
+        log_warn "SD を読み取り専用に戻せませんでした(このあとの再起動で戻ります)"
+    fi
     flock -u 9 || true
     overlayctl disable
     echo "=== $(date -Is) 固定化中に更新を頼まれました。固定化を外して再起動します ===" >> /boot/feeldscope/update.log

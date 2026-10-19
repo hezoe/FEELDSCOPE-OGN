@@ -547,7 +547,7 @@ function ManualContent() {
             <li><strong>登録（トークン不要）</strong>: 新しくインストールした端末は、自動でサポート担当に登録を申請します（設定画面の「登録を申請する」でも申請できます）。サポート担当が<strong>承認すると自動で接続</strong>され、リモートサポートが ON になります（承認待ちの間は10分ごとに確認・14日で打ち切り。不要なら下のスイッチで OFF にできます）。急ぐときは、画面に出る申請名（例: <code>feeldscope-49f8e9</code>）をサポート担当にお伝えください。登録トークン（64桁の16進）を受け取った場合は「登録トークンをお持ちの場合」から登録することもできます。</li>
             <li><strong>既定はOFF</strong>。困ったときだけ「リモートサポートを許可する」をONにすると、サポート担当だけが安全な保守用トンネル(CATVPN)経由で接続できます。</li>
             <li><strong>ONにすると、自分でOFFにするまで有効なまま</strong>です。再起動してもONのままです。OFFにすれば即座に切れます。用が済んだらOFFに戻してください。</li>
-            <li>ON の間は<strong>接続が切れても自動で復旧</strong>を試みます。通信が5分以上途切れるとトンネルを繋ぎ直します（再試行は10分間隔）。</li>
+            <li>ON の間は<strong>接続が切れても自動で復旧</strong>を試みます。通信が5分以上途切れるとトンネルを繋ぎ直します（再試行は10分間隔）。本機が接続しようとしているのに中継サーバー側で成立しないときは、中継サーバーが2分ごとに見つけてつなぎ直します。</li>
             <li>ONにしても、その端末に入れるのは<strong>サポート担当</strong>と、下の「リモートアクセス」で<strong>許可した端末</strong>（画面だけ）のみで、あなたの他の機器へは到達できません（相互隔離）。ON/OFFの切替に<strong>パスワードは不要</strong>です（失念時の解除導線を兼ねます）。</li>
             <li>OFF にすると、リモートアクセスで許可した端末も<strong>つながらなくなります</strong>（リモートアクセスはこのトンネルを使います）。</li>
             <li>サポート担当はリモートサポート中、パスワードなしで設定変更・パスワードリセットが可能です（VPN上の本人性で認可）。</li>
@@ -794,11 +794,34 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.32 */}
+      {/* v1.4.33 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.32</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.33</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-19</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        関宿（Sekiyado1）を v1.4.32 に更新したときに見つかった問題の修正です。
+      </p>
+
+      <Card title="FIX: 固定化（OverlayFS）中のアップデートが途中で止まることがあった">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>固定化中にアップデートを押すと、固定化を外す前に止まり、<strong>更新されないまま</strong>になることがありました（SD カードが既に書き込みできる状態だったとき）。止まったあとも「更新の予約」だけが残り、次に再起動したとき（毎朝の自動再起動など）に更新が始まるおそれがありました。</li>
+          <li>SD カードがどちらの状態でも、固定化を外して再起動 → 自動で更新 → 固定化を戻して再起動、まで進むようにしました。途中で進めないときは予約を消して止まり、理由を更新ログに残します。</li>
+        </ul>
+      </Card>
+
+      <Card title="中継サーバー（CATVPN）: 再起動のあとリモートサポートがつながらないときに自動で戻す">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>アップデートの再起動のあと、本機は動いているのに<strong>リモートサポート（VPN）だけ</strong>がつながらないことがありました（本機の時計が一時的にずれたため、中継サーバーが接続を断り続けた）。</li>
+          <li>中継サーバーが「接続しようとしているのに成立しない端末」を2分ごとに見つけて、自動でつなぎ直すようにしました（本機側の更新は不要）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.32 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.32</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-19</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         滑空場に Wi-Fi が無く LAN から見られない、という声に応えた新機能です。
