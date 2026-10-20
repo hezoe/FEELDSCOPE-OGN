@@ -291,7 +291,7 @@ function ManualContent() {
 
         <Section id="status-ogn-receiver" heading="OGN受信機">
           <p className="text-xs mb-2" style={{ color: "var(--color-text-secondary)" }}>
-            起動直後は、<strong>時計が合うまで（最大3分）受信を始めません</strong>（v1.4.31 から）。FLARM の電波は時刻で暗号化されていて、時計が狂ったまま受信すると位置がでたらめに解読され、OGN 全体へ配信されてしまうためです（Raspberry Pi には時計の電池が無く、電源断のあとは古い時刻から動き出します）。3分で合わなければいったん停止のままにし、受信機の見張り（2分ごと）が時計が合ってから起動します。ネットの無い場所で時計を待たずに受信したい場合は、SD カードの起動用の区画に <code>feeldscope-no-time-wait</code> という空のファイルを置いてください。
+            起動直後は、<strong>時計が合うまで（最大3分）受信を始めません</strong>（v1.4.31 から）。FLARM の電波は時刻で暗号化されていて、時計が狂ったまま受信すると位置がでたらめに解読され、OGN 全体へ配信されてしまうためです（Raspberry Pi には時計の電池が無く、電源断のあとは古い時刻から動き出します）。3分で合わなければいったん停止のままにし、受信機の見張り（2分ごと）が時計が合ってから起動します。時刻は複数の時刻サーバー（NICT・Google・Cloudflare）に問い合わせ、2つ以上が一致したときだけ合わせます（v1.4.34 から。1台だけの答えでは合わせません）。ネットの無い場所で時計を待たずに受信したい場合は、SD カードの起動用の区画に <code>feeldscope-no-time-wait</code> という空のファイルを置いてください。
           </p>
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
@@ -485,7 +485,7 @@ function ManualContent() {
             <li><strong>他の端末で開いたままの画面</strong> — 1分ごとに機体の版数を確認し、更新されていれば自動で再読み込み（地図タブ表示中・入力操作中でないときのみ。v1.4.16以降）</li>
           </ul>
           <div className="mt-2 p-2 rounded text-xs" style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
-            <strong>固定化(OverlayFS)が ON のとき</strong>（v1.4.31 以降）: アップデートを押すと、<strong>固定化を外して再起動 → 起動後に自動で更新 → 固定化を戻して再起動</strong>を自動で行います（再起動 2回・10〜20分）。その間は受信と画面が止まるので、運行中は避けてください。経過は <code>/boot/feeldscope/update.log</code> に残り、終わってから画面を開き直すと新しい版になっています。<br />
+            <strong>固定化(OverlayFS)が ON のとき</strong>（v1.4.31 以降）: アップデートを押すと、<strong>固定化を外して再起動 → 起動後に自動で更新 → 固定化を戻して再起動</strong>を自動で行います（再起動 2回・10〜20分）。その間は受信と画面が止まるので、運行中は避けてください。経過は <code>/boot/feeldscope/update.log</code> に残り、終わってから画面を開き直すと新しい版になっています。固定化を外せなかったときは、再起動を繰り返さずに予約を消して止まります（v1.4.34 から）。そのときは固定化を OFF にして再起動してから、もう一度アップデートしてください。<br />
             （v1.4.30 以前の機体は、固定化 ON だと断られます。先に固定化を OFF にして再起動してから更新してください。）
           </div>
         </Section>
@@ -794,11 +794,34 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.33 */}
+      {/* v1.4.34 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.34</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-20</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        関宿（Sekiyado1）が 2026-10-20 の朝に再起動を繰り返した問題の修正です。
+      </p>
+
+      <Card title="FIX: 固定化中のアップデートで再起動を繰り返すことがあった">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>固定化（OverlayFS）中のアップデートが固定化を外す前に止まると、次の起動で「更新の続き」が固定化の付いたまま動き、<strong>失敗 → 再起動 → また失敗</strong>を約1分ごとに繰り返しました（関宿で約5時間。その間は受信も止まりました）。</li>
+          <li>固定化が付いたままの起動では更新の続きを行わず、予約を消して止まるようにしました（理由は更新ログに残ります）。そのときは設定画面で固定化を外して再起動してから、もう一度アップデートしてください。</li>
+        </ul>
+      </Card>
+
+      <Card title="FIX: 時刻合わせで時計が1〜2日ずれることがあった">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>起動時と10分ごとの時刻合わせは、時刻サーバー1台の答えをそのまま使っていたため、時計が<strong>1〜2日先</strong>に合わされたことがありました。時計が狂うと FLARM の位置が正しく解読できず、リモートサポートもつながらなくなります。</li>
+          <li>複数の時刻サーバー（NICT・Google・Cloudflare）に問い合わせ、<strong>2つ以上が一致したときだけ</strong>合わせるようにしました。10分ごとの時刻合わせも同じ方法に置き換えます（正しく同期しているときは何もしません）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.33 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.33</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-19</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         関宿（Sekiyado1）を v1.4.32 に更新したときに見つかった問題の修正です。

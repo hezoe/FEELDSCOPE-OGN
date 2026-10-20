@@ -36,6 +36,12 @@ fi
 # 「次の起動から有効」なだけ（まだ働いていない）なら、SD に直接書けるので普通に更新する。
 OVERLAY_BASE=/overlay/robase
 if command -v overlayctl &>/dev/null && [ -e "$OVERLAY_BASE/overlay" ]; then
+    # 「固定化を外した起動のあとの更新」(feeldscope-update-resume)から呼ばれたのに固定化が働いている
+    # =固定化を外せなかった。ここで予約を書くと再起動を繰り返す(2026-10-20 関宿)ので、止める
+    if [ "${FEELDSCOPE_UPDATE_RESUME:-}" = 1 ]; then
+        log_error "固定化を外した起動のはずが、固定化が有効です。再起動を繰り返さないよう更新を止めます（設定画面で固定化を外して再起動してから、もう一度アップデートしてください）"
+        exit 1
+    fi
     reenable=0
     overlayctl status 2>/dev/null | grep -q "overlay enabled for next boot" && reenable=1
     log_warn "固定化(OverlayFS)が有効です。固定化を外して再起動し、起動後に自動で更新してから、"

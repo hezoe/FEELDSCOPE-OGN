@@ -23,6 +23,15 @@ grep -q '^reenable_overlay=1' "$PENDING" && reenable=1
 repo=$(sed -n 's/^repo=//p' "$PENDING" | head -1)
 [ -n "$repo" ] && [ -f "$repo/feeldscope-update.sh" ] || repo=/home/pi/FEELDSCOPE-OGN
 rm -f "$PENDING"; sync
+# 固定化が働いたままの起動では更新しない(予約は上で消した)。ここで update.sh を流すと固定化の分岐に入って
+# 予約を書き直し、「失敗→固定化を戻して再起動→また更新」を繰り返す(2026-10-20 関宿: 固定化を外せない
+# まま約1分ごとの再起動が5時間続いた)。固定化を外せなかったときは、画面から外して更新し直してもらう
+# (判定は update.sh と同じ: 固定化が働いているときだけ、下の SD に /overlay がある)
+if [ -e /overlay/robase/overlay ]; then
+  echo "=== $(date -Is) 固定化(OverlayFS)が有効なままの起動なので、更新しません（予約を消しました）。設定画面で固定化を外して再起動してから、もう一度アップデートしてください ===" >> "$LOG"
+  sync
+  exit 0
+fi
 
 # ログが育ちすぎないように(古い分を落とす)
 if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 300000 ]; then
@@ -33,7 +42,8 @@ fi
   echo "=== $(date -Is) 固定化を外した起動で、更新を始めます ==="
   # ネットと時計を待つ（git pull と npm に要る）
   [ -x /usr/local/sbin/feeldscope-wait-time.sh ] && /usr/local/sbin/feeldscope-wait-time.sh 300 || true
-  bash "$repo/feeldscope-update.sh"
+  # FEELDSCOPE_UPDATE_RESUME=1: update.sh 側でも、固定化の分岐に入ったら予約を書かずに止まる(二重の歯止め)
+  FEELDSCOPE_UPDATE_RESUME=1 bash "$repo/feeldscope-update.sh"
   rc=$?
   if [ "$rc" -eq 0 ]; then
     echo "=== $(date -Is) 更新が終わりました ==="

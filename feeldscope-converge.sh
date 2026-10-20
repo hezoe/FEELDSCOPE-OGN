@@ -19,6 +19,9 @@
 #   - 起動の記録（feeldscope-bootlog・feeldscope-alive.timer）。再起動の回数・前回は正常に
 #     止まったか・最後に動いていた時刻を /boot に残す（固定化中も消えない）。
 #
+#   - 10分ごとの時刻合わせ（root の cron の ntpdate pool.ntp.org）を、複数の時刻サーバーを
+#     突き合わせる feeldscope-wait-time.sh sync に置き換える。
+#
 #   - ※ rtlsdr-ogn の enable はしない。受信方式（rtlsdr-ogn / SkyLens / ADS-B専用）
 #     は端末ごとの意図的な正本なので、ここでは触らない。一律 enable すると
 #     SkyLens/ADS-B 機で ogn-rf が SDR を奪い合い受信停止する（既知事故）。
@@ -72,6 +75,21 @@ inst "$SCRIPT_DIR/config/feeldscope-alive.timer"          /etc/systemd/system/fe
 # --- 固定化中に頼まれた更新を、固定化を外した起動のあとで行う（/boot/feeldscope/update-pending があるときだけ動く） ---
 inst "$SCRIPT_DIR/feeldscope-update-resume.sh"            /usr/local/sbin/feeldscope-update-resume            755
 inst "$SCRIPT_DIR/config/feeldscope-update-resume.service" /etc/systemd/system/feeldscope-update-resume.service 644
+
+# --- 10分ごとの時刻合わせ(OGN 受信機の導入で root の cron に入る ntpdate pool.ntp.org)を、突き合わせ付きに置き換える ---
+# 1台の時刻サーバーの答えで合わせると、狂ったサーバーに当たったとき時計が1〜2日ずれる(2026-10-20 関宿)。
+# feeldscope-wait-time.sh sync は chrony が同期中なら何もせず、そうでなければ複数の出どころが一致したときだけ合わせる
+if crontab -l 2>/dev/null | grep -v '^[[:space:]]*#' | grep -q 'ntpdate.*pool\.ntp\.org'; then
+  cron_tmp=$(mktemp)
+  crontab -l 2>/dev/null | awk '!/^[[:space:]]*#/ && /ntpdate/ && /pool\.ntp\.org/ { print "*/10 * * * * /usr/local/sbin/feeldscope-wait-time.sh sync > /tmp/ntp-sync.log 2>&1"; next } { print }' > "$cron_tmp"
+  if crontab "$cron_tmp"; then
+    info "10分ごとの時刻合わせを突き合わせ付き(feeldscope-wait-time.sh sync)に置き換えました"
+    command -v feeldscope-persist >/dev/null 2>&1 && feeldscope-persist /var/spool/cron/crontabs/root >/dev/null 2>&1 || true
+  else
+    warn "root の cron を書き換えられませんでした（ntpdate pool.ntp.org のまま）"
+  fi
+  rm -f "$cron_tmp"
+fi
 
 [ "$changed" -eq 1 ] && systemctl daemon-reload
 # 受信機の監視は常に ON。止めたいときは /boot/feeldscope-ogn-watchdog.disabled を置く。
