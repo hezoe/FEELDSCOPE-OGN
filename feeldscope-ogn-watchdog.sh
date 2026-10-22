@@ -47,6 +47,22 @@ port=$(sed -n 's/^[[:space:]]*Port[[:space:]]*=[[:space:]]*\([0-9]\{1,5\}\).*/\1
 case "$port" in ''|*[!0-9]*) port=8082 ;; esac
 
 alive() { curl -sf --max-time 3 "http://localhost:$port/" >/dev/null 2>&1; }
+# 受信の開始を START_WAIT_SEC まで待つ。始まれば 0
+wait_alive() {
+  local waited=0
+  while [ "$waited" -lt "$START_WAIT_SEC" ]; do
+    sleep 5
+    waited=$(( waited + 5 ))
+    if alive; then
+      echo "受信機が復旧しました（${waited}秒）"
+      # OGN設定マネージャは起動のたびに wpa_supplicant.conf へ network を足すので畳む
+      [ -x /usr/local/sbin/feeldscope-wpa-dedupe ] &&
+        /usr/local/sbin/feeldscope-wpa-dedupe >/dev/null 2>&1
+      return 0
+    fi
+  done
+  return 1
+}
 
 # 1回の取りこぼし（起動直後・一瞬の高負荷）で再起動しないよう二度見る
 alive && exit 0
@@ -60,6 +76,22 @@ if [ -x /usr/local/sbin/feeldscope-wait-time.sh ] &&
    ! /usr/local/sbin/feeldscope-wait-time.sh 30 >/dev/null 2>&1; then
   echo "受信機は停止中ですが、時計がまだ合っていないので起動しません（次の確認で再試行）"
   exit 0
+fi
+
+# 起動処理の OGN 設定マネージャが「つながるまで永久に待つ」所で止まっていないか（2026-10-22 滝川:
+# glidernet のダウンロードサーバーが止まっている間の毎朝の再起動で、受信が約6時間止まった）。
+# 止まっていれば解放して手元の受信ソフトで受信を始めさせる。起動処理の途中なら重ねて起動せずに待つ
+# （重ねると止まった起動処理が積み重なる）。
+if [ -x /usr/local/sbin/feeldscope-ogn-cm-guard ]; then
+  /usr/local/sbin/feeldscope-ogn-cm-guard
+  case $? in
+    10) ;;                                   # 起動処理は動いていない → 下の停止→起動へ
+    12) echo "=== $(date -Is) watchdog: 止まっていた OGN 設定マネージャを解放 ===" >> "$RESTART_LOG"
+        wait_alive && exit 0
+        echo "受信機を復旧できませんでした。$RESTART_LOG を確認してください"
+        exit 1 ;;
+    *)  exit 0 ;;                            # 起動処理が進行中・受信ソフトのダウンロード待ち
+  esac
 fi
 
 now=$(date +%s)
@@ -82,18 +114,7 @@ echo "受信機(rtlsdr-ogn)が ${port}番に応答しません。停止→起動
   /etc/init.d/rtlsdr-ogn start
 } >> "$RESTART_LOG" 2>&1
 
-waited=0
-while [ "$waited" -lt "$START_WAIT_SEC" ]; do
-  sleep 5
-  waited=$(( waited + 5 ))
-  if alive; then
-    echo "受信機が復旧しました（${waited}秒）"
-    # OGN設定マネージャは起動のたびに wpa_supplicant.conf へ network を足すので畳む
-    [ -x /usr/local/sbin/feeldscope-wpa-dedupe ] &&
-      /usr/local/sbin/feeldscope-wpa-dedupe >/dev/null 2>&1
-    exit 0
-  fi
-done
-
+wait_alive && exit 0
+# 起動処理が設定マネージャの接続確認で止まった場合は、次回(2分後)以降の見張りが解放する
 echo "受信機を復旧できませんでした。$RESTART_LOG を確認してください"
 exit 1

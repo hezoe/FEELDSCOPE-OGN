@@ -5,7 +5,9 @@
 # git（webappコード）では配れない「OS側のサービス設定」を、既知の正しい状態へ
 # 冪等に揃える。full update（git pull + build）なしで、どの端末にも安全に流せる。
 #
-#   - OGN受信機ウォッチドッグ（feeldscope-ogn-watchdog）を導入/更新。
+#   - OGN受信機ウォッチドッグ（feeldscope-ogn-watchdog）と、その中で使う設定マネージャの見張り
+#     （feeldscope-ogn-cm-guard: OGN 公式の設定マネージャが download.glidernet.org 等への接続確認で
+#     止まったら解放し、手元の受信ソフトで受信を始めさせる）を導入/更新。
 #     受信機が落ちても自力復帰する（watchdog 自身が「rtlsdr-ogn が enabled の
 #     端末でのみ作動／SDRが無ければ何もしない」ので、SkyLens機・ADS-B専用機に
 #     入れても無害）。
@@ -55,6 +57,8 @@ inst(){ # inst <src> <dst> <mode> … 差分がある時だけ入れる（冪等
 
 # --- OGN受信機ウォッチドッグ（受信が落ちたら停止→起動で自動復帰） ---
 inst "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh"             /usr/local/sbin/feeldscope-ogn-watchdog.sh          755
+# OGN 設定マネージャが「つながるまで永久に待つ」所で止まったら解放する見張り（watchdog から呼ぶ。2026-10-22 滝川）
+inst "$SCRIPT_DIR/feeldscope-ogn-cm-guard.sh"             /usr/local/sbin/feeldscope-ogn-cm-guard             755
 inst "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/feeldscope-ogn-watchdog.service 644
 inst "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/feeldscope-ogn-watchdog.timer   644
 

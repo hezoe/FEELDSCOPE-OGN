@@ -463,6 +463,7 @@ install -m 755 "$SCRIPT_DIR/feeldscope-reset-password.sh"       /usr/local/bin/f
 cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-ogn-watchdog.timer"   /etc/systemd/system/
 install -m 755 "$SCRIPT_DIR/feeldscope-ogn-watchdog.sh" /usr/local/sbin/feeldscope-ogn-watchdog.sh
+install -m 755 "$SCRIPT_DIR/feeldscope-ogn-cm-guard.sh" /usr/local/sbin/feeldscope-ogn-cm-guard
 
 # OGN の受信は時計が合ってから始める（狂った時計だと FLARM の位置が壊れて配信される）
 install -m 755 "$SCRIPT_DIR/feeldscope-wait-time.sh" /usr/local/sbin/feeldscope-wait-time.sh

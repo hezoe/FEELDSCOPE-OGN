@@ -293,6 +293,9 @@ function ManualContent() {
           <p className="text-xs mb-2" style={{ color: "var(--color-text-secondary)" }}>
             起動直後は、<strong>時計が合うまで（最大3分）受信を始めません</strong>（v1.4.31 から）。FLARM の電波は時刻で暗号化されていて、時計が狂ったまま受信すると位置がでたらめに解読され、OGN 全体へ配信されてしまうためです（Raspberry Pi には時計の電池が無く、電源断のあとは古い時刻から動き出します）。3分で合わなければいったん停止のままにし、受信機の見張り（2分ごと）が時計が合ってから起動します。時刻は複数の時刻サーバー（NICT・Google・Cloudflare）に問い合わせ、2つ以上が一致したときだけ合わせます（v1.4.34 から。1台だけの答えでは合わせません）。ネットの無い場所で時計を待たずに受信したい場合は、SD カードの起動用の区画に <code>feeldscope-no-time-wait</code> という空のファイルを置いてください。
           </p>
+          <p className="text-xs mb-2" style={{ color: "var(--color-text-secondary)" }}>
+            受信ソフトは起動のたびに、OGN 公式の設定マネージャが <code>download.glidernet.org</code>（OGN 運営のサーバー）から最新版を取ってから動き出します。このサーバーが止まっていると設定マネージャが「つながるまで永久に待つ」ため、手元に受信ソフトがあっても受信が始まりませんでした（2026-10-22 滝川で約6時間）。v1.4.35 から、受信機の見張り（2分ごと）が<strong>設定マネージャが4分以上つながるのを待っていたら止めて、手元の受信ソフトと設定のまま受信を始めます</strong>（ダウンロードや展開の途中は止めません）。そのため、サーバーの停止中に再起動しても、起動から5〜8分ほどで受信が戻ります。
+          </p>
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}><tbody>
             <ManualRow label="状態" desc="rtlsdr-ognの稼働状況（HTTP 8082応答可否）" />
             <ManualRow label="ソフトウェア" desc="rtlsdr-ognのバージョンとビルド日" />
@@ -794,11 +797,28 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.34 */}
+      {/* v1.4.35 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.35</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-22</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        滝川（TAKIKAWA1）で 2026-10-22 の朝、毎日の自動再起動のあと OGN の受信が約6時間止まった問題の対策です。
+      </p>
+
+      <Card title="FIX: OGN のダウンロードサーバーが止まっていると、再起動後に受信が始まらなかった">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信ソフトは起動のたびに、OGN 公式の設定マネージャが <code>download.glidernet.org</code>（OGN 運営のサーバー）から最新版を取ってから動き出します。このサーバーが止まっていた間に自動再起動が走り、設定マネージャが<strong>つながるまで永久に待った</strong>ため、手元に受信ソフトがあるのに受信が始まりませんでした（GitHub は無関係でした）。</li>
+          <li>受信機の見張り（2分ごと）が、設定マネージャが<strong>4分以上つながるのを待っていたら止めて、手元の受信ソフトと設定のまま受信を始める</strong>ようにしました。受信ソフトのダウンロードや展開の途中は止めません（壊さないため）。サーバーの停止中に再起動しても、起動から5〜8分ほどで受信が戻ります。</li>
+          <li>見張りが起動し直しを重ねて、止まった起動処理が積み重なることがありました。起動処理の途中なら重ねずに待ち、重なっていたら1つに片付けるようにしました。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.34 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.34</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-20</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         関宿（Sekiyado1）が 2026-10-20 の朝に再起動を繰り返した問題の修正です。
