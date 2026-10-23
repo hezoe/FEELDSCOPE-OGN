@@ -797,11 +797,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.35 */}
+      {/* v1.4.36 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.36</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-23</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        セキュリティの点検で見つかった、部品の既知の脆弱性への対策です。画面や操作は変わりません。
+      </p>
+
+      <Card title="SEC: Web 画面の土台（Next.js）を 16.4.2 に更新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Web 画面の土台の Next.js を 16.1.6 から <strong>16.4.2</strong> に上げました。16.1.6 には、画面を返す処理を大量の要求で止められる不具合や、画像の変換機能（/_next/image）の脆弱性などが報告されていました。</li>
+          <li>MQTT の接続に使う部品（ws など）も、修正済みの版に上げました。部品の既知の脆弱性は 0 件です。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.35 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.35</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-22</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         滝川（TAKIKAWA1）で 2026-10-22 の朝、毎日の自動再起動のあと OGN の受信が約6時間止まった問題の対策です。
@@ -2439,7 +2455,7 @@ function VersionContent() {
 
       <Card title="コンポーネント">
         <div className="space-y-2">
-          <InfoRow label="Next.js" value="16.1.6" />
+          <InfoRow label="Next.js" value="16.4.2" />
           <InfoRow label="React" value="19.2.3" />
           <InfoRow label="Leaflet" value="1.9.4" />
           <InfoRow label="MQTT.js" value="5.15.0" />
