@@ -797,11 +797,28 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.36 */}
+      {/* v1.4.37 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.37</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-24</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        v1.4.36 に更新すると Raspberry Pi で Web 画面が起動しなくなる問題の修正です。
+      </p>
+
+      <Card title="FIX: v1.4.36 に更新すると、Raspberry Pi で Web 画面のビルドと起動に失敗した">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>v1.4.36（Next.js 16.4.2）に更新すると、<code>Failed to load next.config.ts</code>／<code>needs an import attribute of type &quot;json&quot;</code> と表示されて、Web 画面のビルドと起動が失敗していました（2026-10-24 板倉 Itakura1）。</li>
+          <li>Raspberry Pi（32bit）が使う WebAssembly 版の変換器では、設定ファイルが版数を読む方法（<code>package.json</code> の import）を Node 20 が受け付けないためです。版数を普通のファイルとして読むように直しました（パソコンや VPS のような 64bit の環境では起きていませんでした）。</li>
+          <li>v1.4.36 で止まってしまった機体は、もう一度アップデート（またはインストール）すると直ります。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.36 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.36</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-23</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         セキュリティの点検で見つかった、部品の既知の脆弱性への対策です。画面や操作は変わりません。
