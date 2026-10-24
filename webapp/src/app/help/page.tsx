@@ -154,6 +154,15 @@ function ManualContent() {
             <li><strong>地上</strong> — 地表付近で停止している機体</li>
             <li><strong>幅変更</strong> — サイドバーとマップの境界をドラッグで幅変更可能（ブラウザ保存）</li>
           </ul>
+          <p className="text-sm mt-2 mb-1" style={{ color: "var(--color-text-secondary)" }}>警告・上空の行の見方（左から）：</p>
+          <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li><strong>機体名</strong> — 右に<strong>離陸中のアイコン</strong>（
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ display: "inline", verticalAlign: "-2px", color: "var(--color-accent)" }} aria-hidden="true"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z" /></svg>
+              ）が出ているのは<strong>曳航中・ウィンチ発航中</strong>の機体です（曳航機とグライダーの両方。v1.4.38 から）。離陸を検知してから離脱を検知するまで出ます。アイコンに触れると「曳航中」「ウィンチ発航中」と表示。受信を始める前から飛んでいた機体や、離陸から20分たっても離脱が見つからない機体には出しません。</li>
+            <li><strong>機種</strong>（警告の行はパス L/D または受信の途絶）</li>
+            <li><strong>高度</strong></li>
+            <li><strong>滑空場からの距離</strong> — 滑空場の位置からの直線距離（v1.4.38 から）。単位は設定の距離（km / nm）に合わせます。</li>
+          </ul>
         </Section>
         <Section id="map-icons" heading="機体アイコン一覧">
           <table className="w-full text-sm mt-2" style={{ borderCollapse: "collapse" }}>
@@ -797,11 +806,33 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.37 */}
+      {/* v1.4.38 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.37</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.38</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-24</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        地図画面の右の一覧（警告・上空）を見やすくしました。
+      </p>
+
+      <Card title="NEW: 曳航中・ウィンチ発航中の機体に「離陸中」のアイコン">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>右の一覧で、<strong>曳航中・ウィンチ発航中</strong>の機体の<strong>機体名の右</strong>に、離陸する飛行機のアイコンを出します。航空機曳航では<strong>曳航機とグライダーの両方</strong>、ウィンチ発航ではグライダーに出ます。アイコンに触れると「曳航中」「ウィンチ発航中」と表示します。</li>
+          <li>離陸を検知してから<strong>離脱を検知するまで</strong>出ます。曳航機は最高高度から少し降下したところで離脱と判定するので、実際に索を外してから数十秒ほど遅れて消えます。受信を始める前から飛んでいた機体や、離陸から20分たっても離脱が見つからない機体（動力機など）には出しません。</li>
+        </ul>
+      </Card>
+
+      <Card title="NEW: 高度の右に滑空場からの距離">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>右の一覧（警告・上空）の<strong>高度の右</strong>に、<strong>滑空場からの直線距離</strong>を出します。単位は設定の距離（km / nm）に合わせ、10 未満は小数1桁で表示します（例: 2.2 km、34 km）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.37 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.37</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-24</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         v1.4.36 に更新すると Raspberry Pi で Web 画面が起動しなくなる問題の修正です。

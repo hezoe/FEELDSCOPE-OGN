@@ -1569,6 +1569,25 @@ export function getPhases(): Record<string, FlightPhase> {
   return out;
 }
 
+/** 発航のしかた。曳航機とその相手のグライダーは "tow"、ウィンチで上がっている機体は "winch" */
+export type LaunchKind = "tow" | "winch";
+
+/**
+ * 発航中(曳航中・ウィンチ発航中)の機体。右の一覧の「離陸中」アイコンに使う。
+ * 離陸を見届けていて、まだ離脱していない機体だけ。離脱を探すのは離陸から RELEASE_MAX_AGE_SEC まで
+ * (それを過ぎても "airborne" のまま残る機体=離陸を見ていない・動力機などは発航中とみなさない)。
+ */
+export function getLaunching(): Record<string, LaunchKind> {
+  const out: Record<string, LaunchKind> = {};
+  const nowMs = Date.now();
+  for (const [id, tr] of S().tracking) {
+    if (!tr.initialized || tr.phase !== "airborne" || tr.takeoffMs === null) continue;
+    if (nowMs - tr.takeoffMs >= RELEASE_MAX_AGE_SEC * 1000) continue;
+    out[id] = !tr.isTow && tr.winchLaunch ? "winch" : "tow";
+  }
+  return out;
+}
+
 /** ブラウザ側で手動編集した結果を反映する */
 export function setFlightLog(entries: FlightLogEntry[]): void {
   checkDailyReset();

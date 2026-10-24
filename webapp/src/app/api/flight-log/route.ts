@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { clientIpFromRequest } from "@/lib/auth";
 import {
   getFlightLog,
+  getLaunching,
   getPhases,
   resetFlightLog,
   setFlightLog,
@@ -65,9 +66,9 @@ function logFlightLogSet(ip: string, before: FlightLogEntry[], after: FlightLogE
   console.log(parts.join(" / "));
 }
 
-// GET /api/flight-log — 現在の飛行記録と、機体ごとの状態
+// GET /api/flight-log — 現在の飛行記録と、機体ごとの状態・発航中(曳航中・ウィンチ発航中)の機体
 export async function GET() {
-  return NextResponse.json({ entries: getFlightLog(), phases: getPhases() });
+  return NextResponse.json({ entries: getFlightLog(), phases: getPhases(), launching: getLaunching() });
 }
 
 // POST /api/flight-log — ブラウザからの手動編集

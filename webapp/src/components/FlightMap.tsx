@@ -22,7 +22,7 @@ import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
 import { lookupByDeviceId, hexAddress } from "@/lib/aircraft-id";
 // 飛行記録の検知と保持はサーバ側 (src/lib/flight-tracker.ts)。ここは表示と手動編集のみ。
-import type { FlightLogEntry, FlightPhase } from "@/lib/flight-tracker";
+import type { FlightLogEntry, FlightPhase, LaunchKind } from "@/lib/flight-tracker";
 
 // ── Colors ──
 const COLOR_NORMAL = "#2e7d32";   // green
@@ -773,6 +773,8 @@ export default function FlightMap() {
   const flightLogRef = useRef<FlightLogEntry[]>([]);
   /** 機体ごとの状態（サーバ側の検知結果）。地図の着陸進入表示に使う */
   const phasesRef = useRef<Record<string, FlightPhase>>({});
+  /** 発航中(曳航中・ウィンチ発航中)の機体。右の一覧の「離陸中」アイコンに使う(サーバの判定) */
+  const [launching, setLaunching] = useState<Record<string, LaunchKind>>({});
   /** 機体ごとに、ありえない位置を連続で弾いた回数 */
   const rejectCountsRef = useRef<Record<string, number>>({});
   /** 前回の掃除で見たログブック日。変わったら地図を片付ける */
@@ -871,16 +873,20 @@ export default function FlightMap() {
     const pull = async () => {
       let server: FlightLogEntry[] = [];
       let phases: Record<string, FlightPhase> = {};
+      let launchNow: Record<string, LaunchKind> = {};
       try {
         const res = await fetch("/api/flight-log");
         const data = await res.json();
         server = data.entries || [];
         phases = data.phases || {};
+        launchNow = data.launching || {};
       } catch {
         return; // サーバに届かない間は今の表示のまま
       }
       if (disposed) return;
       phasesRef.current = phases;
+      // 変わったときだけ差し替える(毎回の取得で一覧を描き直さない)
+      setLaunching((prev) => (JSON.stringify(prev) === JSON.stringify(launchNow) ? prev : launchNow));
 
       // サーバが空＝再起動直後。控えがあれば戻す。
       // 件数が減っただけの場合は戻さない（利用者が消した行を復活させないため）。
@@ -2335,12 +2341,18 @@ export default function FlightMap() {
                     className="flex items-center gap-2 px-3 py-1.5 text-[13px] cursor-pointer danger-blink"
                     style={{ borderBottom: "1px solid var(--color-border)", color: COLOR_DANGER }}
                   >
-                    <span className="font-semibold min-w-[65px]">{ac.label}</span>
-                    <span className="text-[11px] flex-1" style={{ opacity: 0.7 }}>
+                    <span className="font-semibold min-w-[65px] flex items-center gap-1">
+                      {ac.label}
+                      {launching[id] && <LaunchIcon kind={launching[id]} />}
+                    </span>
+                    <span className="text-[11px] flex-1 truncate" style={{ opacity: 0.7 }}>
                       {lost ? `途絶 ${secAgo}秒` : `L/D ${ratio}`}
                     </span>
                     <span className="tabular-nums text-xs font-bold">
                       {formatAltitude(ac.position.altitude_m, units.altitude)}
+                    </span>
+                    <span className="tabular-nums text-[11px] text-right min-w-[44px]" style={{ opacity: 0.8 }}>
+                      {formatFieldDistance(d, units.distance)}
                     </span>
                   </div>
                 );
@@ -2380,6 +2392,9 @@ export default function FlightMap() {
                         mapRef.current?.setView([ac.position.latitude, ac.position.longitude], 13);
                       }}
                       dbGliderType={lookupDbRecord(aircraftDbRef.current, id, ac.position.glider_id)?.glider_type}
+                      launch={launching[id]}
+                      distM={haversineM(fLat, fLon, ac.position.latitude, ac.position.longitude)}
+                      distUnit={units.distance}
                     />
                   );
                 })
@@ -2579,6 +2594,9 @@ function StatusItem({
   low,
   onClick,
   dbGliderType,
+  launch,
+  distM,
+  distUnit,
 }: {
   id: string;
   ac: TrackedAircraft;
@@ -2587,6 +2605,11 @@ function StatusItem({
   low: boolean;
   onClick: () => void;
   dbGliderType?: string;
+  /** 発航中(曳航中・ウィンチ発航中)なら機体名の右に「離陸中」アイコン */
+  launch?: LaunchKind;
+  /** 滑空場からの距離(m)。上空の一覧だけ渡し、高度の右に出す */
+  distM?: number;
+  distUnit?: "km" | "nm";
 }) {
   const pos = ac.position;
   const labelColor = low ? COLOR_LOW : COLOR_NORMAL;
@@ -2608,10 +2631,11 @@ function StatusItem({
         outline: selected ? "1px solid var(--color-accent)" : "none",
       }}
     >
-      <span className="font-semibold min-w-[65px]" style={{ color: labelColor }}>
+      <span className="font-semibold min-w-[65px] flex items-center gap-1" style={{ color: labelColor }}>
         {ac.label}
+        {launch && <LaunchIcon kind={launch} />}
       </span>
-      <span className="text-[11px] flex-1" style={{ color: "var(--color-text-secondary)" }}>
+      <span className="text-[11px] flex-1 truncate" style={{ color: "var(--color-text-secondary)" }}>
         {dbGliderType || pos.glider_type || id.slice(0, 6)}
       </span>
       <span
@@ -2620,7 +2644,34 @@ function StatusItem({
       >
         {formatAltitude(pos.altitude_m, units.altitude)}
       </span>
+      {distM !== undefined && (
+        <span
+          className="tabular-nums text-[11px] text-right min-w-[44px]"
+          style={{ color: "var(--color-text-secondary)" }}
+          title="滑空場からの距離"
+        >
+          {formatFieldDistance(distM, distUnit ?? "km")}
+        </span>
+      )}
     </div>
+  );
+}
+
+/** 滑空場からの距離。10 未満は小数1桁、それ以上は整数(km / nm は設定に合わせる) */
+function formatFieldDistance(m: number, unit: "km" | "nm"): string {
+  const v = m / (unit === "nm" ? 1852 : 1000);
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${unit}`;
+}
+
+/** 離陸中(曳航中・ウィンチ発航中)のアイコン。上向きに離陸する飛行機(Material Icons「flight_takeoff」・Apache License 2.0) */
+function LaunchIcon({ kind }: { kind: LaunchKind }) {
+  const label = kind === "winch" ? "ウィンチ発航中" : "曳航中";
+  return (
+    <span title={label} aria-label={label} className="inline-flex shrink-0" style={{ color: "var(--color-accent)" }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z" />
+      </svg>
+    </span>
   );
 }
 
