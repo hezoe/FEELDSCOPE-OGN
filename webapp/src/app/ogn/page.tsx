@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import HelpHint from "@/components/HelpHint";
+import AuthPanel from "@/components/AuthPanel";
 
 interface OgnConfig {
   receiverName: string;
@@ -90,6 +91,15 @@ export default function OgnPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [report, setReport] = useState<SaveReport | null>(null);
+  // 保存・再起動・確認は管理者ログインかリモートサポートの操作者だけ（/api/ogn が 401 を返す）。
+  // 取得できるまでは安全側＝押せないままにする（ログイン/ログアウト時は AuthPanel がページを読み直す）
+  const [canMutate, setCanMutate] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCanMutate(!!d.canMutate))
+      .catch(() => { /* 変更不可のまま */ });
+  }, []);
 
   // 編集中の config が定期取得で上書きされないよう、初回ロード + 保存/再起動後のみ config を更新する。
   // status は live 値なので 5秒毎に再取得して良い。
@@ -208,6 +218,7 @@ export default function OgnPage() {
         className="w-full max-w-3xl space-y-5 p-6 rounded"
         style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)" }}
       >
+        <AuthPanel />
         {error && (
           <div className="p-3 rounded text-sm" style={{ background: "var(--color-danger-dim)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
             {error}
@@ -527,25 +538,28 @@ export default function OgnPage() {
         <div className="flex gap-3 items-center">
           <button
             onClick={saveConfig}
-            disabled={saving || !config}
+            disabled={saving || !config || !canMutate}
+            title={canMutate ? undefined : "管理者ログインが必要です"}
             className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{ background: "var(--color-accent)", color: "#fff", opacity: saving ? 0.5 : 1, cursor: saving ? "wait" : "pointer" }}
+            style={{ background: "var(--color-accent)", color: "#fff", opacity: saving || !canMutate ? 0.5 : 1, cursor: saving ? "wait" : canMutate ? "pointer" : "not-allowed" }}
           >
             {saving ? "保存中..." : "設定を保存して受信機を再起動"}
           </button>
           <button
             onClick={restartReceiver}
-            disabled={restarting}
+            disabled={restarting || !canMutate}
+            title={canMutate ? undefined : "管理者ログインが必要です"}
             className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)", opacity: restarting ? 0.5 : 1, cursor: restarting ? "wait" : "pointer" }}
+            style={{ background: "var(--color-warning-dim)", color: "var(--color-warning)", border: "1px solid var(--color-warning)", opacity: restarting || !canMutate ? 0.5 : 1, cursor: restarting ? "wait" : canMutate ? "pointer" : "not-allowed" }}
           >
             {restarting ? "再起動中..." : "受信機のみ再起動"}
           </button>
           <button
             onClick={verifyConfig}
-            disabled={verifying}
+            disabled={verifying || !canMutate}
+            title={canMutate ? undefined : "管理者ログインが必要です"}
             className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)", opacity: verifying ? 0.5 : 1, cursor: verifying ? "wait" : "pointer" }}
+            style={{ background: "var(--color-bg-card)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)", opacity: verifying || !canMutate ? 0.5 : 1, cursor: verifying ? "wait" : canMutate ? "pointer" : "not-allowed" }}
           >
             {verifying ? "確認中..." : "保存内容を確認"}
           </button>

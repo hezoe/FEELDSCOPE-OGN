@@ -10,6 +10,7 @@ __pycache__/
 aircraft-db.json
 adsb-config.json
 airfield-config.json
+view-config.json
 testdata/*.IGC
 testdata/*.igc
 

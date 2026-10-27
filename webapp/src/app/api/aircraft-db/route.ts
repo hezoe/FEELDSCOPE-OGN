@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { run } from "@/lib/run";
 import type { AircraftDatabase, AircraftRecord, AircraftTypeCode } from "@/lib/types";
+import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import { findKeyByAddress, hexAddress } from "@/lib/aircraft-id";
-import { clientIpFromRequest } from "@/lib/auth";
+import { clientIpFromRequest, getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { persistFiles } from "@/lib/persist";
 
 const DB_PATH = process.env.FEELDSCOPE_AIRCRAFT_DB || "/home/pi/FEELDSCOPE/aircraft-db.json";
@@ -274,6 +275,58 @@ function mergeOnline(db: AircraftDatabase, net: Map<string, NetRecord>): MergeSu
   };
 }
 
+// ── 書き換えの入口の検査(セキュリティ点検 R-008) ──
+// 機体 DB の値は地図のラベルなどに出る。以前は誰でも書き換えられたので、
+// 編集・削除・オンライン取得は管理者ログインかリモートサポートの操作者だけにする。
+// 地図が未知の機体を空の行で登録する自動登録は、閲覧中の誰のブラウザからも呼ばれるので開けたまま。
+
+/** JSON 以外の本文(別サイトのフォームの text/plain など)は受け付けない */
+function notJson(req: Request): NextResponse | null {
+  if (/^application\/json\b/i.test(req.headers.get("content-type") || "")) return null;
+  return NextResponse.json({ error: "Content-Type は application/json にしてください" }, { status: 415 });
+}
+
+async function denyUnlessAuthorized(req: Request): Promise<NextResponse | null> {
+  const bad = notJson(req);
+  if (bad) return bad;
+  if (isAuthorizedToMutate(await getAuthContext(req))) return null;
+  return NextResponse.json(
+    { error: "機体情報の変更には管理者ログインが必要です。", needsAuth: true },
+    { status: 401 },
+  );
+}
+
+/** device_id として受け付ける形(FLR/ICA/OGN などの接頭辞+アドレス) */
+const DEVICE_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const TEXT_FIELDS = ["glider_type", "registration", "competition_id", "pilot"] as const;
+const AIRCRAFT_TYPES = new Set<string>(AIRCRAFT_TYPE_OPTIONS.map((o) => o.value));
+
+class RecordInputError extends Error {}
+
+/** 画面から届いた1行を検査して、決まった項目だけに詰め直す(online の控えはサーバー側の値を使う) */
+function sanitizeRecord(raw: unknown, prev: AircraftRecord | undefined): AircraftRecord {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new RecordInputError("機体情報がありません");
+  const r = raw as Record<string, unknown>;
+  const device_id = typeof r.device_id === "string" ? r.device_id.trim() : "";
+  if (!DEVICE_ID_RE.test(device_id)) {
+    throw new RecordInputError("デバイスIDは英数字・ハイフン・アンダースコア40文字以内で入力してください");
+  }
+  const out = { device_id } as AircraftRecord;
+  for (const f of TEXT_FIELDS) {
+    const v = r[f] === undefined || r[f] === null ? "" : r[f];
+    if (typeof v !== "string") throw new RecordInputError(`${f} は文字で入力してください`);
+    if (v.length > 64) throw new RecordInputError(`${f} は64文字以内で入力してください`);
+    if (/[\x00-\x1f\x7f]/.test(v)) throw new RecordInputError(`${f} に改行などの制御文字は使えません`);
+    out[f] = v;
+  }
+  const t = r.aircraft_type ?? "glider";
+  if (typeof t !== "string" || !AIRCRAFT_TYPES.has(t)) throw new RecordInputError("機体種別が正しくありません");
+  out.aircraft_type = t as AircraftTypeCode;
+  // オンライン取得の控えは画面から編集しない(消してしまうと「手で直した」印が出せなくなる)
+  if (prev?.online) out.online = prev.online;
+  return out;
+}
+
 // GET - return full database
 export async function GET() {
   try {
@@ -286,39 +339,40 @@ export async function GET() {
 
 // PUT - upsert a single record
 export async function PUT(req: Request) {
+  const denied = await denyUnlessAuthorized(req);
+  if (denied) return denied;
   try {
-    const body = await req.json();
-    const { device_id } = body as AircraftRecord;
-    if (!device_id) return NextResponse.json({ error: "device_id required" }, { status: 400 });
+    const body = await req.json().catch(() => null);
     const db = await readDb();
-    const incoming = body as AircraftRecord;
-    // 機体情報も無認証で書き換えられる。飛行ログと同じく記録だけ残す
-    const prev = db[device_id];
+    const device_id = (body as { device_id?: unknown } | null)?.device_id;
+    const prev = typeof device_id === "string" ? db[device_id.trim()] : undefined;
+    const incoming = sanitizeRecord(body, prev);
+    // 誰がいつ何を変えたかを記録に残す
     const ip = clientIpFromRequest(req) || "不明";
     const changed = (["registration", "glider_type", "competition_id", "pilot", "aircraft_type"] as const)
       .filter((f) => (prev?.[f] ?? "") !== (incoming[f] ?? ""))
       .map((f) => `${f}: ${prev?.[f] || "(空)"} -> ${incoming[f] || "(空)"}`);
     console.log(prev
-      ? `[aircraft-db] edit from ${ip}: ${device_id}${changed.length ? " / " + changed.join(", ") : " / 変更なし"}`
-      : `[aircraft-db] add from ${ip}: ${device_id} ${incoming.registration || "(登録番号なし)"}`);
-    // オンライン取得の控えは画面から編集しない。送られてこなければ既存を残す
-    // （消してしまうと「手で直した」印が出せなくなる）
-    if (incoming.online === undefined && db[device_id]?.online) {
-      incoming.online = db[device_id].online;
-    }
-    db[device_id] = incoming;
+      ? `[aircraft-db] edit from ${ip}: ${incoming.device_id}${changed.length ? " / " + changed.join(", ") : " / 変更なし"}`
+      : `[aircraft-db] add from ${ip}: ${incoming.device_id} ${incoming.registration || "(登録番号なし)"}`);
+    db[incoming.device_id] = incoming;
     await writeDb(db);
-    return NextResponse.json(db[device_id]);
+    return NextResponse.json(db[incoming.device_id]);
   } catch (err) {
+    if (err instanceof RecordInputError) return NextResponse.json({ error: err.message }, { status: 400 });
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
 // DELETE - remove a record
 export async function DELETE(req: Request) {
+  const denied = await denyUnlessAuthorized(req);
+  if (denied) return denied;
   try {
-    const { device_id } = await req.json();
-    if (!device_id) return NextResponse.json({ error: "device_id required" }, { status: 400 });
+    const { device_id } = (await req.json().catch(() => ({}))) as { device_id?: unknown };
+    if (typeof device_id !== "string" || !DEVICE_ID_RE.test(device_id)) {
+      return NextResponse.json({ error: "device_id required" }, { status: 400 });
+    }
     const db = await readDb();
     const gone = db[device_id];
     console.log(`[aircraft-db] ★delete from ${clientIpFromRequest(req) || "不明"}: `
@@ -333,10 +387,14 @@ export async function DELETE(req: Request) {
 
 // POST - オンライン取得、または未知の device_id の一括自動登録
 export async function POST(req: Request) {
+  const bad = notJson(req);
+  if (bad) return bad;
   try {
-    const body = await req.json() as { action?: string; device_ids?: string[] };
+    const body = (await req.json().catch(() => ({}))) as { action?: string; device_ids?: unknown };
 
     if (body.action === "fetch-online") {
+      const denied = await denyUnlessAuthorized(req);
+      if (denied) return denied;
       const net = await fetchOnlineRecords();
       const db = await readDb();
       const summary = mergeOnline(db, net.records);
@@ -360,7 +418,9 @@ export async function POST(req: Request) {
     if (!Array.isArray(device_ids)) return NextResponse.json({ error: "device_ids array required" }, { status: 400 });
     const db = await readDb();
     const added: string[] = [];
-    for (const id of device_ids) {
+    // 自動登録は認証なしで呼ばれるので、形の合う ID だけを1回100件まで受け付ける
+    const ids = device_ids.filter((id): id is string => typeof id === "string" && DEVICE_ID_RE.test(id)).slice(0, 100);
+    for (const id of ids) {
       // 同じアドレスが別の接頭辞で既にあるなら同じ機体。行を増やさない
       if (!findKeyByAddress(db, id)) {
         db[id] = {

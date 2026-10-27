@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { access, constants, readFile } from "fs/promises";
+import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
 import { run } from "@/lib/run";
+import { OgnInputError, assertShellSafeValue, sanitizeOgnConfig, type OgnConfig } from "@/lib/ogn-validate";
 import {
   OGN_RECEIVER_CONF_PATH, RTLSDR_OGN_CONF_AUTHORITY, RTLSDR_OGN_CONF_PATHS,
   decodePort, errMsg, extractField, fetchLocalPage, normalizeNewlines,
@@ -36,25 +38,6 @@ export interface SaveReport {
   files: FileCheck[];
   live?: FileCheck;
   verified: boolean;
-}
-
-interface OgnConfig {
-  // From rtlsdr-ogn.conf (runtime)
-  receiverName: string;        // APRS.Call
-  latitude: number;            // Position.Latitude
-  longitude: number;           // Position.Longitude
-  altitude: number;            // Position.Altitude
-  freqCorr: number;            // RF.FreqCorr
-  httpPort: number;            // HTTP.Port
-  // AGC / demodulator (added v1.1.23)
-  gain: number;                // RF.OGN.Gain (initial value, OGN auto-steps from here)
-  minNoise: number;            // RF.OGN.MinNoise (target noise floor)
-  maxNoise: number;            // RF.OGN.MaxNoise (saturation guard)
-  detectSNR: number;           // Demodulator.DetectSNR (decode threshold)
-  // From /boot/OGN-receiver.conf (boot config / install)
-  enableBias: boolean;         // enableBias="1"
-  ognBinaryUrl: string;        // OGNBINARYURL
-  enableCoreOGNTeamRemoteAdmin: boolean; // EnableCoreOGNTeamRemoteAdmin="true"
 }
 
 interface OgnStatus {
@@ -277,31 +260,15 @@ async function verifyOgnConfig(expect?: OgnConfig): Promise<SaveReport> {
 /** 行があれば置き換え、無ければ足す。置き換えられず黙って消えるのを防ぐ */
 function setConfLine(text: string, key: string, value: string): string {
   const re = new RegExp(`^#?\\s*${key}\\s*=.*$`, "mi");
-  const line = `${key}="${value}"`;
+  // このファイルは root の bash が source する。値で引用符を閉じられないよう書く直前にも確かめる
+  const line = `${key}="${assertShellSafeValue(key, value)}"`;
   // 置換文字列の $& などを展開させないため、関数で返す
   if (re.test(text)) return text.replace(re, () => line);
   return (text === "" || text.endsWith("\n") ? text : text + "\n") + line + "\n";
 }
 
+/** c は sanitizeOgnConfig を通したものだけを渡すこと(型・範囲・文字を検査済みの値) */
 async function saveOgnConfig(c: OgnConfig): Promise<SaveReport> {
-  // Validate
-  if (!/^[A-Z0-9]{1,9}$/i.test(c.receiverName || "")) {
-    throw new Error("Receiver Name は英数字9文字以内である必要があります");
-  }
-  if (!Number.isFinite(c.latitude) || c.latitude < -90 || c.latitude > 90) {
-    throw new Error("緯度は -90〜90 の範囲です");
-  }
-  if (!Number.isFinite(c.longitude) || c.longitude < -180 || c.longitude > 180) {
-    throw new Error("経度は -180〜180 の範囲です");
-  }
-  if (!Number.isFinite(c.altitude) || c.altitude < -500 || c.altitude > 9000) {
-    throw new Error("高度は -500〜9000m の範囲です");
-  }
-  if (c.gain < 0 || c.gain > 50) throw new Error("Initial Gain は 0〜50 dB の範囲です");
-  if (c.minNoise < 0 || c.minNoise > 30) throw new Error("MinNoise は 0〜30 dB の範囲です");
-  if (c.maxNoise <= c.minNoise || c.maxNoise > 40) throw new Error("MaxNoise は MinNoise より大きく 40 以下である必要があります");
-  if (c.detectSNR < 1 || c.detectSNR > 20) throw new Error("DetectSNR は 1〜20 dB の範囲です");
-
   const steps: StepResult[] = [];
   const conf = buildRtlsdrConf(c);
 
@@ -454,18 +421,38 @@ export async function GET() {
 
 // POST /api/ogn — save config or restart receiver
 export async function POST(request: Request) {
-  const body = await request.json();
-  const { action } = body;
+  // JSON として送られたものだけを受け付ける。form の text/plain などで JSON 風の本文を
+  // 送り込む別サイトのページ(CSRF)を止める(application/json は他サイトからは事前確認が要り、通らない)
+  const contentType = request.headers.get("content-type") || "";
+  if (!/^application\/json\b/i.test(contentType)) {
+    return NextResponse.json({ ok: false, error: "Content-Type は application/json にしてください" }, { status: 415 });
+  }
+  let body: { action?: unknown; config?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "送られた内容が JSON として読めません" }, { status: 400 });
+  }
+  const action = body?.action;
 
   // 受信機設定の書き込み(/boot へ sudo)と受信機の再起動は端末本体の操作。デモ機では拒否する
   if ((action === "save" || action === "restart") && isHostLocked()) {
     return NextResponse.json({ ok: false, error: HOST_LOCKED_MESSAGE, hostLocked: true }, { status: 403 });
   }
 
+  // 保存・再起動・確認は管理者ログインかリモートサポートの操作者だけ(セキュリティ点検 R-004)。
+  // 保存した値は root で読まれる設定ファイルに入るので、LAN の誰でもできてはいけない
+  if (!isAuthorizedToMutate(await getAuthContext(request))) {
+    return NextResponse.json(
+      { ok: false, error: "受信機の設定の保存・再起動には管理者ログインが必要です。", needsAuth: true },
+      { status: 401 },
+    );
+  }
+
   try {
     switch (action) {
       case "save": {
-        const c: OgnConfig = body.config;
+        const c = sanitizeOgnConfig(body.config);
         const report = await saveOgnConfig(c);
         // 書けたつもりで書けていない、を無くす。読み戻して一致したときだけ成功と言う。
         if (!report.verified) {
@@ -489,7 +476,7 @@ export async function POST(request: Request) {
       }
       case "verify": {
         // 保存せずに、設定がどこまで行き渡っているかだけを見る
-        const report = await verifyOgnConfig(body.config as OgnConfig | undefined);
+        const report = await verifyOgnConfig(body.config === undefined ? undefined : sanitizeOgnConfig(body.config));
         return NextResponse.json({
           ok: true,
           message: report.verified
@@ -509,6 +496,6 @@ export async function POST(request: Request) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: err instanceof OgnInputError ? 400 : 500 });
   }
 }

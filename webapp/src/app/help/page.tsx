@@ -720,6 +720,7 @@ function ManualContent() {
             <li><strong>受信機のみ再起動</strong> — 設定は変更せずrtlsdr-ognだけ再起動</li>
             <li>どちらも<strong>完了まで1〜2分かかります</strong>。受信機の起動は時刻合わせとOGN公式の設定マネージャ（疎通確認・自己更新）を済ませてから始まるためです。状態ページが実際に応答したことを確かめてから結果を出すので、画面が返るまで閉じずにお待ちください</li>
             <li><strong>保存内容を確認</strong> — 保存せずに、設定ファイル・再インストール用の設定・受信機が実際に使っている値を並べて比べます。食い違っていればその場所と理由（所有者・パーミッション・エラー内容）を表示します</li>
+            <li>3つのボタンとも<strong>管理者ログインが必要</strong>です（v1.4.39 から。画面のログイン欄から。アカウントは設定画面と共通）。設定の閲覧はログイン不要です</li>
           </ul>
         </Section>
       </Card>
@@ -743,6 +744,7 @@ function ManualContent() {
 
         <Section id="aircraft-db-ops" heading="操作">
           <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <li>追加・編集・削除・オンライン取得には<strong>管理者ログインが必要</strong>です（v1.4.39 から。画面のログイン欄から。アカウントは設定画面と共通）。一覧の表示はログイン不要です</li>
             <li><strong>オンライン取得</strong>ボタン — OGN DDB と FlarmNet から JA 登録機の情報を取り込みます（下記）</li>
             <li><strong>+ 新規追加</strong>ボタン — 機体情報を手動追加</li>
             <li><strong>編集</strong>ボタン — 既存レコードを編集</li>
@@ -806,11 +808,37 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.38 */}
+      {/* v1.4.39 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.39</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-27</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        セキュリティ点検（2026-10-22）で見つかった弱点の対策です。見た目・受信動作は変わりません。
+      </p>
+
+      <Card title="CHG: 機体情報と受信機設定の変更に管理者ログインが必要になりました">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報画面の<strong>追加・編集・削除・オンライン取得</strong>と、OGN 受信機設定の<strong>保存・再起動・確認</strong>は、<strong>管理者ログイン</strong>（またはリモートサポートの操作者）だけができるようになりました。これまでは LAN にいる誰でも書き換えられました。</li>
+          <li>閲覧は今まで通りログイン不要です。両方の画面にログイン欄を置きました（アカウントは設定画面と共通）。</li>
+          <li>地図が未知の機体を空の行で自動登録する仕組みは、今まで通りログインなしで動きます。</li>
+        </ul>
+      </Card>
+
+      <Card title="SEC: 画面から受け取る値の検査と、地図に出す文字の無害化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信機設定の値は受信機の起動時に root が読む設定ファイルに書かれるため、<strong>型・範囲・使える文字を保存前に検査</strong>し、コマンドを差し込める文字（<code>&quot;</code> <code>$</code> など）は書き込みを中止するようにしました。</li>
+          <li>機体情報の各項目も<strong>形式と長さ（64文字以内・制御文字不可）を検査</strong>するようにしました。不正な値は保存せず、理由を画面に表示します。</li>
+          <li>地図のラベル・吹き出しに出す文字（登録番号・CN・操縦者名・滑空場名・受信機名など）を<strong>すべて HTML として無害化</strong>しました。機体データベースやオンライン取得の値にスクリプトを仕込まれても動きません。</li>
+          <li>変更系の API は <code>application/json</code> 以外の送信を受け付けません（別サイトのページから送り込む攻撃＝CSRF の対策）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.38 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.38</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-10-24</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         地図画面の右の一覧（警告・上空）を見やすくしました。

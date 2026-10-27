@@ -36,6 +36,15 @@ function adsbColor(pos: AircraftPosition): string {
   return pos.adsb_mode === "adsb" ? COLOR_ADSB : COLOR_MODES;
 }
 
+/**
+ * Leaflet の divIcon の html と bindTooltip の文字列は HTML として描かれる。機体 DB の登録番号・CN・
+ * 操縦者名、オンライン取得(OGN DDB・FlarmNet)や ADS-B の値、滑空場名・受信機名には誰でも文字を
+ * 入れられるので、そのまま入れるとスクリプトが動く(セキュリティ点検 R-008)。必ずこれを通す。
+ */
+function escHtml(s: unknown): string {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+}
+
 // ── Feeldscope SVG icons ──
 function svgGlider(color: string, heading: number): string {
   return `<svg width="30" height="30" viewBox="-15 -15 30 30" style="transform:rotate(${heading}deg)"><path d="M0,-11 Q0.6,-9 1.05,-6 L0.9,-3.5 Q1,-1 0.85,1 L0.6,5.5 Q0.3,8.5 0,10.5 Q-0.3,8.5 -0.6,5.5 L-0.85,1 Q-1,-1 -0.9,-3.5 L-1.05,-6 Q-0.6,-9 0,-11Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M0.8,-2.2 L15,-2.2 L14.5,-1.5 L0.8,0.2Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M-0.8,-2.2 L-15,-2.2 L-14.5,-1.5 L-0.8,0.2Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M0.5,7.5 L5.5,9 L5.5,9.5 L0.5,9.5Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/><path d="M-0.5,7.5 L-5.5,9 L-5.5,9.5 L-0.5,9.5Z" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width=".6"/></svg>`;
@@ -118,8 +127,8 @@ function makeAircraftIcon(heading: number, color: string, blink: boolean, glider
   const size = isAdsb ? 24 : 30;
   const anchor = isAdsb ? 12 : 15;
   // ラベルは機体アイコンの上(表示名)・下(高度+速度)に配置(ogn.ezoe.net と同様)。
-  const top = labels?.top ? `<span class="ac-top">${labels.top}</span>` : "";
-  const bot = labels?.bot ? `<span class="ac-bot">${labels.bot}</span>` : "";
+  const top = labels?.top ? `<span class="ac-top">${escHtml(labels.top)}</span>` : "";
+  const bot = labels?.bot ? `<span class="ac-bot">${escHtml(labels.bot)}</span>` : "";
   return L.divIcon({
     html: `<div class="ac-mk">${top}<div class="aircraft-icon${blinkClass}">${svg}</div>${bot}</div>`,
     className: "",
@@ -985,7 +994,7 @@ export default function FlightMap() {
       pane: "airfieldPane",
     })
       .addTo(map)
-      .bindTooltip(airfield.name, {
+      .bindTooltip(escHtml(airfield.name), {
         permanent: true,
         direction: "top",
         offset: [0, -10],
@@ -1078,7 +1087,7 @@ export default function FlightMap() {
         const icon = L.divIcon({ html, className: "ogn-receiver-icon", iconSize: [22, 22], iconAnchor: [11, 11] });
 
         const latlng = L.latLng(cfg.latitude, cfg.longitude);
-        const tooltipText = `OGN受信機: ${cfg.receiverName || "—"}<br>${online ? "稼働中" : "停止"}${status?.ognGain ? `<br>Gain: ${status.ognGain}` : ""}${status?.noise ? `<br>Noise: ${status.noise}` : ""}`;
+        const tooltipText = `OGN受信機: ${escHtml(cfg.receiverName || "—")}<br>${online ? "稼働中" : "停止"}${status?.ognGain ? `<br>Gain: ${escHtml(status.ognGain)}` : ""}${status?.noise ? `<br>Noise: ${escHtml(status.noise)}` : ""}`;
 
         if (!ognReceiverMarkerRef.current) {
           const m = L.marker(latlng, { icon, zIndexOffset: -100 })
@@ -1111,7 +1120,7 @@ export default function FlightMap() {
     if (!marker) return;
     const latlng = L.latLng(airfield.latitude, airfield.longitude);
     marker.setLatLng(latlng);
-    marker.setTooltipContent(airfield.name);
+    marker.setTooltipContent(escHtml(airfield.name));
   }, [airfield]);
 
   const unitsRef = useRef(units);

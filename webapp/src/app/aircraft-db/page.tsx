@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { AircraftRecord, AircraftTypeCode, AircraftDatabase } from "@/lib/types";
 import { AIRCRAFT_TYPE_OPTIONS } from "@/lib/types";
 import HelpHint from "@/components/HelpHint";
+import AuthPanel from "@/components/AuthPanel";
 
 /** オンライン取得の結果（/api/aircraft-db の fetch-online が返す形） */
 interface OnlineResult {
@@ -63,6 +64,16 @@ export default function AircraftDbPage() {
   const [fetching, setFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState<OnlineResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // 編集・削除・オンライン取得は管理者ログインかリモートサポートの操作者だけ（API が 401 を返す）。
+  // 取得できるまでは安全側＝押せないままにする（ログイン/ログアウト時は AuthPanel がページを読み直す）
+  const [canMutate, setCanMutate] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setCanMutate(!!d.canMutate))
+      .catch(() => { /* 変更不可のまま */ });
+  }, []);
 
   const fetchDb = useCallback(async () => {
     try {
@@ -114,11 +125,22 @@ export default function AircraftDbPage() {
   };
 
   const saveRecord = async (record: AircraftRecord) => {
-    await fetch("/api/aircraft-db", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(record),
-    });
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/aircraft-db", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      // 失敗したら編集中の内容は残す（入れ直さずに済むように）
+      setSaveError(`保存できませんでした: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     setEditingId(null);
     setDraft(null);
     setAddingNew(false);
@@ -128,11 +150,20 @@ export default function AircraftDbPage() {
 
   const deleteRecord = async (deviceId: string) => {
     if (!confirm(`${deviceId} を削除しますか？`)) return;
-    await fetch("/api/aircraft-db", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_id: deviceId }),
-    });
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/aircraft-db", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setSaveError(`削除できませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    }
     await fetchDb();
   };
 
@@ -186,7 +217,7 @@ export default function AircraftDbPage() {
             {overlayEnabled && <span className="text-xs" style={{ color: "var(--color-warning)" }}>固定化中 — 変更は再起動時にリセット</span>}
             <button
               onClick={fetchOnline}
-              disabled={fetching}
+              disabled={fetching || !canMutate}
               title={overlayEnabled
                 ? "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます（固定化中なので再起動で元に戻ります）"
                 : "OGN DDB と FlarmNet から JA 登録機の情報を取り込みます"}
@@ -195,23 +226,30 @@ export default function AircraftDbPage() {
                 background: "var(--color-bg-tertiary)",
                 color: "var(--color-text-primary)",
                 border: "1px solid var(--color-border)",
-                opacity: fetching ? 0.5 : 1,
-                cursor: fetching ? "wait" : "pointer",
+                opacity: fetching || !canMutate ? 0.5 : 1,
+                cursor: fetching ? "wait" : canMutate ? "pointer" : "not-allowed",
               }}
             >
               {fetching ? "取得中..." : "オンライン取得"}
             </button>
             <button
               onClick={startAdd}
-              disabled={addingNew}
+              disabled={addingNew || !canMutate}
+              title={canMutate ? undefined : "管理者ログインが必要です"}
               className="px-3 py-1 text-sm rounded font-semibold"
-              style={{ background: "var(--color-accent)", color: "#fff", opacity: addingNew ? 0.5 : 1 }}
+              style={{ background: "var(--color-accent)", color: "#fff", opacity: addingNew || !canMutate ? 0.5 : 1, cursor: canMutate ? "pointer" : "not-allowed" }}
             >
               + 追加
             </button>
             <HelpHint sectionId="aircraft-db-ops" title="操作の説明を表示" />
           </div>
         </div>
+        <AuthPanel />
+        {saveError && (
+          <div className="p-2 mb-3 rounded text-sm" style={{ background: "var(--color-danger-dim)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
+            {saveError}
+          </div>
+        )}
 
         {fetchError && (
           <div className="mb-3 px-3 py-2 rounded text-sm"
@@ -363,8 +401,8 @@ export default function AircraftDbPage() {
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEdit(rec)} className="px-2 py-0.5 text-xs rounded mr-1" style={{ background: "var(--color-bg-tertiary)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}>編集</button>
-                            <button onClick={() => deleteRecord(rec.device_id)} className="px-2 py-0.5 text-xs rounded" style={{ background: "var(--color-danger)", color: "#fff" }}>削除</button>
+                            <button onClick={() => startEdit(rec)} disabled={!canMutate} title={canMutate ? undefined : "管理者ログインが必要です"} className="px-2 py-0.5 text-xs rounded mr-1" style={{ background: "var(--color-bg-tertiary)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)", opacity: canMutate ? 1 : 0.5, cursor: canMutate ? "pointer" : "not-allowed" }}>編集</button>
+                            <button onClick={() => deleteRecord(rec.device_id)} disabled={!canMutate} title={canMutate ? undefined : "管理者ログインが必要です"} className="px-2 py-0.5 text-xs rounded" style={{ background: "var(--color-danger)", color: "#fff", opacity: canMutate ? 1 : 0.5, cursor: canMutate ? "pointer" : "not-allowed" }}>削除</button>
                           </>
                         )}
                       </td>
