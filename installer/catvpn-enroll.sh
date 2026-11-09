@@ -179,6 +179,37 @@ if [ ! -f /etc/ssh/ssh_host_ed25519_key.pub ]; then
     log "  Generating missing ed25519 host key..."
     ssh-keygen -A
 fi
+
+# 鍵の個体化(2026-11-09): 出荷イメージの端末は SSH ホスト鍵が全端末共通のため、
+# ハブの TOFU 照合(同名の再申請は同じホスト鍵のときだけ通す)が効かない。
+# 初回の登録前に必ず作り直して端末固有の鍵にし、以後この鍵を「この端末である」証明にする。
+# 承認待ちの再試行(10分ごと)で鍵が変わると承認済みの申請と照合できなくなるため、
+# 一度作り直したら印(/etc/catvpn/hostkey-individualized)を置いて二度と変えない。
+HOSTKEY_MARKER=/etc/catvpn/hostkey-individualized
+regen_host_key() {
+    # 安全に作り直す: 失敗・sshd 検証 NG なら元に戻す。古い証明書は消す(鍵と不一致の
+    # 証明書・証明書なしは sshd では警告のみで、登録成功時に新しい証明書が入る)。
+    local bdir
+    bdir=$(mktemp -d /etc/ssh/hostkey-backup.XXXXXX) || return 1
+    cp -a /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub "$bdir"/ 2>/dev/null || true
+    cp -a /etc/ssh/ssh_host_ed25519_key-cert.pub "$bdir"/ 2>/dev/null || true
+    rm -f /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub \
+          /etc/ssh/ssh_host_ed25519_key-cert.pub
+    if ! ssh-keygen -q -t ed25519 -N '' -f /etc/ssh/ssh_host_ed25519_key || ! sshd -t; then
+        cp -a "$bdir"/. /etc/ssh/ 2>/dev/null || true
+        rm -rf "$bdir"
+        return 1
+    fi
+    rm -rf "$bdir"
+    install -d -m 755 /etc/catvpn
+    date -Iseconds > "$HOSTKEY_MARKER"
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+    log "  Generated device-unique SSH host key"
+}
+if [ ! -f "$HOSTKEY_MARKER" ]; then
+    regen_host_key || log "  WARN: host key individualization failed (continuing with current key)"
+fi
+
 HOST_PUB=$(cat /etc/ssh/ssh_host_ed25519_key.pub)
 
 # ---------- 4. API へ登録要求 ----------
@@ -228,14 +259,50 @@ print(json.dumps({
         # Step 2: 自動生成 hostname で /self-enroll に fallback
         CATVPN_HOSTNAME=$(derive_catvpn_hostname)
         log "  /claim returned $HTTP_CODE. Falling back to /self-enroll as '$CATVPN_HOSTNAME'..."
-        python3 -c "
-import json
-print(json.dumps({
+
+        # OGN 受信機名と座標を申請に添える(あれば)。承認通知で「どの受信機か」を見分けるため。
+        # 読み方は feeldscope-install.sh と同じ(CR を除いて bash で source)。
+        # 無い・読めない場合は従来どおり名前なしで申請する(申請は止めない)。
+        RCV_NAME=""; RCV_LAT=""; RCV_LON=""
+        if [ -f /boot/OGN-receiver.conf ]; then
+            IFS='|' read -r RCV_NAME RCV_LAT RCV_LON < <(
+                env -i PATH=/usr/bin:/bin bash --noprofile --norc -c \
+                  'source <(tr -d "\r" < /boot/OGN-receiver.conf) >/dev/null 2>&1; printf "%s|%s|%s\n" "$ReceiverName" "$Latitude" "$Longitude"'
+            ) || true
+        fi
+        is_num() { [[ "$1" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; }
+        # 設定マネージャの控え(/home/pi/rtlsdr-ogn.conf)から座標を補う
+        prev_conf_value() { grep -E "^[[:space:]{]*$1[[:space:]]*=" /home/pi/rtlsdr-ogn.conf 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*([-+0-9.]+).*/\1/'; }
+        is_num "$RCV_LAT" || RCV_LAT="$(prev_conf_value Latitude)"
+        is_num "$RCV_LON" || RCV_LON="$(prev_conf_value Longitude)"
+        [[ "$RCV_NAME" =~ ^[A-Za-z0-9_-]{1,16}$ ]] || RCV_NAME=""
+        if ! is_num "$RCV_LAT" || ! is_num "$RCV_LON"; then RCV_LAT=""; RCV_LON=""; fi
+
+        # 変更不能の識別子として MAC アドレスも申請に添える(ハブで記録。名前の由来の裏付け)
+        ENROLL_MAC=""
+        for ifname in eth0 wlan0; do
+            if [ -f "/sys/class/net/$ifname/address" ]; then
+                _m=$(tr -d ':' < "/sys/class/net/$ifname/address" | tr 'A-Z' 'a-z')
+                if [ -n "$_m" ] && [ "$_m" != "000000000000" ]; then ENROLL_MAC="$_m"; break; fi
+            fi
+        done
+
+        RCV_NAME="$RCV_NAME" RCV_LAT="$RCV_LAT" RCV_LON="$RCV_LON" ENROLL_MAC="$ENROLL_MAC" python3 -c "
+import json, os
+body = {
     'fleet': 'feeldscope',
     'hostname': '$CATVPN_HOSTNAME',
     'wg_pubkey': '$WG_PUB',
     'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
-}))
+}
+if os.environ.get('RCV_NAME'):
+    body['receiver'] = os.environ['RCV_NAME']
+if os.environ.get('RCV_LAT') and os.environ.get('RCV_LON'):
+    body['lat'] = float(os.environ['RCV_LAT'])
+    body['lon'] = float(os.environ['RCV_LON'])
+if os.environ.get('ENROLL_MAC'):
+    body['mac'] = os.environ['ENROLL_MAC']
+print(json.dumps(body))
 " > "$BODY_FILE"
 
         HTTP_CODE=$(curl -sS -m 30 -o "$RESP_FILE" -w "%{http_code}" -X POST "$API/self-enroll" \

@@ -80,6 +80,15 @@ inst "$SCRIPT_DIR/config/feeldscope-alive.timer"          /etc/systemd/system/fe
 inst "$SCRIPT_DIR/feeldscope-update-resume.sh"            /usr/local/sbin/feeldscope-update-resume            755
 inst "$SCRIPT_DIR/config/feeldscope-update-resume.service" /etc/systemd/system/feeldscope-update-resume.service 644
 
+# --- SD クローンの自己修復と、SSH ホスト鍵の個体化（2026-11-09 ITAKURA1 事件対策） ---
+# identity-check: 起動時(wg-quick の前)に「登録時の MAC 由来名 vs 実機 MAC」を照合し、
+#   クローン SD なら元の端末を名乗る前に鍵・設定を破棄して自分として登録し直す。
+# hostkey-rotate: 全端末共通のイメージ焼き込みホスト鍵を端末固有の鍵に作り直し、
+#   ハブの TOFU 記録を VPN トンネル越し(本人証明)に更新する(一度だけ)。
+inst "$SCRIPT_DIR/installer/catvpn-identity-check.sh"     /usr/local/sbin/catvpn-identity-check               755
+inst "$SCRIPT_DIR/installer/catvpn-hostkey-rotate.sh"     /usr/local/sbin/catvpn-hostkey-rotate               755
+inst "$SCRIPT_DIR/config/catvpn-identity-check.service"   /etc/systemd/system/catvpn-identity-check.service   644
+
 # --- 10分ごとの時刻合わせ(OGN 受信機の導入で root の cron に入る ntpdate pool.ntp.org)を、突き合わせ付きに置き換える ---
 # 1台の時刻サーバーの答えで合わせると、狂ったサーバーに当たったとき時計が1〜2日ずれる(2026-10-20 関宿)。
 # feeldscope-wait-time.sh sync は chrony が同期中なら何もせず、そうでなければ複数の出どころが一致したときだけ合わせる
@@ -102,6 +111,11 @@ systemctl enable --now feeldscope-ogn-watchdog.timer >/dev/null 2>&1 || true
 systemctl enable --now feeldscope-bootlog.service >/dev/null 2>&1 || true
 systemctl enable --now feeldscope-alive.timer     >/dev/null 2>&1 || true
 systemctl enable feeldscope-update-resume.service >/dev/null 2>&1 || true   # 起動時だけ(印があるときだけ)動く
+systemctl enable catvpn-identity-check.service    >/dev/null 2>&1 || true   # 起動時(wg-quick の前)に照合
+
+# クローン検出は再起動を待たずいま照合する。鍵の個体化は未実施の端末だけ一度動く
+/usr/local/sbin/catvpn-identity-check || warn "identity-check が警告を出しました"
+/usr/local/sbin/catvpn-hostkey-rotate || warn "ホスト鍵の個体化は完了しませんでした(次回の更新で再試行)"
 
 wd="$(systemctl is-active feeldscope-ogn-watchdog.timer 2>/dev/null)/$(systemctl is-enabled feeldscope-ogn-watchdog.timer 2>/dev/null)"
 ro="$(systemctl is-enabled rtlsdr-ogn 2>/dev/null | tail -1)"

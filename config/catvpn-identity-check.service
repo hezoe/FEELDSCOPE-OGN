@@ -1,0 +1,14 @@
+[Unit]
+Description=CATVPN identity self-check (detect cloned SD before connecting)
+# クローン SD が元の端末を名乗って接続する前に照合する(wg-quick より先に実行)
+After=network-online.target
+Wants=network-online.target
+Before=wg-quick@wg0.service
+ConditionPathExists=/etc/wireguard/wg0.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/catvpn-identity-check
+
+[Install]
+WantedBy=multi-user.target
