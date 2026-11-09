@@ -60,8 +60,9 @@ async function writeDb(db: AircraftDatabase): Promise<void> {
 const DDB_URL = "http://ddb.glidernet.org/download/?j=1";
 /** FlarmNet 公式(LXNAV形式)。全バイト +1 の難読化がかかっている */
 const FLARMNET_URL = "https://www.flarmnet.org/files/lxnav.fln";
-/** 日本の登録記号: JA + 数字1桁 + 英数3桁（JA1234 / JA12AB など） */
-const JA_RE = /^JA[0-9][0-9A-Z]{3}$/;
+/** 取り込む登録記号: JA + 英数4桁（JA1234 / JA12AB のほか、JATEST などの
+ *  試験用登録も対象。2026-11-09 ユーザー指示で数字始まり限定を撤廃） */
+const JA_RE = /^JA[0-9A-Z]{4}$/;
 /** DDB の device_type から機体IDの接頭辞へ。新規に作るときだけ使う */
 const DEVICE_TYPE_PREFIX: Record<string, string> = { I: "ICA", F: "FLR", O: "OGN" };
 const NET_TIMEOUT_MS = 90_000;

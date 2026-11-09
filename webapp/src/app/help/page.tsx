@@ -808,11 +808,24 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.40 */}
+      {/* v1.4.41 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.40</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.41</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-09</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+
+      <Card title="CHG: オンライン取得の対象を「JA+英数4桁」に拡大">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>機体情報の<strong>オンライン取得</strong>（OGN DDB / FlarmNet）の取り込み対象を、従来の「JA+数字1桁+英数3桁」（JA1234 / JA12AB など）から<strong>「JA+英数4桁」</strong>に広げました。<code>JATEST</code> のような試験用の登録も取り込めます。</li>
+          <li>反映するには、機体情報画面で「オンライン取得」を実行してください（管理者ログインが必要）。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.40 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.40</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-09</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         SD カードのクローン（コピー）事故への対策です。画面・受信動作は変わりません。
