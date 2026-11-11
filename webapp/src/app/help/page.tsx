@@ -808,11 +808,47 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.41 */}
+      {/* v1.4.42 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.42</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-11</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        セキュリティ点検（2026-10-26）への対応です。通常の画面操作・受信動作は変わりません。
+      </p>
+
+      <Card title="SEC: 外部の Web ページからの操作（CSRF・DNS リバインディング）を遮断">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>場内 LAN の PC で悪意ある Web ページを開いた場合に、そのページを踏み台に端末の API（再起動・設定変更など）を外部から叩かれる経路を、入口（Host / Origin の検査）で遮断しました。</li>
+          <li>通常のアクセス（IP アドレス・<code>端末名.local</code>・リモートサポートの <code>〜.feeldscope.wg</code>）はこれまでどおり使えます。</li>
+        </ul>
+      </Card>
+
+      <Card title="SEC: 管理者ログインの強化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>ログイン試行に回数制限を付けました（同じ接続元から10分に8回まで。超えるとしばらく待つ必要があります）。</li>
+          <li><strong>新しいパスワードは8文字以上</strong>になりました（既存のパスワードはそのまま使えます）。</li>
+          <li>パスワードを変更すると、<strong>変更前に発行された全てのログイン状態が即時無効</strong>になります。</li>
+        </ul>
+      </Card>
+
+      <Card title="SEC: 機体データ配信（MQTT）への書き込みを遮断">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>画面への機体データ配信（WebSocket 9001番）は<strong>読み取り専用</strong>になり、LAN から偽の機体データを流し込むことはできなくなりました。内部ポート（1883番）は端末内からのみ接続できます。</li>
+        </ul>
+      </Card>
+
+      <Card title="SEC: リモートサポート加入後は SSH のパスワードログインを無効化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>リモートサポート（CATVPN）加入済みの端末は証明書でログインできるため、<strong>SSH のパスワードログインを自動で無効化</strong>するようになりました（これまでは有効なまま残っていました）。本体にキーボード・画面をつないだ操作（コンソール）は従来どおりパスワードで使えます。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.41 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.41</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-09</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
 
       <Card title="CHG: オンライン取得の対象を「JA+英数4桁」に拡大">

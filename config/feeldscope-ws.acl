@@ -1,0 +1,4 @@
+# FEELDSCOPE LAN 向け WebSocket(9001) の ACL (R-013)
+# 匿名クライアント(ブラウザ)は ogn/# の購読のみ許可。publish は一切不可。
+topic read ogn/#
+topic read $SYS/#

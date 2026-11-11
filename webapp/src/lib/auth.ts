@@ -5,8 +5,11 @@
 //   ※リモートサポートONの時のみ RPi は VPN 上に存在し、その IP に到達できるのは
 //     隔離ポリシー上オペレーターだけ。よって送信元IP=10.66.10.x は本人証明になる。
 import { readFile, writeFile } from "fs/promises";
-import { randomBytes, scryptSync, timingSafeEqual, createHmac } from "crypto";
+import { randomBytes, scrypt as scryptCb, scryptSync, timingSafeEqual, createHmac } from "crypto";
+import { promisify } from "util";
 import { persistFiles } from "./persist";
+
+const scryptAsync = promisify(scryptCb) as (p: string, s: string, n: number) => Promise<Buffer>;
 
 const AUTH_PATH = process.env.FEELDSCOPE_AUTH_CONFIG
   || `${process.env.FEELDSCOPE_DIR || "/home/pi/FEELDSCOPE"}/auth.json`;
@@ -62,20 +65,38 @@ async function saveAuth(cfg: AuthConfig): Promise<void> {
 
 export async function verifyPassword(password: string): Promise<boolean> {
   const cfg = await loadAuth();
-  const h = hashPassword(password, cfg.salt);
+  // R-032: 非同期 scrypt(検証中にサーバー全体が止まらないように)
+  const h = await scryptAsync(password, cfg.salt, 32);
   const stored = Buffer.from(cfg.hash, "hex");
   return h.length === stored.length && timingSafeEqual(h, stored);
 }
 
+// ── R-032: ログイン試行の回数制限(IPごと 10分窓で8回まで) ──
+const loginAttempts = new Map<string, number[]>();
+export function loginRateOk(ip: string | null): boolean {
+  const key = ip || "unknown";
+  const now = Date.now();
+  const hist = (loginAttempts.get(key) || []).filter((t) => now - t < 10 * 60 * 1000);
+  if (hist.length >= 8) { loginAttempts.set(key, hist); return false; }
+  hist.push(now);
+  loginAttempts.set(key, hist);
+  if (loginAttempts.size > 1000) {
+    for (const [k, v] of loginAttempts) { if (!v.length || now - v[v.length - 1] > 10 * 60 * 1000) loginAttempts.delete(k); }
+  }
+  return true;
+}
+
 // current が正しければ new を設定。operatorBypass=true なら current 不要（失念時の解除用）
 export async function changePassword(newPassword: string, current: string | null, operatorBypass: boolean): Promise<{ ok: boolean; error?: string }> {
-  if (!newPassword || newPassword.length < 4) return { ok: false, error: "パスワードは4文字以上にしてください" };
+  if (!newPassword || newPassword.length < 8) return { ok: false, error: "パスワードは8文字以上にしてください" };
   if (!operatorBypass) {
     if (!(await verifyPassword(current || ""))) return { ok: false, error: "現在のパスワードが違います" };
   }
   const cfg = await loadAuth();
   const salt = randomBytes(16).toString("hex");
-  await saveAuth({ ...cfg, salt, hash: hashPassword(newPassword, salt).toString("hex"), mustChange: false });
+  const hash = (await scryptAsync(newPassword, salt, 32)).toString("hex");
+  // R-032: sessionSecret も作り直す=変更前に発行された全セッションを即時無効化
+  await saveAuth({ ...cfg, salt, hash, sessionSecret: randomBytes(32).toString("hex"), mustChange: false });
   return { ok: true };
 }
 

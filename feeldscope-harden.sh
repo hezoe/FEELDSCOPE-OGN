@@ -38,9 +38,14 @@ fi
 DROPIN=/etc/ssh/sshd_config.d/60-feeldscope-hardening.conf
 SSH_KEYS=/home/pi/.ssh/authorized_keys
 if [ -d /etc/ssh/sshd_config.d ] && grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config 2>/dev/null; then
-    if [ -s "$SSH_KEYS" ]; then
+    # R-086 (2026-11-11): CATVPN 加入機は SSH CA(TrustedUserCAKeys)でログインするため
+    # authorized_keys が無くても鍵ログイン手段がある。CA 信頼が設定済みなら
+    # パスワード認証を切る(以前は authorized_keys がある時だけで、加入機に残っていた)。
+    HAS_CA=0
+    grep -rqsE '^\s*TrustedUserCAKeys\s+\S' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null && HAS_CA=1
+    if [ -s "$SSH_KEYS" ] || [ "$HAS_CA" = 1 ]; then
         PW_LINE="PasswordAuthentication no"
-        PW_NOTE="password auth OFF (pi has an SSH key)"
+        PW_NOTE="password auth OFF (pi has an SSH key or CA trust)"
     else
         PW_LINE="# PasswordAuthentication kept enabled: pi has no SSH key yet (avoid lockout)"
         PW_NOTE="password auth KEPT (no SSH key for pi yet)"

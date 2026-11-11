@@ -176,6 +176,7 @@ log_info "Node.js $(node -v), npm $(npm -v)"
 
 log_info "[3/9] Configuring Mosquitto with WebSocket support..."
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf" /etc/mosquitto/conf.d/feeldscope.conf
+cp "$SCRIPT_DIR/config/feeldscope-ws.acl"         /etc/mosquitto/conf.d/feeldscope-ws.acl   # R-013: 9001は購読のみ
 
 # Disable the default listener if it conflicts
 if [ -f /etc/mosquitto/mosquitto.conf ]; then

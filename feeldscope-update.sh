@@ -197,6 +197,7 @@ cp "$SCRIPT_DIR/config/adsb-poller.service"        /etc/systemd/system/
 cp "$SCRIPT_DIR/config/igc-simulator.service"      /etc/systemd/system/
 cp "$SCRIPT_DIR/config/feeldscope-webapp.service"  /etc/systemd/system/
 cp "$SCRIPT_DIR/config/mosquitto-feeldscope.conf"  /etc/mosquitto/conf.d/feeldscope.conf
+cp "$SCRIPT_DIR/config/feeldscope-ws.acl"          /etc/mosquitto/conf.d/feeldscope-ws.acl   # R-013: 9001は購読のみ
 
 # リモートサポート監視（enable 状態を正本に、落ちていたら自動復帰）
 cp "$SCRIPT_DIR/config/feeldscope-remote-support.service" /etc/systemd/system/
