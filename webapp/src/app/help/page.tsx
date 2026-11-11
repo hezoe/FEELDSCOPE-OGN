@@ -808,11 +808,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.42 */}
+      {/* v1.4.43 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.42</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.43</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-11</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        Linux の脆弱性（CVE-2026-98432）への緩和対応です。通常の画面操作・受信動作は変わりません。
+      </p>
+
+      <Card title="SEC: Linux TCP の脆弱性（CVE-2026-98432）を緩和">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Linux カーネルの TCP 処理に、遠隔から機器を停止・乗っ取りできる恐れのある脆弱性が公表されました。この攻撃は「IP オプション付きの通信パケット」が必須条件のため、それを端末のファイアウォールで入口から遮断しました（正規の通信は IP オプションを使わないため影響しません）。</li>
+          <li>根本対策は端末 OS の世代更新（別途計画）で、本バージョンはそれまでの緩和策です。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.42 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.42</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-11</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         セキュリティ点検（2026-10-26）への対応です。通常の画面操作・受信動作は変わりません。

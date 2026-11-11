@@ -32,6 +32,38 @@ if command -v ufw >/dev/null 2>&1; then
     else
         hwarn "ufw enable failed (skipped)"
     fi
+
+    # ---- CVE-2026-98432 緩和: IP オプション付き IPv4 パケットを入口で落とす ----
+    # カーネル TCP スタックの use-after-free(kernel 4.4+。機体の bullseye には修正
+    # カーネルの配布が無いため apt では直せない)。この攻撃は「IP オプション付きの
+    # IPv4 パケット」が引き金の必須条件なので、それを落とせば経路を断てる。正規の
+    # 通信は IP オプションを使わないため影響しない(IHL>5 = ヘッダにオプションあり)。
+    # 根本対策は OS 世代更新(R-078)で、本ルールはそれまでの緩和。
+    BR=/etc/ufw/before.rules
+    CVE_TAG="FEELDSCOPE CVE-2026-98432"
+    CVE_RULE='-A ufw-before-input -m u32 --u32 "0>>24&0x0F=6:15" -j DROP'
+    if [ -f "$BR" ] && ! grep -qF "$CVE_TAG" "$BR"; then
+        # before.rules は外部チェーンを参照するためファイル全体は --test できない。
+        # 追加する u32 ルール単体を検証し、通った時だけ差し替える(壊れた規則で
+        # ufw reload が全遮断/全開放になるのを防ぐ。xt_u32 が無い環境では skip)。
+        if printf '*filter\n:ufw-before-input - [0:0]\n%s\nCOMMIT\n' "$CVE_RULE" \
+             | iptables-restore --test >/dev/null 2>&1; then
+            cp -a "$BR" "${BR}.feeldscope-bak"
+            awk '
+                { print }
+                (!done && /^-A ufw-before-input -i lo -j ACCEPT/) {
+                    print "";
+                    print "# FEELDSCOPE CVE-2026-98432: drop IPv4 packets carrying IP options (IHL>5)";
+                    print "-A ufw-before-input -m u32 --u32 \"0>>24&0x0F=6:15\" -j DROP";
+                    done=1
+                }
+            ' "${BR}.feeldscope-bak" > "$BR"
+            ufw reload >/dev/null 2>&1 || true
+            hlog "before.rules: IP-options drop added (CVE-2026-98432 mitigation)"
+        else
+            hwarn "before.rules: u32 rule unsupported here (xt_u32 missing?); skipped"
+        fi
+    fi
 fi
 
 # ---- sshd hardening via drop-in (wins because Include is near the top) ----
