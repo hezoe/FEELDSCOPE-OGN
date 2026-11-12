@@ -253,7 +253,7 @@ function ManualContent() {
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航の相手の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則、曳航機の値を写します。曳航機の離脱が受信の途切れで見えなかったときは、反対にグライダーの値を曳航機へ写します。手で直すと※は消えます）</li>
             <li><strong>離脱距離</strong> — 離脱時の滑空場からの距離</li>
-            <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）</li>
+            <li><strong>🗑 削除ボタン</strong> — その行を削除（確認ダイアログあり）。編集と 1 行ずつの削除はログイン不要。4 行以上をまとめて消す変更と全消去は管理者のログインが必要（消える前の一覧は受信機の一時領域に控えられます）</li>
             <li><strong>テーブル高さ</strong> — マップとの境界をドラッグで変更可能（ブラウザ保存）</li>
           </ul>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
@@ -808,11 +808,29 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.46 */}
+      {/* v1.4.47 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.46</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.47</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        フライトログの編集の守りを強めました。メンバーの通常の編集(時刻や高度の入力、1 行ずつの削除)はこれまでどおりログインなしで行えます。
+      </p>
+
+      <Card title="SEC: フライトログの編集の守り">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>4 行以上をまとめて消す変更と、全消去は管理者のログインが必要になりました。ログインせずに行うと画面に案内が出て、表示は元に戻ります。</li>
+          <li>行が消える変更の直前に、消える前の一覧を受信機の一時領域(/tmp/feeldscope-flightlog、直近 30 件)に控えます。当日中なら管理者が復元できます。</li>
+          <li>1 回の送信は 256KB・2,000 行まで、同じ端末からは 1 分に 120 回までに制限しました。形式の正しくない記録は受け付けません。</li>
+          <li>ステータス画面の ADS-B 取得元 URL と、設定画面のリモートサポートの VPN 割当 IP は、ログインしているときだけ表示します(リモートサポートの申込みに使うホスト名は従来どおり表示)。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.46 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.46</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         更新の安全性の強化です。受信機は GitHub の最新コードをそのまま取り込むのをやめ、署名を確かめられた版だけを受け入れるようになります。画面・受信の動作は変わりません。

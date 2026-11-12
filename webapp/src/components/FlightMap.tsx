@@ -777,6 +777,13 @@ export default function FlightMap() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "set", entries: log }),
+    }).then(async (r) => {
+      // R-085: 4 行以上の一括削除などサーバが受け付けなかった変更は、知らせて表示を
+      // サーバの内容に戻す(次の取得で上書きされるよう「編集直後」の保護を外す)
+      if (r.ok) return;
+      const j = await r.json().catch(() => null);
+      lastManualEditRef.current = 0;
+      if (r.status === 403 || r.status === 429) window.alert(j?.error || "この変更は受け付けられませんでした");
     }).catch(() => {});
   }, []);
   const flightLogRef = useRef<FlightLogEntry[]>([]);

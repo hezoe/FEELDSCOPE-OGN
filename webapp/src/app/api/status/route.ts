@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { isSafeServiceName, run, runQuiet, runQuietStdout, runShell } from "@/lib/run";
 import { readBootHistory } from "@/lib/boot-history";
+import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 
 const RTLSDR_OGN_CONF_PATHS = ["/home/pi/rtlsdr-ogn.conf", "/boot/rtlsdr-ogn.conf"];
 
@@ -204,7 +205,8 @@ interface OgnReceiverStatusMqtt {
   [key: string]: unknown;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authed = isAuthorizedToMutate(await getAuthContext(request));
   const receiverId = await getReceiverId();
 
   const [
@@ -257,7 +259,8 @@ export async function GET() {
     system,
     ogn_receiver: ognReceiver,
     ogn_mqtt_status: ognMqttStatusOut,
-    adsb_status: adsbStatusOut,
+    // R-085: ADS-B の取得元 URL(LAN 内の tar1090 の場所)は認証時のみ
+    adsb_status: adsbStatusOut && !authed ? { ...adsbStatusOut, url: undefined } : adsbStatusOut,
     services,
     flight_log: flightLogStats,
     boot_history: bootHistory,

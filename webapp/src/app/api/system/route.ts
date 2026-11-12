@@ -683,7 +683,9 @@ export async function GET(request: Request) {
     network: authed ? network : null,
     version,
     auto_reboot: authed ? autoReboot : null,
-    remote_support: remoteSupport,
+    // R-085: VPN の割当 IP(内部ネットワークの情報)は認証時のみ。ホスト名はリモートサポートを
+    // 頼むときに管理者へ伝える値なので、未認証でも出す
+    remote_support: remoteSupport && !authed ? { ...remoteSupport, assigned_ip: undefined } : remoteSupport,
     // true = デモ機。端末本体の設定(リモートサポート・自動再起動・ネットワーク・電源・更新・固定化)は変更不可
     host_locked: hostLocked,
   });
