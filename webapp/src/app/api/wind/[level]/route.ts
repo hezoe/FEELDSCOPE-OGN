@@ -92,7 +92,8 @@ function cropGrid(recs: GridRecord[], lat: number, lon: number): GridRecord[] | 
 
 export async function GET(req: Request, ctx: { params: Promise<{ level: string }> }) {
   const { level } = await ctx.params;
-  if (!(level in TTL_MS)) return NextResponse.json({ error: "unknown level" }, { status: 404 });
+  // R-115⑥: in だと "constructor" 等の継承キーも通るので自身のキーだけ
+  if (!Object.prototype.hasOwnProperty.call(TTL_MS, level)) return NextResponse.json({ error: "unknown level" }, { status: 404 });
   const q = new URL(req.url).searchParams;
   const lat = Number(q.get("lat")), lon = Number(q.get("lon"));
   const hasPos = q.has("lat") && q.has("lon") && Number.isFinite(lat) && Number.isFinite(lon);

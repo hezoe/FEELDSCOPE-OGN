@@ -14,6 +14,19 @@ const nextConfig: NextConfig = {
   // 開きっぱなしの画面が更新後も古いJSで動き続けないよう、VersionWatcher が
   // 自分の版数と /api/version(動いているサーバの版数)を比べて再読み込みする。
   env: { FEELDSCOPE_BUILD_VERSION: pkg.version },
+  // R-115⑤: 防御用ヘッダー。画面は別サイトの iframe に入れない(クリックジャック防止)。
+  // script-src は Next.js のハイドレーション用インラインスクリプトがあるため付けない(nonce 方式は別途)。
+  async headers() {
+    return [{
+      source: "/(.*)",
+      headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'" },
+      ],
+    }];
+  },
 };
 
 export default nextConfig;

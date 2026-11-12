@@ -4,7 +4,7 @@
 // - オペレーター判定: CATVPN オペレーターサブネット(10.66.10.0/24)からのアクセス
 //   ※リモートサポートONの時のみ RPi は VPN 上に存在し、その IP に到達できるのは
 //     隔離ポリシー上オペレーターだけ。よって送信元IP=10.66.10.x は本人証明になる。
-import { readFile, writeFile } from "fs/promises";
+import { readFile, stat, writeFile } from "fs/promises";
 import { randomBytes, scrypt as scryptCb, scryptSync, timingSafeEqual, createHmac } from "crypto";
 import { promisify } from "util";
 import { persistFiles } from "./persist";
@@ -40,16 +40,24 @@ function makeConfig(password: string, mustChange: boolean): AuthConfig {
 }
 
 let cache: AuthConfig | null = null;
+let cacheMtime = 0;   // R-115①: auth.json の更新時刻。外(feeldscope-reset-password)で書き換えられたら読み直す
+
+async function authMtime(): Promise<number> {
+  try { return (await stat(AUTH_PATH)).mtimeMs; } catch { return -1; }
+}
 
 async function loadAuth(): Promise<AuthConfig> {
-  if (cache) return cache;
+  const mtime = await authMtime();
+  if (cache && mtime === cacheMtime) return cache;
   try {
     const p = JSON.parse(await readFile(AUTH_PATH, "utf-8"));
     if (p.salt && p.hash && p.sessionSecret) {
       cache = { salt: p.salt, hash: p.hash, sessionSecret: p.sessionSecret, mustChange: !!p.mustChange };
+      cacheMtime = mtime;
       return cache;
     }
   } catch { /* not seeded yet */ }
+  if (cache) return cache;   // 読めない(消された等)間は手元の控えで動く
   // 初期化: 既定パスワード "admin"（mustChange=true）
   const cfg = makeConfig(DEFAULT_PASSWORD, true);
   await saveAuth(cfg).catch(() => { /* read-only fs 等は無視、メモリのみ */ });
@@ -61,6 +69,7 @@ async function saveAuth(cfg: AuthConfig): Promise<void> {
   await writeFile(AUTH_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   await persistFiles(AUTH_PATH);   // 固定化中も操作パスワードを残す
   cache = cfg;
+  cacheMtime = await authMtime();
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {
@@ -124,8 +133,9 @@ async function verifySession(token: string | undefined): Promise<boolean> {
 }
 
 export function clientIpFromRequest(request: Request): string | null {
-  // custom server(server.ts) が socket.remoteAddress を x-client-ip に載せる
-  const ip = request.headers.get("x-client-ip") || request.headers.get("x-real-ip");
+  // custom server(server.ts) が socket.remoteAddress を x-client-ip に載せる(クライアントが送った同名ヘッダーは上書きされる)。
+  // R-115④: x-real-ip は見ない(server.ts を通さない next start では誰でも付けられる)。
+  const ip = request.headers.get("x-client-ip");
   return ip ? ip.replace(/^::ffff:/, "").trim() : null;
 }
 

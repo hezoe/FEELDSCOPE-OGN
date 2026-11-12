@@ -808,11 +808,35 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.43 */}
+      {/* v1.4.44 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.44</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        セキュリティ点検（2026-10-26）の「低」項目への対応です。通常の画面操作・受信動作は変わりません。
+      </p>
+
+      <Card title="SEC: リモートアクセスの鍵をブラウザ側で作る">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>「リモートアクセス」で PC・スマホを登録するとき、WireGuard の鍵をお使いのブラウザの中で作るようにしました。秘密鍵は端末（FEELDSCOPE）にもクラブ内 LAN にも流れず、画面に表示される設定ファイル・QR コードにだけ入ります（古いブラウザでは従来どおり端末側で作ります）。</li>
+        </ul>
+      </Card>
+
+      <Card title="SEC: 細かな硬化">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信機の再起動ログ・更新ログを誰でも読み書きできる権限で作らないようにしました。</li>
+          <li>固定化（OverlayFS）中の設定の書き写しで、シンボリックリンクをたどらないようにしました。</li>
+          <li>管理者パスワードを <code>feeldscope-reset-password</code> で戻したとき、再起動しなくても新しいパスワードが効き、固定化中でも SD に残るようにしました。</li>
+          <li>Wi-Fi 名・パスワードの制御文字の除去、画面の防御用ヘッダー（他サイトの枠への埋め込み禁止など）、送信元判定の厳密化、CATVPN 登録スクリプトの値の受け渡しの安全化。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.43 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.43</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-11</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         Linux の脆弱性（CVE-2026-98432）への緩和対応です。通常の画面操作・受信動作は変わりません。

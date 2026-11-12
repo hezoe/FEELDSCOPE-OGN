@@ -564,8 +564,9 @@ async function syncOgnReceiverWifi(ssid: string, password: string): Promise<void
     const recv = await readFile(OGN_RECEIVER_CONF, "utf-8");
     // ssid/psk はダブルクォートを含みうるので除去してから埋め込む
     // （/boot/OGN-receiver.conf は shell 変数形式のため JSON エスケープは使えない）
-    const safeSsid = ssid.replace(/["\\$`]/g, "");
-    const safePass = password.replace(/["\\$`]/g, "");
+    // R-115②: 改行などの制御文字も除く(行を増やして別の変数を書かせない)
+    const safeSsid = ssid.replace(/["\\$`\x00-\x1f\x7f]/g, "");
+    const safePass = password.replace(/["\\$`\x00-\x1f\x7f]/g, "");
     let next = recv;
     const set = (key: string, value: string) => {
       const re = new RegExp(`^#?\\s*${key}=".*"`, "m");
@@ -992,7 +993,9 @@ export async function POST(request: Request) {
         // Remove stale log and launch updater as independent systemd transient unit
         await run("sudo", ["-n", "rm", "-f", "/tmp/feeldscope-update.log"]);
         await run("sudo", ["-n", "touch", "/tmp/feeldscope-update.log"]);
-        await run("sudo", ["-n", "chmod", "666", "/tmp/feeldscope-update.log"]);
+        // R-113: 書くのは root(更新ユニット)、読むのは pi(この webapp の update-log)だけ。誰でも書ける 666 にしない
+        await run("sudo", ["-n", "chown", "root:pi", "/tmp/feeldscope-update.log"]);
+        await run("sudo", ["-n", "chmod", "640", "/tmp/feeldscope-update.log"]);
         // 起動スクリプトもシェルを介さず書く
         await writeRootFile(
           "/tmp/feeldscope-do-update.sh",

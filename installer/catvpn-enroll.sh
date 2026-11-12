@@ -240,11 +240,12 @@ derive_catvpn_hostname() {
 if [ "$MODE" = "auto" ]; then
     # Step 1: 現在の hostname で /claim を試す (admin が事前にトークン発行している場合に一致)
     log "  Step 1/2: trying /claim with current hostname '$SELF_HOSTNAME'..."
-    python3 -c "
-import json
+    # R-115③: 値は環境変数で渡す(Python のソース文字列に直接埋め込まない)
+    ENROLL_HOSTNAME="$SELF_HOSTNAME" WG_PUB="$WG_PUB" python3 -c "
+import json, os
 print(json.dumps({
-    'hostname': '$SELF_HOSTNAME',
-    'wg_pubkey': '$WG_PUB',
+    'hostname': os.environ['ENROLL_HOSTNAME'],
+    'wg_pubkey': os.environ['WG_PUB'],
     'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
 }))
 " > "$BODY_FILE"
@@ -287,12 +288,12 @@ print(json.dumps({
             fi
         done
 
-        RCV_NAME="$RCV_NAME" RCV_LAT="$RCV_LAT" RCV_LON="$RCV_LON" ENROLL_MAC="$ENROLL_MAC" python3 -c "
+        ENROLL_HOSTNAME="$CATVPN_HOSTNAME" WG_PUB="$WG_PUB" RCV_NAME="$RCV_NAME" RCV_LAT="$RCV_LAT" RCV_LON="$RCV_LON" ENROLL_MAC="$ENROLL_MAC" python3 -c "
 import json, os
 body = {
     'fleet': 'feeldscope',
-    'hostname': '$CATVPN_HOSTNAME',
-    'wg_pubkey': '$WG_PUB',
+    'hostname': os.environ['ENROLL_HOSTNAME'],
+    'wg_pubkey': os.environ['WG_PUB'],
     'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
 }
 if os.environ.get('RCV_NAME'):
@@ -337,10 +338,10 @@ print(json.dumps(body))
     fi
 else
     # token モード: 既存の /enroll を使用
-    python3 -c "
-import json
+    WG_PUB="$WG_PUB" python3 -c "
+import json, os
 print(json.dumps({
-    'wg_pubkey': '$WG_PUB',
+    'wg_pubkey': os.environ['WG_PUB'],
     'host_pubkey': open('/etc/ssh/ssh_host_ed25519_key.pub').read().strip(),
 }))
 " > "$BODY_FILE"

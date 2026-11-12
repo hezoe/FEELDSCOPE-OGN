@@ -58,11 +58,18 @@ fi
 rc=0
 for f in "${targets[@]}"; do
   dst="$ROBASE$f"
+  # R-114: シンボリックリンクはたどらない(許可リストの名前に別のファイルを指すリンクを置かれても、その中身を SD に写さない)
+  if [ -L "$f" ]; then
+    echo "シンボリックリンクは書き写さない: $f" >&2; rc=1; continue
+  fi
+  if [ -e "$f" ] && [ ! -f "$f" ]; then
+    echo "普通のファイルではないので書き写さない: $f" >&2; rc=1; continue
+  fi
   if [ -e "$f" ]; then
     mkdir -p "$(dirname "$dst")"
     # 同じ所に一時ファイルを作ってから置き換える(書いている途中で電源が切れても元のファイルは残る)
     tmp="$dst.feeldscope-tmp"
-    if cp -p "$f" "$tmp" && sync "$tmp" && mv -f "$tmp" "$dst"; then
+    if cp -p --no-dereference "$f" "$tmp" && sync "$tmp" && mv -f "$tmp" "$dst"; then
       echo "書き写し: $f"
     else
       echo "書き写しに失敗: $f" >&2; rm -f "$tmp"; rc=1

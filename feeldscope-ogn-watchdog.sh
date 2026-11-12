@@ -14,6 +14,7 @@
 # スクリプトを終えると Type=oneshot の cgroup ごと systemd に片付けられ、
 # 起動途中の launch が道連れになる（webapp 側で実際に起きた事故と同じ形）。
 set -u
+umask 077   # R-113: 作るログ(/tmp/feeldscope-ogn-restart.log)は root だけが読める
 
 STAMP=/run/feeldscope-ogn-watchdog.stamp
 RESTART_LOG=/tmp/feeldscope-ogn-restart.log

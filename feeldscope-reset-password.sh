@@ -18,4 +18,9 @@ fs.writeFileSync(process.env.FEELDSCOPE_AUTH_PATH,
   { mode: 0o600 });
 '
 chown pi:pi "$AUTH" 2>/dev/null || true
+# R-115①: 固定化(OverlayFS)中は RAM にしか残らないので下の SD にも書き写す(再起動で元のパスワードに戻らないように)。
+# webapp は auth.json の更新時刻を見て読み直すので、再起動しなくても新しいパスワードが効く。
+if [ -e /overlay/robase/overlay ] && [ -x /usr/local/sbin/feeldscope-persist ]; then
+  /usr/local/sbin/feeldscope-persist "$AUTH" || echo "警告: 固定化中の書き写しに失敗しました(再起動で元に戻る可能性があります)" >&2
+fi
 echo "管理者パスワードをリセットしました（新パスワード: '$NEW' / 次回変更を推奨）。"

@@ -120,9 +120,20 @@ export interface AddResult {
   url: string;          // つないだあとに開く URL
 }
 
-export async function addMember(name: string, device: string): Promise<AddResult> {
-  const keys = generateKeyPair();
-  const r = await hub<AddResponse>("POST", "/v1/members", { name, device, pubkey: keys.publicKey });
+/** ブラウザが鍵を作ったとき、設定の PrivateKey 行に入れる印(ブラウザが自分の秘密鍵で置き換える) */
+export const CLIENT_PRIVATE_KEY_TOKEN = "{{PRIVATE_KEY}}";
+export const WG_KEY_RE = /^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$/;
+
+/**
+ * メンバーを追加して WireGuard の設定を返す。
+ * R-112: clientPubkey があれば鍵はブラウザが作ったもので、秘密鍵はこのサーバーも LAN も通らない
+ * (設定の PrivateKey 行は CLIENT_PRIVATE_KEY_TOKEN のままブラウザへ返し、ブラウザが埋める)。
+ * 無ければ従来どおりここで鍵を作る(古いブラウザ向けの後退)。
+ */
+export async function addMember(name: string, device: string, clientPubkey?: string): Promise<AddResult> {
+  const keys = clientPubkey ? null : generateKeyPair();
+  const pubkey = clientPubkey ?? keys!.publicKey;
+  const r = await hub<AddResponse>("POST", "/v1/members", { name, device, pubkey });
   const { address, allowed_ips, hub: h } = r.client;
   if (!h?.endpoint || !h?.pubkey) throw new HubError("ハブの接続先が分かりません（ハブの設定を確認してください）");
   const target = allowed_ips.replace(/\/32$/, "");
@@ -130,7 +141,7 @@ export async function addMember(name: string, device: string): Promise<AddResult
     "[Interface]",
     // QR(英数字)と各 OS の WireGuard で確実に読めるよう、設定の中は ASCII だけにする(氏名は入れない)
     `# FEELDSCOPE remote access ${target} (${r.member.id})`,
-    `PrivateKey = ${keys.privateKey}`,
+    `PrivateKey = ${keys ? keys.privateKey : CLIENT_PRIVATE_KEY_TOKEN}`,
     `Address = ${address}`,
     "",
     "[Peer]",

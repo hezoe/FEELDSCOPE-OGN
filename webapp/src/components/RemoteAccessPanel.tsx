@@ -6,6 +6,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import qrcode from "qrcode-generator";
+import { generateWireGuardKeyPair } from "@/lib/x25519";
+
+const CLIENT_PRIVATE_KEY_TOKEN = "{{PRIVATE_KEY}}";   // lib/remote-access.ts と同じ印
+
+/** R-112: WireGuard の鍵をこのブラウザで作る。秘密鍵はサーバーにも LAN にも出さない。作れなければ null(サーバーが作る) */
+function makeClientKeys(): { privateKey: string; publicKey: string } | null {
+  try {
+    if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function" || typeof BigInt === "undefined") return null;
+    return generateWireGuardKeyPair();
+  } catch {
+    return null;
+  }
+}
 
 interface Member {
   id: string;
@@ -136,7 +149,12 @@ export default function RemoteAccessPanel({ canMutate }: { canMutate: boolean })
     setBusy("add");
     setError(null);
     try {
-      const r: Added = await post({ action: "add", name: name.trim(), device: device.trim() });
+      const keys = makeClientKeys();
+      const r: Added = await post({ action: "add", name: name.trim(), device: device.trim(), ...(keys ? { pubkey: keys.publicKey } : {}) });
+      if (keys) {
+        if (!r.config.includes(CLIENT_PRIVATE_KEY_TOKEN)) throw new Error("設定の形式が想定と違います(サーバーの版が古い可能性)");
+        r.config = r.config.replace(CLIENT_PRIVATE_KEY_TOKEN, keys.privateKey);
+      }
       setAdded(r);
       setCopied(false);
       setName("");

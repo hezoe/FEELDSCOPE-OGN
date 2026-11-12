@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext, isAuthorizedToMutate } from "@/lib/auth";
 import { HOST_LOCKED_MESSAGE, isHostLocked } from "@/lib/host-guard";
-import { addMember, changeMember, HubError, listMembers, vpnState } from "@/lib/remote-access";
+import { addMember, changeMember, HubError, listMembers, vpnState, WG_KEY_RE } from "@/lib/remote-access";
 
 // リモートアクセス(メンバーの PC → この FEELDSCOPE だけ)の窓口。台帳と関所はハブ側にある(lib/remote-access.ts)。
 // メンバーの氏名は個人情報なので、一覧も操作も管理者ログイン(またはオペレーター)が必要。
@@ -34,7 +34,8 @@ export async function GET(request: Request) {
 }
 
 // POST /api/remote-access
-//   { action: "add", name, device }       → 201 { member, config, filename, url }  ※ config(秘密鍵入り)は一度だけ
+//   { action: "add", name, device, pubkey? } → 201 { member, config, filename, url }  ※ config は一度だけ
+//       pubkey(ブラウザが作った WireGuard 公開鍵)があれば秘密鍵はサーバーを通らず、config の PrivateKey は印のまま返す(R-112)
 //   { action: "pause" | "resume" | "delete", id }
 export async function POST(request: Request) {
   if (isHostLocked()) {
@@ -61,7 +62,11 @@ export async function POST(request: Request) {
       if (!(await vpnState()).active) {
         return NextResponse.json({ error: "リモートサポートが OFF です。先にリモートサポートを ON にしてください。" }, { status: 409 });
       }
-      const r = await addMember(name, device);
+      const pubkey = typeof body.pubkey === "string" ? body.pubkey.trim() : "";
+      if (pubkey && !WG_KEY_RE.test(pubkey)) {
+        return NextResponse.json({ error: "公開鍵の形式が正しくありません" }, { status: 400 });
+      }
+      const r = await addMember(name, device, pubkey || undefined);
       return NextResponse.json(r, { status: 201, headers: { "Cache-Control": "no-store" } });
     }
     if (action === "pause" || action === "resume" || action === "delete") {

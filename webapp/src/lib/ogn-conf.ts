@@ -112,7 +112,8 @@ export async function restartOgnReceiver(port: number): Promise<{ ok: boolean; d
 
   await run(
     "sudo",
-    ["-n", "setsid", "sh", "-c", `${OGN_RESTART_SH} > ${OGN_RESTART_LOG} 2>&1 < /dev/null &`],
+    // R-113: ログは root だけが読める(umask 077)。上流スクリプトの出力に秘密が混じっても他ユーザーに見せない
+    ["-n", "setsid", "sh", "-c", `umask 077; ${OGN_RESTART_SH} > ${OGN_RESTART_LOG} 2>&1 < /dev/null &`],
     { timeout: 20_000 },
   );
 
