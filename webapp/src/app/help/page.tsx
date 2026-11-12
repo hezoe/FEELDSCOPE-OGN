@@ -808,11 +808,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.44 */}
+      {/* v1.4.45 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.44</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.45</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        開発ツールの部品の脆弱性(GitHub Dependabot の勧告 16 件)への対応です。受信機の動作・画面は変わりません。
+      </p>
+
+      <Card title="SEC: 開発ツールの部品を更新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>webapp の開発ツール(eslint 系)が使う部品(brace-expansion・browserslist・flatted・js-yaml・minimatch・picomatch・postcss-selector-parser ほか)を修正版に更新しました(npm audit 0 件)。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.44 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.44</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         セキュリティ点検（2026-10-26）の「低」項目への対応です。通常の画面操作・受信動作は変わりません。
