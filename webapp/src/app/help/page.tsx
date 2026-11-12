@@ -808,11 +808,30 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.45 */}
+      {/* v1.4.46 */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.45</span>
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.46</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
         <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        更新の安全性の強化です。受信機は GitHub の最新コードをそのまま取り込むのをやめ、署名を確かめられた版だけを受け入れるようになります。画面・受信の動作は変わりません。
+      </p>
+
+      <Card title="SEC: 更新は署名を確かめた版だけ">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>更新のたびに、配布元の署名(SSH 鍵)が付いたリリースの版だけを取り込みます。署名の無い版・鍵の違う版・今より古い版は「更新あり」にならず、取り込みもしません。万一 GitHub 側が乗っ取られても、受信機に細工したコードが入らないようにするためです。</li>
+          <li>設定画面の「新しい版」の表示も、署名を確かめた最新の版で判断します。</li>
+          <li>検証用の鍵は受信機の /etc/feeldscope/allowed_signers にあります(新しい SD イメージには同梱。今の受信機にはこの版への更新のときに入ります)。鍵の差し替えは署名付きの版を通してしかできません。</li>
+          <li>SD カードの /boot/feeldscope/release-pin にタグ名(例 v1.4.46)を書くと、その版に固定できます(署名は必要)。</li>
+          <li>インストール時の Node.js の tarball は公式のチェックサムと照合し、RTL-SDR のドライバは決まったコミットを取るようにしました。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.45 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.45</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         開発ツールの部品の脆弱性(GitHub Dependabot の勧告 16 件)への対応です。受信機の動作・画面は変わりません。

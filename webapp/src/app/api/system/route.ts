@@ -239,25 +239,17 @@ async function fetchVersionInfo(): Promise<VersionInfo> {
   let latest: string | null = null;
   let updateAvailable = false;
   try {
-    // Fetch remote to compare without pulling. Try sudo -u pi first (RPi),
-    // fall back to plain git fetch (VPS or any other env).
-    try {
-      await run("sudo", ["-n", "-u", "pi", "git", "fetch", "origin", "--quiet"], { cwd: FEELDSCOPE_OGN_DIR });
-    } catch {
-      await run("git", ["fetch", "origin", "--quiet"], { cwd: FEELDSCOPE_OGN_DIR });
-    }
-    // Compare package.json version rather than commit count — update-script commits
-    // don't change the deployed version, so commits-ahead can be misleading
-    try {
-      const { stdout: remotePkg } = await run("git", ["show", "origin/master:webapp/package.json"], { cwd: FEELDSCOPE_OGN_DIR });
-      latest = JSON.parse(remotePkg).version || null;
-    } catch { /* ignore */ }
-    // Update available only when version string differs.
-    // Same version = same state for all users (policy: always bump patch for any change).
-    const { stdout } = await run("git", ["rev-list", "HEAD..origin/master", "--count"], { cwd: FEELDSCOPE_OGN_DIR });
-    const behind = parseInt(stdout.trim(), 10);
-    updateAvailable = behind > 0 && latest !== current;
-  } catch { /* ignore */ }
+    // R-076 (v1.4.46): 「新しい版がある」の判断は master ではなく、署名を確かめられた最新の
+    // リリースタグで行う(feeldscope-release.sh latest --fetch: origin からタグを取り、
+    // /etc/feeldscope/allowed_signers の鍵で署名が通った最新の版を "タグ 版 コミット" で返す。
+    // 今の版より古い版は返さない)。署名の無い版・鍵の違う版は「更新あり」にならない。
+    const { stdout } = await run("bash", [`${FEELDSCOPE_OGN_DIR}/feeldscope-release.sh`, "latest", "--fetch"], { cwd: FEELDSCOPE_OGN_DIR });
+    const [, version, commit] = stdout.trim().split(/\s+/);
+    latest = version || null;
+    const { stdout: head } = await run("git", ["rev-parse", "HEAD"], { cwd: FEELDSCOPE_OGN_DIR });
+    // 版の文字列が違うときだけ更新あり(方針: どんな変更でも必ず patch を上げる)。
+    updateAvailable = !!latest && latest !== current && commit !== head.trim();
+  } catch { /* 署名を確かめられる版が無い・ネット不通 → 更新なし扱い */ }
 
   return { current, latest, updateAvailable };
 }

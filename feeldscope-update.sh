@@ -96,32 +96,41 @@ echo ""
 # Step 1: Pull latest code
 # =============================================================================
 
-log_info "[1/6] Pulling latest code..."
+log_info "[1/6] Fetching signed release..."
 cd "$SCRIPT_DIR"
 SELF_HASH_BEFORE=$(sha256sum "$0" | awk '{print $1}')
-if ! sudo -u pi git pull --ff-only; then
-    # 上流の履歴が書き換えられた（force push）場合だけ、origin/master に合わせ直す。
-    # 端末はコミットを持たないので失うものは無い。設定・記録は追跡外なので残る。
-    # ネットワーク不通や、早送りできるのに失敗した場合（手元の変更と衝突など）は従来どおり止める。
-    sudo -u pi git fetch origin
-    if sudo -u pi git merge-base --is-ancestor HEAD origin/master; then
-        log_error "git pull failed"
-        exit 1
+# R-076 (v1.4.46): master をそのまま pull せず、署名を確かめられたリリースタグだけを取り込む。
+# 検証はいま動いている(=前回確かめた)版の feeldscope-release.sh で行う。GitHub が乗っ取られて
+# 細工した版を push されても、署名鍵が無い限り受信機はそれを受け付けない。
+# 検証鍵が無い受信機(署名方式より前の版からの更新)は、初回だけリポジトリの鍵を写して始める。
+# shellcheck source=feeldscope-release.sh
+source "$SCRIPT_DIR/feeldscope-release.sh"
+fs_release_sync_signers || true
+if RELEASE=$(fs_release_latest --fetch); then
+    REL_TAG=${RELEASE%% *}; REL_COMMIT=${RELEASE##* }
+    if [ "$(sudo -u pi git rev-parse HEAD)" = "$REL_COMMIT" ]; then
+        log_info "Already at signed release $REL_TAG"
+    else
+        log_info "Checking out signed release $REL_TAG"
+        # 端末はコミットを持たないので失うものは無い。設定・記録は追跡外なので残る。
+        sudo -u pi git checkout --quiet --force --detach "$REL_TAG"
     fi
-    log_warn "Upstream history was rewritten; resetting to origin/master"
-    sudo -u pi git reset --hard origin/master
+else
+    log_error "署名を確かめられる版が見つからないため更新しません(ネットワーク、または不正な版の疑い)"
+    exit 1
 fi
 SELF_HASH_AFTER=$(sha256sum "$0" | awk '{print $1}')
-# 自己更新検知: スクリプト本体が git pull で書き換わった場合は新版で再exec する。
+# 自己更新検知: スクリプト本体が書き換わった場合は新版で再exec する。
 # bash は実行中ファイルを位置オフセットで読み続けるため、書き換わった後の新ステップ
 # (例: v1.1.30で追加された Step 4g CATVPN-enroll deploy) が古い実行プロセスからは
-# 走らない。env で再exec を1回に制限し無限ループを防止。
-if [ "$SELF_HASH_BEFORE" != "$SELF_HASH_AFTER" ] && [ -z "${FEELDSCOPE_UPDATE_RELOADED:-}" ]; then
+# 走らない。env の回数で再exec を2回までに制限し無限ループを防止
+# (署名方式より前の版 → master の新版 → 署名付きの版 と2段で変わることがある)。
+if [ "$SELF_HASH_BEFORE" != "$SELF_HASH_AFTER" ] && [ "${FEELDSCOPE_UPDATE_RELOADED:-0}" -lt 2 ]; then
     log_info "Updater script itself changed; re-executing new version..."
-    export FEELDSCOPE_UPDATE_RELOADED=1
+    export FEELDSCOPE_UPDATE_RELOADED=$(( ${FEELDSCOPE_UPDATE_RELOADED:-0} + 1 ))
     exec bash "$0" "$@"
 fi
-log_info "Code updated"
+log_info "Code updated ($(sudo -u pi git describe --tags --always 2>/dev/null))"
 
 # =============================================================================
 # Step 2: Stop services

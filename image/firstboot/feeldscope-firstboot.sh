@@ -184,6 +184,22 @@ else
     $AS_PI git clone --quiet "$REPO_URL" "$REPO_DIR" \
         || fail_and_wait 4 "FEELDSCOPE の取得" "GitHub から取得できませんでした。電源を入れ直すと再試行します。"
 fi
+# R-076: 署名を確かめられたリリースタグだけを使う(検証の手順と鍵はイメージに同梱)。
+# 同梱が無い古いイメージはそのまま master で進む(従来どおり)。
+RELEASE_LIB="${FB_RELEASE_LIB:-/usr/local/lib/feeldscope/feeldscope-release.sh}"
+if [ -r "$RELEASE_LIB" ]; then
+    # shellcheck source=/dev/null
+    FS_REPO_DIR="$REPO_DIR" FS_GIT_USER="${FB_GIT_USER:-pi}" source "$RELEASE_LIB"
+    if RELEASE=$(fs_release_latest --fetch); then
+        $AS_PI git -C "$REPO_DIR" checkout --quiet --force --detach "${RELEASE%% *}" \
+            || fail_and_wait 4 "FEELDSCOPE の取得" "取得した版を展開できませんでした。電源を入れ直すと再試行します。"
+        log "署名を確かめた版: $RELEASE"
+    else
+        fail_and_wait 4 "FEELDSCOPE の取得" "署名を確かめられる FEELDSCOPE の版が見つかりませんでした。電源を入れ直すと再試行します。"
+    fi
+else
+    log "署名検証の手順が同梱されていないイメージのため master をそのまま使います"
+fi
 log "取得した版: $($AS_PI git -C "$REPO_DIR" log -1 --format='%h %s')"
 
 # ── 5. インストール ──────────────────────────────────────────────────

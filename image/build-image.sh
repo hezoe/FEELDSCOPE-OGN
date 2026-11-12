@@ -94,6 +94,12 @@ install -m 644 "$HERE/firstboot/feeldscope-firstboot-status.service" "$R/etc/sys
 ln -sf /etc/systemd/system/feeldscope-firstboot.service        "$R/etc/systemd/system/multi-user.target.wants/feeldscope-firstboot.service"
 ln -sf /etc/systemd/system/feeldscope-firstboot-status.service "$R/etc/systemd/system/multi-user.target.wants/feeldscope-firstboot-status.service"
 
+# ── リリース署名の検証(R-076): 手順と検証鍵をイメージに同梱 ─────────────
+# 初回起動は GitHub から取った中身のうち、この鍵で署名されたリリースタグだけを使う。
+install -d -m 755 "$R/usr/local/lib/feeldscope" "$R/etc/feeldscope"
+install -m 755 "$HERE/../feeldscope-release.sh"   "$R/usr/local/lib/feeldscope/feeldscope-release.sh"
+install -m 644 "$HERE/../config/allowed_signers"  "$R/etc/feeldscope/allowed_signers"
+
 # ── 版の記録 ───────────────────────────────────────────────────
 cat > "$R/etc/feeldscope-image-release" <<EOF
 FEELDSCOPE image ${STAMP}

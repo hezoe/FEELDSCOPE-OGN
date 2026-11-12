@@ -151,6 +151,14 @@ if [ "$NODE_INSTALLED" = false ]; then
             log_info "Downloading Node.js ${NODE_VERSION} for ${ARCH}..."
             cd /tmp
             curl -fsSL "$NODE_URL" -o node.tar.xz
+            # R-076: 公式の SHASUMS256.txt と照合する(途中で差し替えられた tarball を展開しない)
+            curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o node-SHASUMS256.txt
+            if ! grep " ${NODE_DIST}.tar.xz\$" node-SHASUMS256.txt | sed 's# .*# node.tar.xz#' | sha256sum -c --quiet -; then
+                log_error "Node.js tarball checksum mismatch (${NODE_DIST}.tar.xz)"
+                rm -f node.tar.xz node-SHASUMS256.txt
+                exit 1
+            fi
+            rm -f node-SHASUMS256.txt
             tar -xf node.tar.xz
             cp -r ${NODE_DIST}/bin/* /usr/local/bin/
             cp -r ${NODE_DIST}/lib/* /usr/local/lib/
@@ -274,8 +282,13 @@ else
 
     cd /tmp
     rm -rf rtl-sdr-blog
-    if ! git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog.git 2>&1 | tail -2; then
-        log_error "Failed to clone rtl-sdr-blog. Check network."
+    # R-076: 取ってくる版を commit で固定する(上流の改変や乗っ取りをそのまま取り込まない)。
+    # 上げるときは https://github.com/rtlsdrblog/rtl-sdr-blog の commit を確かめてから書き換える。
+    RTL_SDR_BLOG_COMMIT="${RTL_SDR_BLOG_COMMIT:-aed0ea19f3a273370a13c9009b96313c75d54c7b}"   # master 2026-11-12 時点
+    if ! git clone --quiet https://github.com/rtlsdrblog/rtl-sdr-blog.git 2>&1 | tail -2 \
+       || ! git -C rtl-sdr-blog checkout --quiet "$RTL_SDR_BLOG_COMMIT" 2>&1 | tail -2 \
+       || [ "$(git -C rtl-sdr-blog rev-parse HEAD)" != "$RTL_SDR_BLOG_COMMIT" ]; then
+        log_error "Failed to fetch rtl-sdr-blog at pinned commit $RTL_SDR_BLOG_COMMIT. Check network."
         exit 1
     fi
     cd rtl-sdr-blog

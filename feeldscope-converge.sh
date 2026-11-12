@@ -80,6 +80,13 @@ inst "$SCRIPT_DIR/config/feeldscope-alive.timer"          /etc/systemd/system/fe
 inst "$SCRIPT_DIR/feeldscope-update-resume.sh"            /usr/local/sbin/feeldscope-update-resume            755
 inst "$SCRIPT_DIR/config/feeldscope-update-resume.service" /etc/systemd/system/feeldscope-update-resume.service 644
 
+# --- リリース署名の検証(R-076): 手順を /usr/local/lib に置き、検証鍵を /etc/feeldscope に揃える ---
+# 検証鍵は「無ければ初回だけリポジトリから写す」「あるときは今の checkout が署名の通った版のときだけ更新」
+# (feeldscope-release.sh sync-signers)。master のままの中身で鍵を差し替えることはできない。
+mkdir -p /usr/local/lib/feeldscope
+inst "$SCRIPT_DIR/feeldscope-release.sh"                  /usr/local/lib/feeldscope/feeldscope-release.sh     755
+FS_REPO_DIR="$SCRIPT_DIR" bash "$SCRIPT_DIR/feeldscope-release.sh" sync-signers 2>&1 | sed 's/^/  /' || true
+
 # --- SD クローンの自己修復と、SSH ホスト鍵の個体化（2026-11-09 ITAKURA1 事件対策） ---
 # identity-check: 起動時(wg-quick の前)に「登録時の MAC 由来名 vs 実機 MAC」を照合し、
 #   クローン SD なら元の端末を名乗る前に鍵・設定を破棄して自分として登録し直す。
