@@ -808,11 +808,26 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.47 */}
+      {/* v1.4.48 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.48</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-18</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        画面の部品(Next.js)の脆弱性への対応です。受信機の動作・画面は変わりません。
+      </p>
+
+      <Card title="SEC: Next.js を 16.4.5 に更新">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>Next.js を 16.4.2 から 16.4.5 に更新しました(CVE-2026-119351 キャッシュの取り違え。この webapp は該当の機能を使っておらず実害はありませんが、修正版に揃えました)。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.47 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.47</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-12</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         フライトログの編集の守りを強めました。メンバーの通常の編集(時刻や高度の入力、1 行ずつの削除)はこれまでどおりログインなしで行えます。
