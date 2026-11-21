@@ -248,7 +248,7 @@ function ManualContent() {
             <li><strong>#</strong> — 行番号</li>
             <li><strong>登録番号</strong> — 機体登録番号（機体DB登録があれば表示）。コンテストナンバーが登録されていれば <strong>JA03KH (KH)</strong> のように括弧で併記します</li>
             <li><strong>離陸</strong> — 離陸時刻 HH:MM（手動編集可）。<strong>空欄</strong>は「離陸を観測できなかった」場合（外来機の飛来や、離陸後に FLARM の電源を入れた等）で、着陸を検知した時点で<strong>着陸のみの記録</strong>が作られます</li>
-            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。橙の時刻に<strong>「推定」</strong>と付いているのは、本体の停止（電源断・再起動）や受信の途切れのあいだに降りていて、着陸の瞬間を見ていない場合です。地上で見つかった時刻（＝この時刻までに着陸した）か、受信が切れる直前に滑空場の近くの低空で見た時刻が入ります。分かれば手で直してください（直すと「推定」は消えます）。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）</li>
+            <li><strong>着陸</strong> — 着陸時刻 HH:MM（飛行中は「飛行中」と表示）。<strong>空欄</strong>は「着陸したが時刻が分からない」場合で、そのまま手で入力できます。橙の時刻に<strong>「推定」</strong>と付いているのは、本体の停止（電源断・再起動）や受信の途切れのあいだに降りていて、着陸の瞬間を見ていない場合です。地上で見つかった時刻（＝この時刻までに着陸した）か、受信が切れる直前に滑空場の近くの低空で見た時刻が入ります。分かれば手で直してください（直すと「推定」は消えます）。上空で受信が<strong>5分以上途切れている</strong>機体は「飛行中」の代わりに<strong>「信号途絶」</strong>（橙）と表示します（着陸したとは限らないので時刻は入れません。受信が戻れば「飛行中」に戻ります）。なお、上昇したまま途切れた機体は低空でも着陸と推定しません。誤って「推定」が付いても、すぐ後にその機体を上空でまた見つけたときは着陸を取り消して同じ便の続きとして追います</li>
             <li>表は新しい飛行に追従して末尾を表示します。上へ遡っている間は追従を止めるので、過去の記録をゆっくり確認できます</li>
             <li><strong>飛行時間</strong> — 自動計算 HH+MM 形式</li>
             <li><strong>離脱高度</strong> — 曳航離脱時の高度（手動編集可）。<strong>※</strong>が付いた値は<strong>曳航の相手の離脱高度・距離を写したもの</strong>です（曳航のグライダーは原則、曳航機の値を写します。曳航機の離脱が受信の途切れで見えなかったときは、反対にグライダーの値を曳航機へ写します。手で直すと※は消えます）</li>
@@ -808,11 +808,27 @@ const ICON_TABLE: { svg: string; label: string; desc: string }[] = [
 function ReleaseNotesContent() {
   return (
     <>
-      {/* v1.4.48 */}
+      {/* v1.4.49 */}
       <div className="flex items-center gap-3 mb-2">
+        <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.49</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-21</span>
+        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
+        離陸直後に受信が途切れると、1つの便が「着陸(推定)」と2つめの離陸に割れることがありました(関宿 2026-11-21 の実測)。割れないようにしました。
+      </p>
+
+      <Card title="FIX: 離陸直後の受信の途切れで便が2つに割れる">
+        <ul className="list-disc ml-5 space-y-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <li>受信が途切れる直前まで<strong>はっきり上昇していた</strong>機体は、滑空場の近くの低空でも「着陸」とは推定しません(離陸・上昇中とみなします)。</li>
+          <li>それでも着陸が「推定」で付いてしまった場合、同じ機体の離陸をすぐ後に<strong>上空で</strong>また見つけたときは、別の便を作らずにその便の着陸を取り消して続きとして追います(本来の離陸時刻が残ります)。地上の滑走から見えた離陸は、本当の再発航かもしれないのでこれまでどおり別の便にします。</li>
+        </ul>
+      </Card>
+
+      {/* v1.4.48 */}
+      <div className="flex items-center gap-3 mb-2 mt-6">
         <span className="text-base font-bold" style={{ color: "var(--color-accent)" }}>v1.4.48</span>
         <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>2026-11-18</span>
-        <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ background: "var(--color-accent-light)", color: "var(--color-accent)" }}>最新</span>
       </div>
       <p className="text-xs mb-3" style={{ color: "var(--color-text-secondary)" }}>
         画面の部品(Next.js)の脆弱性への対応です。受信機の動作・画面は変わりません。

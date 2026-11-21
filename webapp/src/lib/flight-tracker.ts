@@ -90,6 +90,17 @@ const GPS_TRUST_MAX_V_ACC_M = 8;
  */
 const UNOBSERVED_GROUND_CONFIRM_SEC = 30;
 
+// ── 離陸直後の途絶で誤って推定した着陸の取り消し ─────────────────────────
+/**
+ * 「着陸(推定)」までがこれ以下しかない飛行は、本物の飛行なら短すぎる。
+ * 離陸直後の低空で受信が途絶すると「滑空場近くの低空で途絶=着陸」の推定が誤発動し、
+ * 上空で再受信された同じ機体が新しい離陸として別の便に割れる(関宿 2026-11-21 実測:
+ * 15:43 離陸の便が 15:43 着陸(推定)+15:46 離陸 の2つになった。実際は 15:43〜16:09 の1便)。
+ */
+const REOPEN_MAX_FLIGHT_SEC = 180;
+/** 推定着陸からこれ以内に同じ機体の離陸をまた見たら、別の便ではなく同じ便の続きを疑う */
+const REOPEN_WINDOW_SEC = 15 * 60;
+
 // ── 受信が途切れたときの後始末 ──────────────────────────────────────────
 /** 最後の位置がこれだけ古くなったら、降りたのかどうかを判断する */
 const SIGNAL_LOST_SEC = 120;
@@ -445,6 +456,17 @@ function clockStr(atMs: number = Date.now()): string {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+/** clockStr の逆: HH:MM(JST) を ref と同じ日のミリ秒に。ref より未来になるなら前日とみなす */
+function clockMs(hhmm: string, refMs: number): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  const d = new Date(refMs + JST_OFFSET_MS);
+  const ms =
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Number(m[1]), Number(m[2])) -
+    JST_OFFSET_MS;
+  return ms > refMs ? ms - 86_400_000 : ms;
+}
+
 /** 05:00 JST 始まりの「ログブック日」 */
 function logbookDay(): string {
   return new Date(Date.now() + JST_OFFSET_MS - 5 * 3600_000).toISOString().slice(0, 10);
@@ -594,13 +616,47 @@ function toGround(tr: TrackingState, agl: number): void {
   clearPair(tr);
 }
 
+/**
+ * 新しい離陸に見えたものが、直前の飛行の続きかを確かめ、続きならその着陸を取り消して
+ * 開き直す。対象は、着陸が「推定」のまま(手で直していない)で、長さが本物の飛行として
+ * 短すぎ(REOPEN_MAX_FLIGHT_SEC 以下)、離脱高度も付いていない便だけ。さらに、新しい
+ * 離陸が上空(AIRBORNE_CONFIRM_AGL_M 以上)で見つかった場合に限る。地上の滑走から
+ * 見えた離陸は本当の再発航(索の切断後の再発航など)かもしれないので併合しない。
+ * 開き直したらその記録と本来の離陸時刻を返す。該当しなければ null。
+ */
+function reopenFalseLanding(
+  deviceId: string, takeoffMs: number, agl: number,
+): { entry: FlightLogEntry; takeoffMs: number } | null {
+  const s = S();
+  if (agl < AIRBORNE_CONFIRM_AGL_M) return null;
+  const prev = [...s.flights].reverse().find((f) => f.deviceId === deviceId);
+  if (!prev?.landingEstimated || prev.releaseAlt != null) return null;
+  if (!prev.takeoffTime || !prev.landingTime) return null;
+  const prevTakeoffMs = clockMs(prev.takeoffTime, takeoffMs);
+  const landedMs = clockMs(prev.landingTime, takeoffMs);
+  if (prevTakeoffMs === null || landedMs === null) return null;
+  if (landedMs - prevTakeoffMs > REOPEN_MAX_FLIGHT_SEC * 1000) return null;
+  if (takeoffMs - landedMs > REOPEN_WINDOW_SEC * 1000) return null;
+  const { landingEstimated: _e, ...rest } = prev;
+  void _e;
+  const entry: FlightLogEntry = withoutSignalLost({ ...rest, landingTime: null });
+  s.flights = s.flights.map((f) => (f.id === prev.id ? entry : f));
+  console.log(
+    `[flight-tracker] takeoff ${deviceId} ${clockStr(takeoffMs)} continues the ${prev.takeoffTime} flight ` +
+    `(the estimated landing ${prev.landingTime} was wrong), reopened`);
+  return { entry, takeoffMs: prevTakeoffMs };
+}
+
 /** 飛行を作って「飛行中」にする。離陸時刻は滑走を始めた時刻（または曳航機から引き継いだ時刻） */
 function openFlight(
   deviceId: string, registration: string, tr: TrackingState,
   takeoffMs: number, takeoffAgl: number, agl: number,
 ): void {
   const s = S();
-  const entry: FlightLogEntry = {
+  // 直前の便の「推定」着陸が誤り(離陸直後の途絶)で、これが同じ飛行の続きなら、
+  // 新しい便を作らずにその便を開き直す
+  const reopened = reopenFalseLanding(deviceId, takeoffMs, agl);
+  const entry: FlightLogEntry = reopened?.entry ?? {
     id: `f${Date.now().toString(36)}${(s.seq++).toString(36)}`,
     registration,
     deviceId,
@@ -609,8 +665,12 @@ function openFlight(
     releaseAlt: null,
     releaseDist: null,
   };
-  s.flights = [...s.flights, entry];
-  console.log(`[flight-tracker] takeoff ${deviceId} ${entry.takeoffTime}`);
+  if (reopened) {
+    takeoffMs = reopened.takeoffMs;
+  } else {
+    s.flights = [...s.flights, entry];
+    console.log(`[flight-tracker] takeoff ${deviceId} ${entry.takeoffTime}`);
+  }
   // 同じ機体が離陸した以上、前の飛行はもう終わっている
   closeOpenFlights(deviceId, "", entry.id);
   tr.phase = "airborne";
@@ -853,7 +913,11 @@ function sweepStaleTracks(): void {
       const aglAtFix = fix.altM - s.airfield.elevation_m;
       const distM = haversineM(
         s.airfield.latitude, s.airfield.longitude, fix.lat, fix.lon);
-      if (aglAtFix < SIGNAL_LOST_AGL_M && distM < SIGNAL_LOST_NEAR_FIELD_M) {
+      // 途切れる直前まではっきり上昇していた機体は、低空でも着陸ではなく離陸・上昇中。
+      // 着陸と推定しない(関宿 2026-11-21 実測: 離陸27秒後・上昇+4 m/s のまま低空で
+      // 途絶し、着陸(推定)と2つめの離陸に割れた。実際は飛び続けていた)
+      const climbingAway = (fix.climbMs ?? 0) >= CLIMB_ACTIVE_MS;
+      if (!climbingAway && aglAtFix < SIGNAL_LOST_AGL_M && distM < SIGNAL_LOST_NEAR_FIELD_M) {
         recordLanding(deviceId, tr, clockStr(fix.timeMs), true);
         toGround(tr, aglAtFix);
       } else if (silenceSec >= SIGNAL_LOST_SHOW_SEC) {
